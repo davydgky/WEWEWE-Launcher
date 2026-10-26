@@ -14,6 +14,7 @@ Welche Quelle Android unter welcher Bedingung erlaubt und warum die Architektur 
   (`WindowInsetsController.controlWindowInsetsAnimation`). Loslassen öffnet oder schließt je nach Weg und
   Tempo. Das Suchfeld hat auf dem Homescreen schon den Fokus, ohne Tastatur. Deshalb steht die Verbindung
   zur Tastatur-App, bevor der Finger das Display berührt.
+- **Tippen auf einer Hardware-Tastatur** öffnet die Suche direkt vom Homescreen aus.
 - **Vorschläge ohne Eingabe**: acht Apps nach Tageszeit, Wochentag und Häufigkeit, dazu passende
   App-Verknüpfungen (die selbst oft genutzten und die wichtigsten der vorgeschlagenen Apps).
 - **Treffer mit Eingabe**: „Top-Treffer“, darunter Gruppen je Quelle, sortiert nach ihrem besten Treffer.

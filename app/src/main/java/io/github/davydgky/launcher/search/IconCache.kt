@@ -10,7 +10,9 @@ import android.util.LruCache
 import android.util.Size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.State
-import androidx.compose.runtime.produceState
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.core.graphics.createBitmap
@@ -75,9 +77,15 @@ class IconCache(private val context: Context) {
     }
 }
 
-/** An icon from the cache, or loaded in the background; null while loading. */
+/**
+ * An icon from the cache, or loaded in the background; null while loading. The state is keyed by
+ * [key], so a list row that shows another result never keeps the previous result's icon.
+ */
 @Composable
-fun rememberIcon(cache: IconCache, key: String, loader: () -> ImageBitmap?): State<ImageBitmap?> =
-    produceState(initialValue = cache.cached(key), cache, key) {
-        if (value == null) value = cache.load(key, loader)
+fun rememberIcon(cache: IconCache, key: String, loader: () -> ImageBitmap?): State<ImageBitmap?> {
+    val state = remember(cache, key) { mutableStateOf(cache.cached(key)) }
+    LaunchedEffect(cache, key) {
+        if (state.value == null) state.value = cache.load(key, loader)
     }
+    return state
+}
