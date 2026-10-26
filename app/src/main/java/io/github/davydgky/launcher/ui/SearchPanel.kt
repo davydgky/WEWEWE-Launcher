@@ -104,7 +104,11 @@ fun SearchPanel(
     val density = LocalDensity.current
 
     LaunchedEffect(state) {
-        snapshotFlow { state.query.text.toString() }.collect(viewModel::setQuery)
+        snapshotFlow { state.query.text.toString() }.collect { text ->
+            viewModel.setQuery(text)
+            // Typing on a hardware keyboard while the home screen shows opens the search.
+            if (text.isNotEmpty() && !state.isActive) state.open()
+        }
     }
     // Input-to-screen latency: wait for the frame that shows these results.
     LaunchedEffect(results) {

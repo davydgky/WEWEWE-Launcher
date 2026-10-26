@@ -3,6 +3,7 @@ package io.github.davydgky.launcher.ui
 import android.graphics.Insets
 import android.os.CancellationSignal
 import android.os.SystemClock
+import android.util.Log
 import android.view.Choreographer
 import android.view.View
 import android.view.WindowInsets
@@ -103,6 +104,10 @@ class ImeController(private val view: View, private val perf: PerfStats) {
         }
     }
 
+    private companion object {
+        const val TAG = "LauncherIme"
+    }
+
     private fun reset() {
         controller = null
         cancellation = null
@@ -114,6 +119,7 @@ class ImeController(private val view: View, private val perf: PerfStats) {
         override fun onReady(controller: WindowInsetsAnimationController, types: Int) {
             requested = false
             this@ImeController.controller = controller
+            Log.d(TAG, "Keyboard control ready: ${controller.hiddenStateInsets.bottom} -> ${controller.shownStateInsets.bottom}")
             val finish = pendingFinish
             pendingFinish = null
             if (finish != null) finish(finish) else apply()
@@ -125,6 +131,7 @@ class ImeController(private val view: View, private val perf: PerfStats) {
 
         override fun onCancelled(controller: WindowInsetsAnimationController?) {
             val wanted = pendingFinish ?: (fraction > 0.5f)
+            Log.d(TAG, "Keyboard control refused; showing it normally: $wanted")
             reset()
             // The system refused control (another animation was running); fall back to a plain request.
             if (wanted) view.windowInsetsController?.show(WindowInsets.Type.ime())

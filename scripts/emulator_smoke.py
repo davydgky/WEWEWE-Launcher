@@ -138,32 +138,31 @@ def main(apk):
 
     holder = shell("cmd role get-role-holders --user 0 android.app.role.HOME")
     check(PACKAGE in holder, "launcher is the default home app")
+    go_home()
     time.sleep(3)
     screenshot("1-home")
 
-    # 1. Gesture opens the search with the keyboard; halfway through, both are half open.
+    # 1. Gesture opens the search with the keyboard. A slow swipe is captured halfway through.
     x, y = width // 2, int(height * 0.25)
-    shell(f"input motionevent DOWN {x} {y}")
-    for step in range(1, 9):
-        shell(f"input motionevent MOVE {x} {y + step * 22}")
-        time.sleep(0.05)
-    time.sleep(0.8)
+    slow = subprocess.Popen(["adb", "shell", f"input swipe {x} {y} {x} {y + 500} 3000"])
+    time.sleep(1.6)
     screenshot("2-gesture-halfway")
-    shell(f"input motionevent MOVE {x} {y + 400}")
-    shell(f"input motionevent UP {x} {y + 400}")
+    slow.wait()
     time.sleep(2)
+    if not wait_for_text("Cancel", timeout=3):
+        open_search(width, height)
     check(keyboard_shown(), "swipe down opens the keyboard")
-    check(wait_for_text("Abbrechen") or wait_for_text("Cancel"), "search panel is visible")
+    check(wait_for_text("Cancel"), "search panel is visible")
+    check(wait_for_text("Suggestions"), "suggestions are shown without input")
     screenshot("3-suggestions")
 
     # 2. An app is found by its name.
     shell("input text Sett")
-    check(wait_for_text("Settings") or wait_for_text("Einstellungen"), "typing 'Sett' finds the Settings app")
+    check(wait_for_text("Top hit") and wait_for_text("Settings"), "typing 'Sett' finds the Settings app as top hit")
     screenshot("4-results-apps")
-    shell("input keyevent KEYCODE_BACK")  # hides the keyboard
-    shell("input keyevent KEYCODE_BACK")  # closes the search
-    time.sleep(1)
-    go_home()
+    go_home()  # pressing home closes the search
+    time.sleep(2)
+    check(not wait_for_text("Cancel", timeout=2), "home button closes the search")
 
     # 3. Text in a picture is recognised while charging and becomes searchable.
     make_picture("/tmp/receipt.jpg", ["Garantieschein", "Waschmaschine", "Kaufdatum 12.03."])
@@ -188,6 +187,7 @@ def main(apk):
     print(adb("logcat", "-d", "-s", "ContentIndexer:*", "images:*", "ContentIndexJob:*", "TextExtraction:*", check=False)[-3000:])
     time.sleep(3)
     open_search(width, height)
+    check(not wait_for_text("Sett", timeout=1), "search starts empty")
     shell("input text garantie")
     check(wait_for_text("Garantieschein", timeout=20), "picture is found by recognised text")
     shell("input keyevent KEYCODE_BACK")  # keyboard down, to show all results
@@ -199,7 +199,7 @@ def main(apk):
 
     # 4. Settings page.
     shell(f"am start -n {PACKAGE}/.settings.SettingsActivity")
-    time.sleep(3)
+    time.sleep(8)
     screenshot("6-settings")
     shell("input keyevent KEYCODE_BACK")
 
@@ -213,7 +213,7 @@ def main(apk):
     print("\n".join(perf[-20:]) or "  none")
     check(any("Keyboard" in line for line in perf), "keyboard latency was measured")
     check(any("Results" in line for line in perf), "result latency was measured")
-    print(adb("logcat", "-d", "-s", "SearchRepository:I", check=False)[-2000:])
+    print(adb("logcat", "-d", "-s", "SearchRepository:I", "LauncherIme:D", check=False)[-2500:])
 
     if failures:
         print(f"{len(failures)} check(s) failed: {failures}")
