@@ -38,14 +38,27 @@ def screen_size():
     return int(match.group(1)), int(match.group(2))
 
 
-def ui_texts():
+def ui_nodes():
     shell("uiautomator dump /sdcard/ui.xml", check=False)
     xml = shell("cat /sdcard/ui.xml", check=False)
     try:
         root = ET.fromstring(xml[xml.index("<?xml"):])
     except (ValueError, ET.ParseError):
         return []
-    return [node.get("text") for node in root.iter("node") if node.get("text")]
+    return [node for node in root.iter("node") if node.get("text")]
+
+
+def ui_texts():
+    nodes = ui_nodes()
+    # The emulator's previous launcher sometimes shows "isn't responding"; close such dialogs.
+    if any("isn't responding" in node.get("text") for node in nodes):
+        for node in nodes:
+            if node.get("text") in ("Close app", "Wait"):
+                x1, y1, x2, y2 = map(int, re.findall(r"\d+", node.get("bounds")))
+                shell(f"input tap {(x1 + x2) // 2} {(y1 + y2) // 2}")
+                time.sleep(1)
+                return ui_texts()
+    return [node.get("text") for node in nodes]
 
 
 def wait_for_text(fragment, timeout=10):
@@ -136,10 +149,13 @@ def main(apk):
     go_home()
     width, height = screen_size()
 
+    # The emulator's own launcher is not needed any more and must not get in the way.
+    shell("pm disable-user --user 0 com.google.android.apps.nexuslauncher", check=False)
     holder = shell("cmd role get-role-holders --user 0 android.app.role.HOME")
     check(PACKAGE in holder, "launcher is the default home app")
     go_home()
     time.sleep(3)
+    ui_texts()  # closes a leftover dialog, if any
     screenshot("1-home")
 
     # 1. Gesture opens the search with the keyboard. A slow swipe is captured halfway through.
