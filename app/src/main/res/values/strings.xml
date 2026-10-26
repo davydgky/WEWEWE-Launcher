@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name" translatable="false">WEWEWE</string>
+    <string name="settings_title">Launcher &amp; search</string>
+
+    <!-- Home screen -->
+    <string name="search_button">Search</string>
+    <string name="menu_wallpaper">Wallpaper</string>
+    <string name="menu_add_to_dock">Add to dock</string>
+    <string name="menu_remove_from_dock">Remove from dock</string>
+    <string name="menu_app_info">App info</string>
+    <string name="menu_uninstall">Uninstall</string>
+    <string name="work_profile">Work</string>
+
+    <!-- Search -->
+    <string name="search_hint">Search</string>
+    <string name="cancel">Cancel</string>
+    <string name="clear">Clear</string>
+    <string name="section_suggestions">Suggestions</string>
+    <string name="section_top_hit">Top hit</string>
+    <string name="section_apps">Apps</string>
+    <string name="section_shortcuts">Shortcuts</string>
+    <string name="section_contacts">Contacts</string>
+    <string name="section_events">Calendar</string>
+    <string name="section_bookmarks">Velo favourites</string>
+    <string name="section_history">Velo history</string>
+    <string name="section_notes">Notes</string>
+    <string name="section_documents">Documents</string>
+    <string name="section_images">Photos</string>
+    <string name="show_more">Show more</string>
+    <string name="show_less">Show less</string>
+    <string name="search_web">Search the web for “%1$s”</string>
+    <string name="no_results">No results on this device</string>
+    <string name="action_call">Call</string>
+    <string name="action_message">Message</string>
+    <string name="event_untitled">(No title)</string>
+    <string name="cannot_open">Could not open this</string>
+    <string name="no_app_to_open">No app can open this</string>
+
+    <!-- Settings -->
+    <string name="default_launcher_title">Not the default home app</string>
+    <string name="default_launcher_description">The search gesture and app shortcuts only work while this is your default home app.</string>
+    <string name="default_launcher_action">Set as default</string>
+    <string name="settings_sources">Search sources</string>
+    <string name="source_apps">Apps</string>
+    <string name="source_apps_description">Installed apps, including the work profile</string>
+    <string name="source_shortcuts">App shortcuts</string>
+    <string name="source_shortcuts_description">Actions and conversations apps offer, such as “New message”</string>
+    <string name="source_contacts">Contacts</string>
+    <string name="source_contacts_description">Names, companies, e-mail addresses and phone numbers</string>
+    <string name="source_calendar">Calendar</string>
+    <string name="source_calendar_description">Events from the last 30 days and the coming year</string>
+    <string name="source_velo">Velo history and favourites</string>
+    <string name="source_velo_description">Pages you visited in Velo and its start page favourites</string>
+    <string name="source_notes">Notes</string>
+    <string name="source_notes_description">Text and Markdown files in shared folders (Obsidian, Markor, Logseq, Orgzly, Joplin)</string>
+    <string name="source_documents">Documents</string>
+    <string name="source_documents_description">PDFs, Office and text files by name; text and PDFs also by content</string>
+    <string name="source_images">Text in photos</string>
+    <string name="source_images_description">Photos are searched by the text in them, recognised on this device</string>
+    <string name="source_usage">Recent and frequent apps</string>
+    <string name="source_usage_description">With usage access, suggestions also count apps opened from notifications or other apps</string>
+    <string name="status_items">Entries: %1$d</string>
+    <string name="status_loading">Indexing…</string>
+    <string name="status_velo_missing">Velo is not installed</string>
+    <string name="status_usage_granted">Usage access granted</string>
+    <string name="status_usage_missing">Only launches from this home screen count. Tap to grant usage access.</string>
+    <string name="grant_permission">Allow access</string>
+    <string name="grant_all_files">Allow access to all files</string>
+    <string name="grant_default_launcher">Set as default home app</string>
+    <string name="settings_note_folders">Note folders</string>
+    <string name="note_folders_description">Android has no interface for notes. Share the folder in which your notes app keeps its files, e.g. an Obsidian vault.</string>
+    <string name="note_folders_add">Add folder</string>
+    <string name="remove">Remove</string>
+    <string name="settings_recognition">Text recognition</string>
+    <string name="recognition_progress">Text recognised in %1$d of %2$d photos</string>
+    <string name="recognition_counting">Counting photos…</string>
+    <string name="recognition_no_access">No access to photos</string>
+    <string name="recognition_description">Recognition runs only while the phone is charging, entirely on this device. Document contents are read at the same time.</string>
+    <string name="settings_measurements">Measurements</string>
+    <string name="metric_keyboard">Swipe to keyboard visible (budget %1$d ms)</string>
+    <string name="metric_results">Keystroke to results shown (budget %1$d ms)</string>
+    <string name="metric_summary">Median %1$.0f ms · 95th percentile %2$.0f ms · max %3$.0f ms · %4$d samples</string>
+    <string name="metric_none">No measurements yet</string>
+    <string name="measurements_description">Measured on this device for the last 200 swipes and keystrokes. Also logged with the tag LauncherPerf.</string>
+    <string name="measurements_reset">Reset</string>
+    <string name="settings_privacy">Privacy</string>
+    <string name="privacy_description">Everything stays on this device. The launcher has no internet permission, its index is not backed up, and a web search only starts when you tap it.</string>
+    <string name="rebuild_index">Rebuild index</string>
+</resources>

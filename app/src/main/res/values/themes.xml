@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The home screen draws over the wallpaper; the window itself stays transparent. -->
+    <style name="Theme.Launcher" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowShowWallpaper">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:colorBackgroundCacheHint">@null</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowSplashScreenBackground">@android:color/transparent</item>
+    </style>
+
+    <style name="Theme.Settings" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/settings_background</item>
+    </style>
+</resources>

@@ -1,0 +1,86 @@
+plugins {
+    alias(libs.plugins.android.application)
+    alias(libs.plugins.kotlin.compose)
+}
+
+// Every CI build gets a higher version code than the previous one, so it installs as an update.
+val buildNumber = providers.environmentVariable("GITHUB_RUN_NUMBER").orNull?.toIntOrNull() ?: 1
+
+android {
+    namespace = "io.github.davydgky.launcher"
+    compileSdk = 37
+
+    defaultConfig {
+        applicationId = "io.github.davydgky.launcher"
+        // Same platform floor as Velo: Android 16, targeting the newest platform.
+        minSdk = 36
+        targetSdk = 37
+        versionCode = buildNumber
+        versionName = "0.1.$buildNumber"
+        androidResources.localeFilters += listOf("en", "de")
+    }
+
+    signingConfigs {
+        getByName("debug") {
+            // A fixed key in the repository: CI runners start fresh and would otherwise sign every build
+            // with a new key, which Android refuses to install as an update.
+            storeFile = rootProject.file("keystore/debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
+    }
+
+    buildTypes {
+        release {
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            signingConfig = signingConfigs.getByName("debug")
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    buildFeatures {
+        compose = true
+    }
+
+    packaging {
+        resources {
+            excludes += listOf("DebugProbesKt.bin", "kotlin-tooling-metadata.json", "META-INF/*.version")
+        }
+    }
+
+    lint {
+        abortOnError = true
+        checkReleaseBuilds = false
+    }
+}
+
+dependencies {
+    implementation(project(":core"))
+
+    implementation(platform(libs.androidx.compose.bom))
+    implementation(libs.androidx.compose.foundation)
+    implementation(libs.androidx.compose.material3)
+    implementation(libs.androidx.compose.ui)
+    implementation(libs.androidx.compose.ui.graphics)
+    implementation(libs.androidx.compose.ui.tooling.preview)
+    debugImplementation(libs.androidx.compose.ui.tooling)
+
+    implementation(libs.androidx.activity.compose)
+    implementation(libs.androidx.core.ktx)
+    implementation(libs.androidx.datastore.preferences)
+    implementation(libs.androidx.lifecycle.runtime.compose)
+    implementation(libs.androidx.lifecycle.viewmodel.compose)
+    implementation(libs.kotlinx.coroutines.android)
+
+    // On-device text recognition with the model bundled in the APK (no Play services, no download).
+    implementation(libs.mlkit.text.recognition)
+
+    testImplementation(libs.junit)
+}

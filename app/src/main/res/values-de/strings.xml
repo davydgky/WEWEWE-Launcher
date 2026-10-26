@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_title">Launcher &amp; Suche</string>
+
+    <!-- Homescreen -->
+    <string name="search_button">Suchen</string>
+    <string name="menu_wallpaper">Hintergrundbild</string>
+    <string name="menu_add_to_dock">Zum Dock hinzufügen</string>
+    <string name="menu_remove_from_dock">Aus dem Dock entfernen</string>
+    <string name="menu_app_info">App-Info</string>
+    <string name="menu_uninstall">Deinstallieren</string>
+    <string name="work_profile">Arbeit</string>
+
+    <!-- Suche -->
+    <string name="search_hint">Suchen</string>
+    <string name="cancel">Abbrechen</string>
+    <string name="clear">Löschen</string>
+    <string name="section_suggestions">Vorschläge</string>
+    <string name="section_top_hit">Top-Treffer</string>
+    <string name="section_apps">Apps</string>
+    <string name="section_shortcuts">Verknüpfungen</string>
+    <string name="section_contacts">Kontakte</string>
+    <string name="section_events">Kalender</string>
+    <string name="section_bookmarks">Velo-Favoriten</string>
+    <string name="section_history">Velo-Verlauf</string>
+    <string name="section_notes">Notizen</string>
+    <string name="section_documents">Dokumente</string>
+    <string name="section_images">Fotos</string>
+    <string name="show_more">Mehr anzeigen</string>
+    <string name="show_less">Weniger anzeigen</string>
+    <string name="search_web">„%1$s“ im Web suchen</string>
+    <string name="no_results">Keine Treffer auf diesem Gerät</string>
+    <string name="action_call">Anrufen</string>
+    <string name="action_message">Nachricht</string>
+    <string name="event_untitled">(Ohne Titel)</string>
+    <string name="cannot_open">Konnte nicht geöffnet werden</string>
+    <string name="no_app_to_open">Keine App kann das öffnen</string>
+
+    <!-- Einstellungen -->
+    <string name="default_launcher_title">Nicht der Standard-Launcher</string>
+    <string name="default_launcher_description">Die Suchgeste und App-Verknüpfungen funktionieren nur, solange diese App der Standard-Launcher ist.</string>
+    <string name="default_launcher_action">Als Standard festlegen</string>
+    <string name="settings_sources">Suchquellen</string>
+    <string name="source_apps">Apps</string>
+    <string name="source_apps_description">Installierte Apps, auch im Arbeitsprofil</string>
+    <string name="source_shortcuts">App-Verknüpfungen</string>
+    <string name="source_shortcuts_description">Aktionen und Unterhaltungen, die Apps anbieten, etwa „Neue Nachricht“</string>
+    <string name="source_contacts">Kontakte</string>
+    <string name="source_contacts_description">Namen, Firmen, E-Mail-Adressen und Telefonnummern</string>
+    <string name="source_calendar">Kalender</string>
+    <string name="source_calendar_description">Termine der letzten 30 Tage und des kommenden Jahres</string>
+    <string name="source_velo">Velo-Verlauf und -Favoriten</string>
+    <string name="source_velo_description">In Velo besuchte Seiten und die Favoriten der Startseite</string>
+    <string name="source_notes">Notizen</string>
+    <string name="source_notes_description">Text- und Markdown-Dateien in freigegebenen Ordnern (Obsidian, Markor, Logseq, Orgzly, Joplin)</string>
+    <string name="source_documents">Dokumente</string>
+    <string name="source_documents_description">PDF-, Office- und Textdateien nach Namen; Text und PDF auch nach Inhalt</string>
+    <string name="source_images">Text in Fotos</string>
+    <string name="source_images_description">Fotos werden nach dem Text darin gefunden, erkannt auf diesem Gerät</string>
+    <string name="source_usage">Zuletzt und häufig genutzte Apps</string>
+    <string name="source_usage_description">Mit Nutzungsdatenzugriff zählen für Vorschläge auch Apps, die über Benachrichtigungen oder andere Apps geöffnet wurden</string>
+    <string name="status_items">Einträge: %1$d</string>
+    <string name="status_loading">Wird indiziert…</string>
+    <string name="status_velo_missing">Velo ist nicht installiert</string>
+    <string name="status_usage_granted">Nutzungsdatenzugriff erteilt</string>
+    <string name="status_usage_missing">Es zählen nur Starts über diesen Homescreen. Antippen, um Nutzungsdatenzugriff zu erteilen.</string>
+    <string name="grant_permission">Zugriff erlauben</string>
+    <string name="grant_all_files">Zugriff auf alle Dateien erlauben</string>
+    <string name="grant_default_launcher">Als Standard-Launcher festlegen</string>
+    <string name="settings_note_folders">Notiz-Ordner</string>
+    <string name="note_folders_description">Android hat keine Schnittstelle für Notizen. Gib den Ordner frei, in dem deine Notiz-App ihre Dateien ablegt, z. B. einen Obsidian-Vault.</string>
+    <string name="note_folders_add">Ordner hinzufügen</string>
+    <string name="remove">Entfernen</string>
+    <string name="settings_recognition">Texterkennung</string>
+    <string name="recognition_progress">Text in %1$d von %2$d Fotos erkannt</string>
+    <string name="recognition_counting">Fotos werden gezählt…</string>
+    <string name="recognition_no_access">Kein Zugriff auf Fotos</string>
+    <string name="recognition_description">Die Erkennung läuft nur, während das Gerät lädt, und vollständig auf diesem Gerät. Dokumentinhalte werden dabei mitgelesen.</string>
+    <string name="settings_measurements">Messwerte</string>
+    <string name="metric_keyboard">Wischen bis Tastatur sichtbar (Budget %1$d ms)</string>
+    <string name="metric_results">Tastendruck bis Ergebnisse sichtbar (Budget %1$d ms)</string>
+    <string name="metric_summary">Median %1$.0f ms · 95. Perzentil %2$.0f ms · max. %3$.0f ms · %4$d Messungen</string>
+    <string name="metric_none">Noch keine Messungen</string>
+    <string name="measurements_description">Gemessen auf diesem Gerät über die letzten 200 Wischgesten und Tastendrücke. Zusätzlich im Logcat unter dem Tag LauncherPerf.</string>
+    <string name="measurements_reset">Zurücksetzen</string>
+    <string name="settings_privacy">Datenschutz</string>
+    <string name="privacy_description">Alles bleibt auf diesem Gerät. Der Launcher hat keine Internetberechtigung, sein Index wird nicht gesichert, und eine Websuche startet erst, wenn du sie antippst.</string>
+    <string name="rebuild_index">Index neu aufbauen</string>
+</resources>

@@ -1,0 +1,40 @@
+package io.github.davydgky.launcher.search
+
+import android.content.ComponentName
+import android.content.pm.LauncherActivityInfo
+import android.content.pm.ShortcutInfo
+import android.net.Uri
+import android.os.UserHandle
+
+/** What a search result opens; carried as [io.github.davydgky.launcher.core.SearchItem.payload]. */
+sealed interface Target
+
+class AppTarget(
+    val key: String,
+    val label: String,
+    val component: ComponentName,
+    val user: UserHandle,
+    val isWorkProfile: Boolean,
+    val info: LauncherActivityInfo,
+) : Target {
+    val packageName: String get() = component.packageName
+}
+
+class ShortcutTarget(val key: String, val info: ShortcutInfo, val appLabel: String) : Target
+
+class ContactTarget(val lookupUri: Uri, val photoUri: Uri?, val phone: String?, val initials: String) : Target
+
+class EventTarget(
+    val eventId: Long,
+    val begin: Long,
+    val end: Long,
+    val allDay: Boolean,
+    val color: Int,
+) : Target
+
+class WebTarget(val url: String, val isBookmark: Boolean) : Target
+
+/** A note or document. [obsidianUri] opens the note in Obsidian when it lives in a vault. */
+class FileTarget(val uri: Uri, val mimeType: String, val extension: String, val obsidianUri: Uri? = null) : Target
+
+class ImageTarget(val uri: Uri, val dateTaken: Long) : Target
