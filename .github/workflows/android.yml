@@ -66,6 +66,8 @@ jobs:
   emulator-smoke-test:
     needs: build
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     # Informational: the software-rendered CI emulator is too slow to judge latency or to gate merges.
     continue-on-error: true
     timeout-minutes: 40
@@ -107,3 +109,14 @@ jobs:
           name: screenshots
           path: screenshots/
           if-no-files-found: ignore
+
+      # Also kept under a hidden ref (not a branch), so the screenshots can be fetched with plain git.
+      - name: Publish screenshots for preview
+        if: always()
+        run: |
+          [ -d screenshots ] || exit 0
+          cd screenshots
+          git init -q
+          git add .
+          git -c user.name="CI" -c user.email="ci@users.noreply.github.com" commit -qm "Screenshots of run ${{ github.run_number }} (${{ github.sha }})"
+          git push -qf "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" HEAD:refs/screenshots/latest

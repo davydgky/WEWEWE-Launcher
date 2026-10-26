@@ -61,11 +61,18 @@ def wait_for_text(fragment, timeout=10):
 
 
 def screenshot(name):
-    """Saves a screenshot for the preview artifact."""
+    """Saves a downscaled screenshot for the preview."""
+    import io
+    from PIL import Image
     os.makedirs(SHOTS, exist_ok=True)
     png = subprocess.run(["adb", "exec-out", "screencap", "-p"], capture_output=True).stdout
-    with open(os.path.join(SHOTS, f"{name}.png"), "wb") as f:
-        f.write(png)
+    try:
+        image = Image.open(io.BytesIO(png)).convert("RGB")
+    except OSError:
+        print(f"  no screenshot for {name}")
+        return
+    image.thumbnail((540, 1200))
+    image.save(os.path.join(SHOTS, f"{name}.jpg"), "JPEG", quality=85)
 
 
 def retry(command, attempts=6, wait=10):
@@ -80,7 +87,8 @@ def retry(command, attempts=6, wait=10):
 
 
 def keyboard_shown():
-    return "mInputShown=true" in shell("dumpsys input_method", check=False)
+    state = shell("dumpsys input_method", check=False)
+    return any(flag in state for flag in ["mInputShown=true", "mIsInputViewShown=true", "isInputViewShown=true"])
 
 
 def check(condition, message):
@@ -115,6 +123,8 @@ def make_picture(path, lines):
 def main(apk):
     adb("wait-for-device")
     shell("settings put global window_animation_scale 1")
+    # The emulator has a hardware keyboard; show the on-screen keyboard anyway, as on a phone.
+    shell("settings put secure show_ime_with_hard_keyboard 1")
     adb("install", "-r", "-g", apk)
     time.sleep(20)  # let the system settle after boot
     retry(f"cmd role add-role-holder --user 0 android.app.role.HOME {PACKAGE}")
@@ -162,13 +172,21 @@ def main(apk):
     adb("push", "/tmp/wifi.jpg", "/sdcard/Pictures/wifi.jpg")
     shell("am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d file:///sdcard/Pictures/receipt.jpg", check=False)
     shell("content call --uri content://media/external/file --method scan_volume --arg external_primary", check=False)
-    time.sleep(5)
     shell("dumpsys battery set ac 1")
     shell("dumpsys battery set status 2")
-    go_home()
-    time.sleep(3)
+    # Wait until MediaStore lists the pictures and the launcher has planned its charging job.
+    deadline = time.time() + 60
+    while time.time() < deadline and "waiting" not in shell(f"cmd jobscheduler get-job-state {PACKAGE} 1", check=False) \
+            and "ready" not in shell(f"cmd jobscheduler get-job-state {PACKAGE} 1", check=False):
+        go_home()
+        time.sleep(3)
+    print("  job state: " + shell(f"cmd jobscheduler get-job-state {PACKAGE} 1", check=False).strip())
     shell(f"cmd jobscheduler run -f {PACKAGE} 1", check=False)
-    time.sleep(25)
+    deadline = time.time() + 90
+    while time.time() < deadline and "Text recognition finished" not in adb("logcat", "-d", "-s", "ContentIndexer:I", check=False):
+        time.sleep(3)
+    print(adb("logcat", "-d", "-s", "ContentIndexer:*", "images:*", "ContentIndexJob:*", "TextExtraction:*", check=False)[-3000:])
+    time.sleep(3)
     open_search(width, height)
     shell("input text garantie")
     check(wait_for_text("Garantieschein", timeout=20), "picture is found by recognised text")

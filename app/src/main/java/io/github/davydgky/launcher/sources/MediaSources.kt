@@ -6,6 +6,7 @@ import android.content.pm.PackageManager
 import android.os.Environment
 import android.provider.MediaStore
 import android.text.format.DateUtils
+import android.util.Log
 import io.github.davydgky.launcher.core.SearchItem
 import io.github.davydgky.launcher.core.SourceKind
 import io.github.davydgky.launcher.index.ContentIndexJob
@@ -48,7 +49,10 @@ class ImagesSource(private val context: Context, private val store: IndexStore) 
                 payload = ImageTarget(image.uri, image.dateTaken),
             )
         }
-        if (pending > 0) ContentIndexJob.schedule(context)
+        if (pending > 0) {
+            Log.i(ID, "$pending pictures wait for text recognition while charging")
+            ContentIndexJob.schedule(context)
+        }
         return items
     }
 

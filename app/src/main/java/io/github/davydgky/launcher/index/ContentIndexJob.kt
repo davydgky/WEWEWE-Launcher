@@ -103,12 +103,13 @@ class ContentIndexer(private val context: Context) {
             image.worthRecognising && known[image.id]?.version != image.version
         }
         if (pending.isEmpty()) return
+        Log.i(TAG, "Recognising text in ${pending.size} pictures")
         TextRecognizer().use { recognizer ->
             var sinceRefresh = 0
             for (image in pending) {
                 currentCoroutineContext().ensureActive()
                 val text = runCatching { recognizer.recognize(context, image.uri) }
-                    .onFailure { Log.w("ContentIndexer", "OCR failed for ${image.uri}", it) }
+                    .onFailure { Log.w(TAG, "OCR failed for ${image.uri}", it) }
                     .getOrDefault("")
                 store.putImageText(image.id, image.version, text)
                 if (++sinceRefresh == REFRESH_EVERY) {
@@ -117,10 +118,13 @@ class ContentIndexer(private val context: Context) {
                 }
             }
         }
+        Log.i(TAG, "Text recognition finished")
         app.search.reload(ImagesSource.ID)
     }
 
     private companion object {
+        const val TAG = "ContentIndexer"
+
         /** New text becomes searchable in batches, so a long run shows progress. */
         const val REFRESH_EVERY = 25
     }
