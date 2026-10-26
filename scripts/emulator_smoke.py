@@ -9,6 +9,7 @@
 5. Checks for crashes and prints the latency measurements (not meaningful on a software-rendered
    emulator, but they show that the measurement works).
 """
+import os
 import re
 import subprocess
 import sys
@@ -16,6 +17,7 @@ import time
 import xml.etree.ElementTree as ET
 
 PACKAGE = "io.github.davydgky.launcher"
+SHOTS = "screenshots"
 failures = []
 
 
@@ -58,6 +60,25 @@ def wait_for_text(fragment, timeout=10):
     return False
 
 
+def screenshot(name):
+    """Saves a screenshot for the preview artifact."""
+    os.makedirs(SHOTS, exist_ok=True)
+    png = subprocess.run(["adb", "exec-out", "screencap", "-p"], capture_output=True).stdout
+    with open(os.path.join(SHOTS, f"{name}.png"), "wb") as f:
+        f.write(png)
+
+
+def retry(command, attempts=6, wait=10):
+    """Some system services are still busy right after boot."""
+    for attempt in range(attempts):
+        result = subprocess.run(["adb", "shell", command], capture_output=True, text=True)
+        if result.returncode == 0 and "Exception" not in result.stdout + result.stderr:
+            return result.stdout
+        print(f"  retrying '{command}': {(result.stdout + result.stderr).strip()[:200]}")
+        time.sleep(wait)
+    raise RuntimeError(f"'{command}' kept failing")
+
+
 def keyboard_shown():
     return "mInputShown=true" in shell("dumpsys input_method", check=False)
 
@@ -95,7 +116,8 @@ def main(apk):
     adb("wait-for-device")
     shell("settings put global window_animation_scale 1")
     adb("install", "-r", "-g", apk)
-    shell(f"cmd role add-role-holder android.app.role.HOME {PACKAGE} 0")
+    time.sleep(20)  # let the system settle after boot
+    retry(f"cmd role add-role-holder --user 0 android.app.role.HOME {PACKAGE}")
     for permission in ["READ_CONTACTS", "READ_CALENDAR", "READ_MEDIA_IMAGES"]:
         shell(f"pm grant {PACKAGE} android.permission.{permission}", check=False)
     shell(f"appops set {PACKAGE} GET_USAGE_STATS allow", check=False)
@@ -104,17 +126,30 @@ def main(apk):
     go_home()
     width, height = screen_size()
 
-    holder = shell("cmd role get-role-holders android.app.role.HOME")
+    holder = shell("cmd role get-role-holders --user 0 android.app.role.HOME")
     check(PACKAGE in holder, "launcher is the default home app")
+    time.sleep(3)
+    screenshot("1-home")
 
-    # 1. Gesture opens the search with the keyboard.
-    open_search(width, height)
+    # 1. Gesture opens the search with the keyboard; halfway through, both are half open.
+    x, y = width // 2, int(height * 0.25)
+    shell(f"input motionevent DOWN {x} {y}")
+    for step in range(1, 9):
+        shell(f"input motionevent MOVE {x} {y + step * 22}")
+        time.sleep(0.05)
+    time.sleep(0.8)
+    screenshot("2-gesture-halfway")
+    shell(f"input motionevent MOVE {x} {y + 400}")
+    shell(f"input motionevent UP {x} {y + 400}")
+    time.sleep(2)
     check(keyboard_shown(), "swipe down opens the keyboard")
     check(wait_for_text("Abbrechen") or wait_for_text("Cancel"), "search panel is visible")
+    screenshot("3-suggestions")
 
     # 2. An app is found by its name.
     shell("input text Sett")
     check(wait_for_text("Settings") or wait_for_text("Einstellungen"), "typing 'Sett' finds the Settings app")
+    screenshot("4-results-apps")
     shell("input keyevent KEYCODE_BACK")  # hides the keyboard
     shell("input keyevent KEYCODE_BACK")  # closes the search
     time.sleep(1)
@@ -122,7 +157,9 @@ def main(apk):
 
     # 3. Text in a picture is recognised while charging and becomes searchable.
     make_picture("/tmp/receipt.jpg", ["Garantieschein", "Waschmaschine", "Kaufdatum 12.03."])
+    make_picture("/tmp/wifi.jpg", ["Gast-WLAN", "Passwort: Sonne123", "Garantie bis 2027"])
     adb("push", "/tmp/receipt.jpg", "/sdcard/Pictures/receipt.jpg")
+    adb("push", "/tmp/wifi.jpg", "/sdcard/Pictures/wifi.jpg")
     shell("am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d file:///sdcard/Pictures/receipt.jpg", check=False)
     shell("content call --uri content://media/external/file --method scan_volume --arg external_primary", check=False)
     time.sleep(5)
@@ -135,11 +172,20 @@ def main(apk):
     open_search(width, height)
     shell("input text garantie")
     check(wait_for_text("Garantieschein", timeout=20), "picture is found by recognised text")
+    shell("input keyevent KEYCODE_BACK")  # keyboard down, to show all results
+    time.sleep(1.5)
+    screenshot("5-results-photos")
     shell("dumpsys battery reset")
     shell("input keyevent KEYCODE_BACK")
     shell("input keyevent KEYCODE_BACK")
 
-    # 4. Crashes and measurements.
+    # 4. Settings page.
+    shell(f"am start -n {PACKAGE}/.settings.SettingsActivity")
+    time.sleep(3)
+    screenshot("6-settings")
+    shell("input keyevent KEYCODE_BACK")
+
+    # 5. Crashes and measurements.
     crashes = adb("logcat", "-d", "-b", "crash", check=False)
     check(PACKAGE not in crashes, "no crashes")
     if PACKAGE in crashes:

@@ -68,6 +68,8 @@ fun LauncherScreen(
     LaunchedEffect(state) { snapshotFlow { state.isActive }.collect(onSearchActive) }
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
         app.search.onResume()
+        // Ready before the next swipe, so the first frame of the search already shows suggestions.
+        app.suggestions.refresh(context)
         // Focus without keyboard: the keyboard connection is ready before the next swipe.
         runCatching { focusRequester.requestFocus() }
     }
