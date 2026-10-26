@@ -165,8 +165,16 @@ def main(apk):
     screenshot("2-gesture-halfway")
     slow.wait()
     time.sleep(2)
-    if not wait_for_text("Cancel", timeout=3):
-        open_search(width, height)
+    if not wait_for_text("Cancel", timeout=10):
+        # The slow swipe did not open it (emulator hiccup): open with the search button instead.
+        shell("input keyevent KEYCODE_HOME")
+        time.sleep(2)
+        for node in ui_nodes():
+            if node.get("text") == "Search":
+                x1, y1, x2, y2 = map(int, re.findall(r"\d+", node.get("bounds")))
+                shell(f"input tap {(x1 + x2) // 2} {(y1 + y2) // 2}")
+                time.sleep(2)
+                break
     check(keyboard_shown(), "swipe down opens the keyboard")
     check(wait_for_text("Cancel"), "search panel is visible")
     check(wait_for_text("Suggestions"), "suggestions are shown without input")

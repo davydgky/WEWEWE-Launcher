@@ -5,6 +5,8 @@ Spotlight ist. Ein Wischen nach unten aus der oberen Bildschirmhälfte öffnet d
 fährt dabei mit dem Finger hoch. Ohne Eingabe zeigt die Suche Vorschläge, mit Eingabe Treffer aus allen
 Quellen, gruppiert und mit dem besten Treffer ganz oben. Alles bleibt auf dem Gerät.
 
+![Vorschau aus dem Emulator-Test](docs/preview.jpg)
+
 Welche Quelle Android unter welcher Bedingung erlaubt und warum die Architektur so aussieht, steht in
 [docs/QUELLEN.md](docs/QUELLEN.md).
 
@@ -120,7 +122,9 @@ Jeder Push baut über GitHub Actions: Build, Unit-Tests, Lint und die Prüfung a
 Internetberechtigung. Danach bedient ein Emulator-Test (`scripts/emulator_smoke.py`) den Launcher: Er macht
 ihn zum Standard, wischt nach unten und prüft, dass die Tastatur erscheint. Er tippt einen App-Namen, legt
 ein Foto mit Text ab, simuliert das Laden, lässt die Texterkennung laufen und sucht nach einem Wort aus dem
-Foto. Die signierte APK liegt als Artefakt `launcher-apk` am Workflow-Lauf. Sie ist mit dem Schlüssel aus
+Foto. Die signierte APK liegt als Artefakt `launcher-apk` am Workflow-Lauf. Die Screenshots des Tests liegen
+als Artefakt `screenshots` und zusätzlich unter der Git-Referenz `refs/screenshots/latest`
+(`git fetch origin refs/screenshots/latest`). Sie ist mit dem Schlüssel aus
 `keystore/` signiert, damit jede Version die vorige ersetzen kann.
 
 ## Bekannte Grenzen
