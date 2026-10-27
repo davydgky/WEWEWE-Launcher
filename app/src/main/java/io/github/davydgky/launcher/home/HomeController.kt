@@ -5,6 +5,7 @@ import android.util.Log
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
@@ -94,6 +95,14 @@ class HomeController(
     /** An element is held after a long press (its menu shows or a drag is about to start). */
     var holding by mutableStateOf(false)
         private set
+
+    /** Bumped by the home button; every open menu closes. */
+    var menuEpoch by mutableIntStateOf(0)
+        private set
+
+    fun dismissMenus() {
+        menuEpoch++
+    }
 
     /** Fingers currently down on home screen elements; the background menu waits for none. */
     var itemsPressed = 0

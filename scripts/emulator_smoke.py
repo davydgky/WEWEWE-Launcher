@@ -87,8 +87,14 @@ def record_anr(dialog):
     traces = adb("shell", "ls -t /data/anr/", check=False).split()
     if traces:
         text = adb("shell", f"cat /data/anr/{traces[0]}", check=False)
-        start = text.find('"main"')
-        print(text[start:start + 6000] if start >= 0 else text[:6000])
+        # The dump holds several processes; show why ours was stuck and its main thread.
+        for line in text.splitlines():
+            if line.startswith("Subject:") or line.startswith("Reason:"):
+                print("  " + line)
+        ours = text.find(f"Cmd line: {PACKAGE}")
+        section = text[ours:] if ours >= 0 else text
+        start = section.find('"main" prio')
+        print(section[start:start + 5000] if start >= 0 else section[:5000])
 
 
 def screenshot(name):
@@ -180,8 +186,9 @@ def main(apk):
     ui_texts()  # closes a leftover dialog, if any
     screenshot("1-home")
 
-    # 1. Gesture opens the search with the keyboard. A slow swipe is captured halfway through.
-    x, y = width // 2, int(height * 0.25)
+    # 1. Gesture opens the search with the keyboard. A slow swipe is captured halfway through. It starts
+    # on free space: on a slow emulator a slow swipe over an icon can turn into a long press.
+    x, y = width // 2, int(height * 0.58)
     slow = subprocess.Popen(["adb", "shell", f"input swipe {x} {y} {x} {y + 500} 3000"])
     time.sleep(1.6)
     screenshot("2-gesture-halfway")
@@ -233,7 +240,7 @@ def main(apk):
     print(adb("logcat", "-d", "-s", "ContentIndexer:*", "images:*", "ContentIndexJob:*", "TextExtraction:*", check=False)[-3000:])
     time.sleep(3)
     open_search(width, height)
-    check(not wait_for_text("Sett", timeout=1), "search starts empty")
+    check(wait_for_text("Cancel", timeout=5) and not wait_for_text("Top hit", timeout=1), "search starts empty")
     shell("input text garantie")
     check(wait_for_text("Garantieschein", timeout=20), "picture is found by recognised text")
     shell("input keyevent KEYCODE_BACK")  # keyboard down, to show all results
@@ -258,6 +265,7 @@ def main(apk):
         time.sleep(2.5)
         texts = ui_texts()
         folder_made = page_labels[1].get("text") not in texts or any(t in texts for t in ["Folder", "Ordner", "Utilities", "Dienstprogramme", "Productivity", "Produktivität"])
+        print(adb("logcat", "-d", "-s", "HomeController:*", "WorkspaceRepository:*", check=False)[-1500:])
         check(folder_made, "dragging an app onto another makes a folder")
         screenshot("7-folder")
     else:

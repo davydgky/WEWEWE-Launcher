@@ -113,7 +113,7 @@ fun HomeScreen(
     val pagerState = rememberPagerState { homePages + 1 }
     controller.pager = pagerState
     LaunchedEffect(resetSignal) { if (resetSignal > 0) pagerState.animateScrollToPage(0) }
-    var backgroundMenu by remember { mutableStateOf(false) }
+    var backgroundMenu by remember(controller.menuEpoch) { mutableStateOf(false) }
     val haptics = LocalHapticFeedback.current
 
     Column(
@@ -234,7 +234,7 @@ private fun WorkspacePage(page: Int, workspace: Workspace, apps: Map<String, App
 @Composable
 private fun HomeAppIcon(app: AppTarget, source: DragSource, controller: HomeController, showLabel: Boolean) {
     val bounds = remember { ScreenBounds() }
-    var menu by remember { mutableStateOf(false) }
+    var menu by remember(controller.menuEpoch) { mutableStateOf(false) }
     var size by remember { mutableStateOf(IntSize.Zero) }
     val haptics = LocalHapticFeedback.current
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
@@ -299,7 +299,7 @@ private fun IconLabel(text: String, modifier: Modifier = Modifier) {
  */
 @Composable
 private fun FolderCell(folder: FolderItem, apps: Map<String, AppTarget>, controller: HomeController) {
-    var menu by remember { mutableStateOf(false) }
+    var menu by remember(controller.menuEpoch) { mutableStateOf(false) }
     var size by remember { mutableStateOf(IntSize.Zero) }
     val haptics = LocalHapticFeedback.current
     val members = folder.apps.mapNotNull(apps::get)
@@ -421,7 +421,7 @@ private fun MiniCluster(apps: List<AppTarget>, size: Dp, onClick: () -> Unit) {
 private fun WidgetCell(item: WidgetItem, workspace: Workspace, cellW: Dp, cellH: Dp, controller: HomeController) {
     val app = LocalContext.current.launcherApp
     val info = remember(item.widgetId) { app.widgets.info(item.widgetId) }
-    var menu by remember { mutableStateOf(false) }
+    var menu by remember(controller.menuEpoch) { mutableStateOf(false) }
     var size by remember { mutableStateOf(IntSize.Zero) }
     val haptics = LocalHapticFeedback.current
     val widthDp = (cellW * item.cell.w - CELL_PADDING * 2).value
@@ -694,7 +694,7 @@ private fun AppLibraryPage(groups: List<LibraryGroup>, workspace: Workspace, con
 
 @Composable
 private fun LibraryBox(group: LibraryGroup, workspace: Workspace, controller: HomeController, modifier: Modifier) {
-    var menuApp by remember { mutableStateOf<AppTarget?>(null) }
+    var menuApp by remember(controller.menuEpoch) { mutableStateOf<AppTarget?>(null) }
     Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
         Box(
             Modifier

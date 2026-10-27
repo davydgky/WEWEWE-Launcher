@@ -93,6 +93,7 @@ fun LauncherScreen(
 
     LaunchedEffect(homePressed) {
         homePressed.collect {
+            controller.dismissMenus()
             when {
                 state.isActive -> state.close()
                 controller.openFolderId != null -> controller.openFolderId = null
