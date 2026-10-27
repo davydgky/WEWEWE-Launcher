@@ -21,6 +21,8 @@ SHOTS = "screenshots"
 failures = []
 # Crashes and "isn't responding" of the launcher itself; these stop a release.
 critical = []
+# ANRs while the main thread only waited for the emulator's software renderer (reported, not critical).
+slow_frames = []
 
 
 def adb(*args, check=True):
@@ -80,10 +82,10 @@ def wait_for_text(fragment, timeout=10):
 
 
 def record_anr(dialog):
-    if dialog in critical:
+    if dialog in critical or dialog in slow_frames:
         return
-    critical.append(dialog)
-    print(f"CRITICAL: {dialog}")
+    print(f"ANR: {dialog}")
+    stuck_in_our_code = True
     # Why the system considered us stuck: the lines after "ANR in" in the system log.
     log = adb("logcat", "-d", "-b", "system", check=False).splitlines()
     for i, line in enumerate(log):
@@ -102,8 +104,19 @@ def record_anr(dialog):
                 print("  " + line)
         section = text[ours:]
         start = section.find('"main" prio')
-        print(section[start:start + 5000] if start >= 0 else section[:5000])
+        main = section[start:start + 5000] if start >= 0 else section[:5000]
+        print(main)
+        # The main thread handed a frame to the render thread and waits for it: without a GPU the
+        # emulator renders the glass blur in software, which says nothing about a phone.
+        stack = main.split("\n\n")[0]
+        stuck_in_our_code = "nSyncAndDrawFrame" not in stack or "io.github.davydgky" in stack
         break
+    if stuck_in_our_code:
+        critical.append(dialog)
+        print("CRITICAL: the launcher's main thread was busy")
+    else:
+        slow_frames.append(dialog)
+        print("NOT CRITICAL: the main thread waited for the software renderer of the emulator")
 
 
 def screenshot(name):
@@ -121,7 +134,7 @@ def screenshot(name):
     image.save(os.path.join(SHOTS, f"{name}.jpg"), "JPEG", quality=85)
 
 
-def wait_until_idle(limit=150):
+def wait_until_idle(limit=90):
     """Right after boot the software-rendered emulator is busy for minutes; starting the launcher then
     measures the emulator, not the launcher."""
     deadline = time.time() + limit

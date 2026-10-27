@@ -19,6 +19,7 @@ import io.github.davydgky.launcher.sources.SearchSource
 import io.github.davydgky.launcher.sources.ShortcutsSource
 import io.github.davydgky.launcher.sources.Velo
 import io.github.davydgky.launcher.sources.VeloSource
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -167,7 +168,11 @@ class SearchRepository(private val app: LauncherApplication, private val scope: 
             val started = SystemClock.elapsedRealtime()
             val index = runCatching {
                 withContext(Dispatchers.IO) { SearchIndex.build(source.load()) }
-            }.onFailure { Log.w(TAG, "Loading ${source.id} failed", it) }.getOrNull()
+            }.onFailure {
+                // A newer load replaced this one: it reports the status, not this one.
+                if (it is CancellationException) throw it
+                Log.w(TAG, "Loading ${source.id} failed", it)
+            }.getOrNull()
             if (index != null && isActive(source)) {
                 engine.publish(source.id, index)
                 Log.i(TAG, "${source.id}: ${index.size} items in ${SystemClock.elapsedRealtime() - started} ms")
