@@ -149,4 +149,5 @@
     <string name="dock_suggestion_off">Hier keine Apps vorschlagen</string>
     <string name="setting_dock_suggestion">App-Vorschlag im Dock</string>
     <string name="setting_dock_suggestion_description">Ein freier Platz im Dock zeigt die App, die du jetzt am wahrscheinlichsten öffnest – nach Tageszeit und Nutzung. Nur auf diesem Gerät.</string>
+    <string name="update_error_not_found">Keine Releases gefunden. Updates brauchen ein öffentliches Repository mit veröffentlichten Releases.</string>
 </resources>

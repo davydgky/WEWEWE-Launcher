@@ -166,6 +166,8 @@ Signaturzertifikat. Installiert wird über den `PackageInstaller`. Beim ersten U
 nach der Erlaubnis „Unbekannte Apps installieren“. Danach ist der Launcher selbst der Installer, und
 Updates laufen ohne Rückfrage, sobald eine andere App im Vordergrund ist. Abschalten lässt sich das unter
 *Launcher & Suche › Updates*.
+Das Repository muss dafür öffentlich sein: Bei einem privaten Repository antwortet GitHub dem Updater
+ohne Anmeldung mit „nicht gefunden“, und die App meldet „Keine Releases gefunden“.
 
 Signiert wird mit `scripts/sign_release.sh`:
 

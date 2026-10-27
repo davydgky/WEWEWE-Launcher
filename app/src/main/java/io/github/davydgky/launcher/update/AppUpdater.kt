@@ -113,8 +113,9 @@ class AppUpdater(
             _state.value = UpdateState.Checking
             val release = runCatching { fetchLatestRelease() }
                 .onFailure { Log.w(TAG, "Update check failed", it) }
-                .getOrElse {
-                    _state.value = if (automatic) UpdateState.Idle else UpdateState.Failed(R.string.update_error_network)
+                .getOrElse { error ->
+                    val message = if (error is ReleasesNotFound) R.string.update_error_not_found else R.string.update_error_network
+                    _state.value = if (automatic) UpdateState.Idle else UpdateState.Failed(message)
                     return@launch
                 }
             preferences.setLastUpdateCheck(System.currentTimeMillis())
@@ -164,7 +165,8 @@ class AppUpdater(
             connection.setRequestProperty("User-Agent", "WEWEWE-Launcher/${BuildConfig.VERSION_NAME}")
             when (connection.responseCode) {
                 HttpURLConnection.HTTP_OK -> Unit
-                HttpURLConnection.HTTP_NOT_FOUND -> return@withContext null // no release published yet
+                // A private repository answers like one without releases; neither offers an update.
+                HttpURLConnection.HTTP_NOT_FOUND -> throw ReleasesNotFound()
                 else -> throw IOException("HTTP ${connection.responseCode}")
             }
             val body = connection.inputStream.bufferedReader().use { it.readText() }
@@ -398,3 +400,6 @@ class AppUpdater(
         val CHECK_INTERVAL_MS = TimeUnit.HOURS.toMillis(6)
     }
 }
+
+/** GitHub lists no release: none was published yet, or the repository is private. */
+private class ReleasesNotFound : IOException("No releases found")
