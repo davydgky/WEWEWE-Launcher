@@ -37,19 +37,26 @@ Welche Quelle Android unter welcher Bedingung erlaubt und warum die Architektur 
 - **Index aktualisiert sich selbst**: `LauncherApps.Callback`, `ContentObserver` für Kontakte, Kalender,
   Medien und Velo, MediaStore-Generationen für inkrementelle Bild- und Dokumentänderungen, regelmäßiger
   Abgleich der Notiz-Ordner.
-- **Homescreen frei anordnen**: Langes Drücken zeigt das Menü (Verknüpfungen der App, Dock, „Vom
-  Home-Bildschirm entfernen“, App-Info, Deinstallieren). Langes Drücken mit anschließendem Ziehen
-  verschiebt. Was im Weg steht, rückt zur Seite. Am Bildschirmrand blättert die Seite um, und hinter der
-  letzten Seite entsteht eine neue. Die erste Anordnung stellt die meistgenutzten Apps nach vorn.
-- **Ordner wie bei Nothing OS**: Eine App auf eine andere ziehen erzeugt einen Ordner über 2×2 Felder. Seine
-  ersten Apps lassen sich direkt antippen, ohne den Ordner zu öffnen. Ab der fünften App zeigt das vierte
-  Feld den Rest in Miniatur. Antippen öffnet den Ordner, in dem man ihn umbenennen und Apps herausnehmen kann.
+- **Bearbeitungsmodus wie bei iOS**: Langes Drücken auf den Hintergrund, „Home-Bildschirm bearbeiten“ im
+  Menü einer App oder das Ziehen eines Elements startet ihn. Alles wackelt, ein graues Minus nimmt Apps,
+  Ordner und Widgets vom Home-Bildschirm (Apps bleiben in der App-Mediathek), und Elemente lassen sich
+  sofort verschieben. Die Leiste unten bietet „Widget hinzufügen“, Hintergrundbild, Einstellungen und
+  „Fertig“. Beenden auch per Tipp auf freie Fläche, Home oder Zurück.
+- **Homescreen frei anordnen**: Langes Drücken auf eine App zeigt ihr Menü (Verknüpfungen, Dock, „Vom
+  Home-Bildschirm entfernen“, App-Info, Deinstallieren). Was im Weg steht, rückt zur Seite. Am
+  Bildschirmrand blättert die Seite um, und hinter der letzten Seite entsteht eine neue. Die erste Anordnung
+  stellt die meistgenutzten Apps nach vorn. Über die Seitenpunkte wischen springt zwischen den Seiten.
+- **Ordner wie bei Nothing OS**: Eine App auf eine andere ziehen erzeugt einen Ordner über 2×2 Felder. Er fasst
+  bis zu neun Apps und zeigt sie verkleinert im 3×3-Raster; jede lässt sich direkt antippen, ohne den Ordner
+  zu öffnen. Der Rand öffnet den Ordner, in dem man ihn umbenennen und Apps herausnehmen kann.
 - **App-Mediathek** rechts neben der letzten Seite, wie bei iOS: Vorschläge, zuletzt installiert und Kategorien,
   die die Apps selbst angeben, jeweils nach Nutzung sortiert. Neue Apps landen wahlweise nur hier.
-- **Widgets**: langes Drücken auf den Hintergrund › „Widget hinzufügen“. Die Auswahl zeigt Vorschauen,
-  danach folgt bei Bedarf die einmalige Erlaubnis und der Einrichtungsbildschirm des Widgets. Größe ändern
-  und entfernen geht per langem Drücken.
-- **Dock** mit bis zu vier Apps, per Ziehen oder Menü befüllbar, und ein kleiner Suchen-Knopf wie bei iOS.
+- **Widgets**: im Bearbeitungsmodus über „Widget hinzufügen“. Die Auswahl zeigt Vorschauen, danach folgt
+  bei Bedarf die einmalige Erlaubnis und der Einrichtungsbildschirm des Widgets. Die Größe ändert ein Tipp
+  auf das Widget im Bearbeitungsmodus oder langes Drücken.
+- **Dock** mit bis zu fünf Apps, per Ziehen oder Menü befüllbar. Ein freier Platz zeigt eine vorgeschlagene
+  App (Ring), wie beim Pixel Launcher, aber aus der eigenen Vorhersage nach Tageszeit und Nutzung; langes
+  Drücken behält sie im Dock oder schaltet die Vorschläge ab. Darüber ein kleiner Suchen-Knopf wie bei iOS.
   Statusleiste und Beschriftungen passen sich an helle und dunkle Hintergrundbilder an.
 - **Einstellungen** („Launcher & Suche“): jede Quelle einzeln abschaltbar, fehlende Berechtigungen mit
   einem Tipp erteilen, Notiz-Ordner verwalten, Fortschritt der Texterkennung, Messwerte, Index neu aufbauen.
@@ -138,11 +145,13 @@ Velo mit `notifyChange`, und der Launcher liest dann neu ein.
 ./gradlew :core:test testDebugUnitTest  # Unit-Tests
 ```
 
-Jeder Push baut über GitHub Actions: Build, Unit-Tests, Lint und die Netzwerk-Prüfungen (siehe Datenschutz).
-Danach bedient ein Emulator-Test (`scripts/emulator_smoke.py`) den Launcher: Er macht
+GitHub Actions spart Minuten: Ein Push auf einen Arbeitszweig kompiliert nur und führt die Unit-Tests aus;
+reine Doku-Änderungen bauen gar nicht. Auf `main` (oder per „Run workflow“) folgen Release-Build, Lint, die
+Netzwerk-Prüfungen (siehe Datenschutz) und der Emulator-Test (`scripts/emulator_smoke.py`). Er macht
 ihn zum Standard, wischt nach unten und prüft, dass die Tastatur erscheint. Er tippt einen App-Namen, legt
 ein Foto mit Text ab, simuliert das Laden, lässt die Texterkennung laufen und sucht nach einem Wort aus dem
-Foto. Er legt einen Ordner per Ziehen an, öffnet die App-Mediathek und fügt ein Widget hinzu. Die
+Foto. Er legt einen Ordner per Ziehen an, öffnet die App-Mediathek, startet den Bearbeitungsmodus und
+fügt ein Widget hinzu. Die
 Screenshots liegen als Artefakt `screenshots` und zusätzlich unter der Git-Referenz `refs/screenshots/latest`
 (`git fetch origin refs/screenshots/latest`). Abstürze oder ein „reagiert nicht“ des Launchers gelten als
 kritisch; die übrigen Prüfungen sind informativ, weil der Software-Emulator langsam ist.
@@ -185,6 +194,9 @@ Signiert wird mit `scripts/sign_release.sh`:
 - Das Glas bricht den Homescreen, nicht das Hintergrundbild selbst. Das Hintergrundbild ist ein eigenes
   Systemfenster und wird nur weichgezeichnet. Ist der Fenster-Blur aus (z. B. im Energiesparmodus), dunkelt
   die Suche es stattdessen ab.
+- Die App-Vorschläge des Pixel Launchers kommen von „Android System Intelligence“ über eine System-API
+  (`AppPredictionManager`), die nur vorinstallierte Launcher nutzen dürfen. Der Dock-Vorschlag nutzt
+  deshalb die eigene Vorhersage.
 - Texterkennung nur für lateinische Schrift. Office-Dateien werden nur über den Namen gefunden.
 - Für eine Veröffentlichung bei Google Play wären Erklärungen für `READ_CONTACTS` (ab Android 17),
   `MANAGE_EXTERNAL_STORAGE` und `PACKAGE_USAGE_STATS` nötig.

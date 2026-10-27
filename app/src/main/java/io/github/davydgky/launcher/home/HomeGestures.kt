@@ -25,6 +25,10 @@ class HomeItemGestureCallbacks(
     val onDown: () -> Unit = {},
     /** The gesture on the element is over, whatever it was. */
     val onRelease: () -> Unit = {},
+    /** In edit mode an element moves at once, without a long press, and keeps every touch to itself. */
+    val editing: () -> Boolean = { false },
+    /** A tap in edit mode (e.g. a widget's size menu); apps do not open then. */
+    val onEditTap: (() -> Unit)? = null,
 )
 
 private const val LONG_PRESS = 0
@@ -38,7 +42,8 @@ private class CoordinatesHolder {
 /**
  * Tap, long press and long press followed by dragging, as on a home screen. Events are watched before
  * the element's children see them, but only taken once the long press fires, so a widget or a folder's
- * icons still receive ordinary taps and scrolls.
+ * icons still receive ordinary taps and scrolls. In edit mode the element takes the whole gesture and
+ * moves as soon as the finger does, as on iOS.
  */
 fun Modifier.homeItemGestures(key: Any, callbacks: HomeItemGestureCallbacks): Modifier = composed {
     val holder = remember { CoordinatesHolder() }
@@ -53,6 +58,34 @@ fun Modifier.homeItemGestures(key: Any, callbacks: HomeItemGestureCallbacks): Mo
                 while (true) {
                     val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
                     current.onDown()
+                    if (current.editing()) {
+                        try {
+                            down.consume()
+                            var dragging = false
+                            try {
+                                while (true) {
+                                    val event = awaitPointerEvent(PointerEventPass.Initial)
+                                    val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                                    change.consume()
+                                    if (!change.pressed) {
+                                        if (!dragging) current.onEditTap?.invoke()
+                                        break
+                                    }
+                                    val coordinates = holder.coordinates ?: continue
+                                    if (!dragging && (change.position - down.position).getDistance() > slop) {
+                                        dragging = true
+                                        current.onDragStart(coordinates.localToRoot(change.position), down.position)
+                                    }
+                                    if (dragging) current.onDrag(coordinates.localToRoot(change.position))
+                                }
+                            } finally {
+                                if (dragging) current.onDragEnd()
+                            }
+                        } finally {
+                            current.onRelease()
+                        }
+                        continue
+                    }
                     try {
                         var outcome = LONG_PRESS
                         withTimeoutOrNull(timeout) {

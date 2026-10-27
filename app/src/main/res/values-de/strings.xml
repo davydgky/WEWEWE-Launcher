@@ -142,4 +142,11 @@
     <string name="update_error_install">Die Installation ist fehlgeschlagen</string>
     <string name="update_auto">Automatisch aktualisieren</string>
     <string name="update_auto_hint">Lädt Updates im WLAN und installiert sie, während eine andere App offen ist. Beim ersten Update fragt Android einmal nach der Erlaubnis.</string>
+    <string name="menu_edit_home">Home-Bildschirm bearbeiten</string>
+    <string name="edit_remove">Entfernen</string>
+    <string name="edit_done">Fertig</string>
+    <string name="dock_suggestion_pin">Im Dock behalten</string>
+    <string name="dock_suggestion_off">Hier keine Apps vorschlagen</string>
+    <string name="setting_dock_suggestion">App-Vorschlag im Dock</string>
+    <string name="setting_dock_suggestion_description">Ein freier Platz im Dock zeigt die App, die du jetzt am wahrscheinlichsten öffnest – nach Tageszeit und Nutzung. Nur auf diesem Gerät.</string>
 </resources>

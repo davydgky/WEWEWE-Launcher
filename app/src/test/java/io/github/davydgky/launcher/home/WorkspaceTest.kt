@@ -112,6 +112,40 @@ class WorkspaceTest {
     }
 
     @Test
+    fun aFolderHoldsAtMostNineApps() {
+        val many = Workspace.initial(4, 6, (1..12).map { "a$it" }, emptyList())
+        var ws = many.makeFolder(many.appItem("a2").id, many.appItem("a1").id, "Ordner")
+        val folderId = ws.items.filterIsInstance<FolderItem>().single().id
+        (3..12).forEach { ws = ws.addToFolder("a$it", folderId) }
+        val folder = ws.item(folderId) as FolderItem
+        assertEquals((1..9).map { "a$it" }, folder.apps)
+        assertTrue(folder.isFull)
+        // The apps that did not fit stay where they were.
+        assertEquals(setOf("a10", "a11", "a12"), ws.items.filterIsInstance<AppItem>().map { it.appKey }.toSet())
+        ws.assertNoOverlaps()
+    }
+
+    @Test
+    fun oversizedFoldersFromBeforeTheLimitAreTrimmed() {
+        val folder = FolderItem(1, Cell(0, 0, 0, 2, 2), "Alt", (1..11).map { "a$it" })
+        val old = Workspace(4, 6, listOf(folder), emptyList(), (1..11).map { "a$it" }.toSet(), 2)
+        val ws = old.sync((1..11).map { "a$it" }, addNew = false)
+        assertEquals((1..9).map { "a$it" }, (ws.item(1) as FolderItem).apps)
+        assertEquals(setOf("a10", "a11"), ws.items.filterIsInstance<AppItem>().map { it.appKey }.toSet())
+        assertEquals((1..11).map { "a$it" }.toSet(), ws.appsOnHome())
+        ws.assertNoOverlaps()
+    }
+
+    @Test
+    fun theDockHoldsFiveApps() {
+        var ws = initial()
+        listOf("app3", "app4", "app5", "app6").forEach { ws = ws.toDock(it, ws.dock.size) }
+        assertEquals(listOf("app1", "app2", "app3", "app4", "app5"), ws.dock)
+        assertFalse("app6" in ws.dock)
+        assertNotNull(ws.items.filterIsInstance<AppItem>().singleOrNull { it.appKey == "app6" })
+    }
+
+    @Test
     fun codecRoundTrip() {
         val base = initial()
         val ws = base.makeFolder(base.appItem("app4").id, base.appItem("app3").id, "Spiele")

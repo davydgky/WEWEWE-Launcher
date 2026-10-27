@@ -143,4 +143,11 @@
     <string name="update_error_install">The installation failed</string>
     <string name="update_auto">Update automatically</string>
     <string name="update_auto_hint">Downloads updates on Wi-Fi and installs them while another app is open. The first update asks once for permission.</string>
+    <string name="menu_edit_home">Edit home screen</string>
+    <string name="edit_remove">Remove</string>
+    <string name="edit_done">Done</string>
+    <string name="dock_suggestion_pin">Keep in dock</string>
+    <string name="dock_suggestion_off">Don\'t suggest apps here</string>
+    <string name="setting_dock_suggestion">Suggested app in the dock</string>
+    <string name="setting_dock_suggestion_description">A free place in the dock shows the app you are most likely to open now, based on time of day and usage. Only on this device.</string>
 </resources>

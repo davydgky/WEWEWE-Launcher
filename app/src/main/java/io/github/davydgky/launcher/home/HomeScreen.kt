@@ -7,11 +7,20 @@ import android.content.Intent
 import android.graphics.Rect
 import android.os.Bundle
 import android.util.SizeF
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateIntOffsetAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -34,6 +43,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -41,14 +51,16 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -66,6 +78,7 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -83,7 +96,8 @@ import io.github.davydgky.launcher.ui.LocalLightWallpaper
 import io.github.davydgky.launcher.ui.ScreenBounds
 import io.github.davydgky.launcher.ui.wallpaperTextColor
 import io.github.davydgky.launcher.widgets.WidgetHost
-import kotlin.math.roundToInt
+import kotlin.math.floor
+import kotlinx.coroutines.launch
 
 /**
  * The home screen: pages of apps, Nothing-style folders and widgets that the user arranges freely, the
@@ -96,6 +110,7 @@ fun HomeScreen(
     library: List<LibraryGroup>,
     controller: HomeController,
     resetSignal: Int,
+    dockSuggestion: AppTarget?,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -113,22 +128,25 @@ fun HomeScreen(
     val pagerState = rememberPagerState { homePages + 1 }
     controller.pager = pagerState
     LaunchedEffect(resetSignal) { if (resetSignal > 0) pagerState.animateScrollToPage(0) }
-    var backgroundMenu by remember(controller.menuEpoch) { mutableStateOf(false) }
     val haptics = LocalHapticFeedback.current
 
     Column(
         modifier
             .fillMaxSize()
             .onGloballyPositioned { controller.screenWidth = it.size.width.toFloat() }
-            // Keyed by the menu epoch: the menu state is new after the home button closed the menus.
-            .pointerInput(controller.menuEpoch) {
-                detectTapGestures(onLongPress = {
-                    // Long presses on apps, folders and widgets have their own menus.
-                    if (controller.itemsPressed == 0) {
-                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                        backgroundMenu = true
-                    }
-                })
+            .pointerInput(Unit) {
+                // Apps, folders and widgets have their own long press; only the background starts editing.
+                var onItem = false
+                detectTapGestures(
+                    onPress = { onItem = controller.itemsPressed > 0 },
+                    onTap = { if (!onItem) controller.stopEditing() },
+                    onLongPress = {
+                        if (!onItem && !controller.editMode) {
+                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                            controller.startEditing()
+                        }
+                    },
+                )
             }
             .statusBarsPadding()
             .navigationBarsPadding(),
@@ -147,30 +165,96 @@ fun HomeScreen(
                     AppLibraryPage(library, workspace, controller)
                 }
             }
-            DropdownMenu(expanded = backgroundMenu, onDismissRequest = { backgroundMenu = false }) {
-                MenuItem(R.string.menu_add_widget, R.drawable.ic_widget) {
-                    backgroundMenu = false
-                    controller.widgetPickerOpen = true
-                }
-                MenuItem(R.string.menu_wallpaper, R.drawable.ic_image) {
-                    backgroundMenu = false
-                    runCatching { context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SET_WALLPAPER), null)) }
-                }
-                MenuItem(R.string.settings_title, R.drawable.ic_settings) {
-                    backgroundMenu = false
-                    context.startActivity(Intent(context, SettingsActivity::class.java))
-                }
-            }
         }
         val onLibrary = pagerState.currentPage >= homePages
-        PageIndicator(homePages, pagerState.currentPage)
-        if (!onLibrary) SearchButton(controller.openSearch) else Spacer(Modifier.height(SEARCH_BUTTON_SPACE))
-        Dock(workspace, apps, controller)
+        PageIndicator(homePages, pagerState)
+        when {
+            controller.editMode -> EditBar(controller)
+            !onLibrary -> SearchButton(controller.openSearch)
+            else -> Spacer(Modifier.height(SEARCH_BUTTON_SPACE))
+        }
+        Dock(workspace, apps, controller, dockSuggestion)
     }
 }
 
 private val CELL_PADDING = 4.dp
-private val SEARCH_BUTTON_SPACE = 38.dp
+private val SEARCH_BUTTON_SPACE = 30.dp
+
+/** Apps shown in an App Library box; with more, the last slot shows the rest in miniature. */
+private const val LIBRARY_SLOTS = 4
+
+private const val WIGGLE_DEGREES = 1.6f
+
+/** The back-and-forth rotation of elements in edit mode; 0 outside it. */
+@Composable
+private fun wiggleAngle(active: Boolean): State<Float> {
+    if (!active) return remember { mutableFloatStateOf(0f) }
+    val transition = rememberInfiniteTransition(label = "wiggle")
+    return transition.animateFloat(
+        initialValue = -WIGGLE_DEGREES,
+        targetValue = WIGGLE_DEGREES,
+        animationSpec = infiniteRepeatable(tween(140, easing = LinearEasing), RepeatMode.Reverse),
+        label = "wiggle",
+    )
+}
+
+/** The grey minus of edit mode that takes an element off the home screen. */
+@Composable
+private fun RemoveBadge(onClick: () -> Unit, modifier: Modifier = Modifier) {
+    val label = stringResource(R.string.edit_remove)
+    Box(
+        modifier
+            .size(22.dp)
+            .clip(CircleShape)
+            .background(Color(0xEB8E8E93))
+            .clickable(onClickLabel = label, onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(painterResource(R.drawable.ic_minus), label, Modifier.size(14.dp), tint = Color.White)
+    }
+}
+
+/** Replaces the search button in edit mode: add a widget, wallpaper, settings and done. */
+@Composable
+private fun EditBar(controller: HomeController) {
+    val context = LocalContext.current
+    Row(
+        Modifier.fillMaxWidth().height(SEARCH_BUTTON_SPACE).padding(horizontal = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        EditPill(R.drawable.ic_add, stringResource(R.string.menu_add_widget)) { controller.widgetPickerOpen = true }
+        EditPill(R.drawable.ic_image, null, stringResource(R.string.menu_wallpaper)) {
+            runCatching { context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SET_WALLPAPER), null)) }
+        }
+        EditPill(R.drawable.ic_settings, null, stringResource(R.string.settings_title)) {
+            context.startActivity(Intent(context, SettingsActivity::class.java))
+        }
+        Spacer(Modifier.weight(1f))
+        EditPill(null, stringResource(R.string.edit_done), emphasized = true, onClick = controller::stopEditing)
+    }
+}
+
+@Composable
+private fun EditPill(icon: Int?, text: String?, description: String? = text, emphasized: Boolean = false, onClick: () -> Unit) {
+    val color = wallpaperTextColor()
+    val content = if (emphasized) (if (LocalLightWallpaper.current) Color.White else Color(0xFF1B1B1F)) else color
+    Row(
+        Modifier
+            .height(28.dp)
+            .clip(RoundedCornerShape(50))
+            .background(if (emphasized) color.copy(alpha = 0.92f) else color.copy(alpha = 0.18f))
+            .clickable(onClickLabel = description, onClick = onClick)
+            .padding(horizontal = if (text == null) 8.dp else 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (icon != null) Icon(painterResource(icon), if (text == null) description else null, Modifier.size(15.dp), tint = content)
+        if (icon != null && text != null) Spacer(Modifier.width(5.dp))
+        if (text != null) {
+            Text(text, color = content, fontSize = 13.sp, lineHeight = 16.sp, fontWeight = if (emphasized) FontWeight.SemiBold else FontWeight.Normal, maxLines = 1)
+        }
+    }
+}
 
 @Composable
 private fun WorkspacePage(page: Int, workspace: Workspace, apps: Map<String, AppTarget>, controller: HomeController) {
@@ -184,6 +268,7 @@ private fun WorkspacePage(page: Int, workspace: Workspace, apps: Map<String, App
         val cellW = maxWidth / workspace.columns
         val cellH = maxHeight / workspace.rows
         val drag = controller.drag
+        val wiggle = wiggleAngle(controller.editMode)
         // Where the dragged element would land.
         when (val target = drag?.target) {
             is DropTarget.Move -> if (target.cell.page == page) {
@@ -218,12 +303,27 @@ private fun WorkspacePage(page: Int, workspace: Workspace, apps: Map<String, App
                             val scale = if (highlighted) 1.12f else 1f
                             scaleX = scale
                             scaleY = scale
+                            // Neighbours swing the other way; large elements less.
+                            val direction = if (item.id % 2 == 0L) 1f else -1f
+                            rotationZ = wiggle.value * direction / maxOf(item.cell.w, item.cell.h)
                         },
                 ) {
                     when (item) {
                         is AppItem -> apps[item.appKey]?.let { HomeAppIcon(it, DragSource.Item(item), controller, showLabel = true) }
                         is FolderItem -> FolderCell(item, apps, controller)
                         is WidgetItem -> WidgetCell(item, workspace, cellW, cellH, controller)
+                    }
+                    if (controller.editMode) {
+                        when (item) {
+                            is AppItem -> RemoveBadge(
+                                onClick = { controller.repository.removeApp(item.appKey) },
+                                modifier = Modifier.align(Alignment.TopCenter).offset(x = -ICON_SIZE / 2 + 2.dp, y = 0.dp),
+                            )
+                            is FolderItem, is WidgetItem -> RemoveBadge(
+                                onClick = { controller.repository.removeItem(item.id) },
+                                modifier = Modifier.align(Alignment.TopStart),
+                            )
+                        }
                     }
                 }
             }
@@ -260,6 +360,7 @@ private fun HomeAppIcon(app: AppTarget, source: DragSource, controller: HomeCont
                         onDragEnd = controller::endDrag,
                         onDown = controller::itemDown,
                         onRelease = controller::itemReleased,
+                        editing = { controller.editMode },
                     ),
                 )
                 .padding(top = 6.dp),
@@ -295,8 +396,8 @@ private fun IconLabel(text: String, modifier: Modifier = Modifier) {
 }
 
 /**
- * A folder like on Nothing OS: 2×2 cells whose app icons open directly. With more than four apps the
- * last slot shows the rest in miniature and opens the folder.
+ * A folder like on Nothing OS: 2×2 cells showing up to nine apps as a 3×3 grid whose icons open
+ * directly. The space around them opens the folder.
  */
 @Composable
 private fun FolderCell(folder: FolderItem, apps: Map<String, AppTarget>, controller: HomeController) {
@@ -325,6 +426,8 @@ private fun FolderCell(folder: FolderItem, apps: Map<String, AppTarget>, control
                     onDragEnd = controller::endDrag,
                     onDown = controller::itemDown,
                     onRelease = controller::itemReleased,
+                    editing = { controller.editMode },
+                    onEditTap = { controller.openFolderId = folder.id },
                 ),
             )
             .padding(CELL_PADDING),
@@ -337,18 +440,44 @@ private fun FolderCell(folder: FolderItem, apps: Map<String, AppTarget>, control
                 .clip(RoundedCornerShape(30.dp))
                 .background(folderFill())
                 .clickable { controller.openFolderId = folder.id }
-                .padding(8.dp),
+                .padding(6.dp),
         ) {
-            AppQuad(
-                apps = members,
-                overflow = members.size > FolderItem.DIRECT_SLOTS,
-                onOpenApp = { app, bounds -> controller.actions.launchApp(app, bounds) },
-                onOverflow = { controller.openFolderId = folder.id },
-            )
+            FolderGrid(members) { app, bounds -> controller.actions.launchApp(app, bounds) }
         }
         Spacer(Modifier.height(4.dp))
         IconLabel(folder.name.ifBlank { stringResource(R.string.folder_default_name) })
         FolderMenu(folder, menu, onDismiss = { menu = false }, controller)
+    }
+}
+
+/** Up to nine apps in three rows of three; each icon opens its app. */
+@Composable
+private fun FolderGrid(apps: List<AppTarget>, onOpenApp: (AppTarget, Rect?) -> Unit) {
+    BoxWithConstraints(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        val slot = minOf(maxWidth, maxHeight) / 3
+        val icon = minOf(slot - 6.dp, ICON_SIZE)
+        Column {
+            for (row in 0 until 3) {
+                Row {
+                    for (col in 0 until 3) {
+                        Box(Modifier.size(slot), contentAlignment = Alignment.Center) {
+                            apps.getOrNull(row * 3 + col)?.let { app ->
+                                key(app.key) {
+                                    val bounds = remember { ScreenBounds() }
+                                    AppIconImage(
+                                        app, icon,
+                                        Modifier
+                                            .onGloballyPositioned(bounds::update)
+                                            .clip(CircleShape)
+                                            .clickable { onOpenApp(app, bounds.rect) },
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -448,6 +577,9 @@ private fun WidgetCell(item: WidgetItem, workspace: Workspace, cellW: Dp, cellH:
                     onDragEnd = controller::endDrag,
                     onDown = controller::itemDown,
                     onRelease = controller::itemReleased,
+                    editing = { controller.editMode },
+                    // In edit mode the widget itself gets no touches; a tap offers its sizes.
+                    onEditTap = { menu = true },
                 ),
             )
             .padding(CELL_PADDING)
@@ -491,6 +623,12 @@ private fun WidgetCell(item: WidgetItem, workspace: Workspace, cellW: Dp, cellH:
                     menu = false
                     controller.repository.removeItem(item.id)
                 }
+                if (!controller.editMode) {
+                    MenuItem(R.string.menu_edit_home, R.drawable.ic_edit) {
+                        menu = false
+                        controller.startEditing()
+                    }
+                }
             }
         } else {
             DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
@@ -503,31 +641,86 @@ private fun WidgetCell(item: WidgetItem, workspace: Workspace, cellW: Dp, cellH:
     }
 }
 
+/**
+ * Page dots plus the App Library glyph. Touching them and sliding along jumps between pages, as on iOS;
+ * a tap jumps to the page under the finger.
+ */
 @Composable
-private fun PageIndicator(homePages: Int, current: Int) {
+private fun PageIndicator(homePages: Int, pager: PagerState) {
     val color = wallpaperTextColor()
-    Row(Modifier.fillMaxWidth().padding(top = 6.dp, bottom = 2.dp), horizontalArrangement = Arrangement.Center) {
-        repeat(homePages) { page ->
-            Box(
-                Modifier
-                    .padding(horizontal = 4.dp)
-                    .size(7.dp)
-                    .clip(CircleShape)
-                    .background(color.copy(alpha = if (page == current) 0.95f else 0.35f)),
-            )
-        }
-        // The App Library, drawn as a tiny grid like on iOS.
-        Column(Modifier.padding(horizontal = 4.dp).size(7.dp), verticalArrangement = Arrangement.SpaceBetween) {
-            repeat(2) {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+    val scope = rememberCoroutineScope()
+    val haptics = LocalHapticFeedback.current
+    val current = pager.currentPage
+    val count = homePages + 1
+    var scrubbing by remember { mutableStateOf(false) }
+    Box(Modifier.fillMaxWidth().height(INDICATOR_HEIGHT), contentAlignment = Alignment.Center) {
+        Row(
+            Modifier
+                .clip(RoundedCornerShape(50))
+                .background(color.copy(alpha = if (scrubbing) 0.18f else 0f))
+                .pointerInput(count) {
+                    val slot = DOT_SLOT.toPx()
+                    val start = INDICATOR_PADDING.toPx()
+                    awaitEachGesture {
+                        val down = awaitFirstDown()
+                        down.consume()
+                        scrubbing = true
+                        var shown = pager.currentPage
+                        fun select(x: Float) {
+                            val page = floor((x - start) / slot).toInt().coerceIn(0, count - 1)
+                            if (page == shown) return
+                            shown = page
+                            haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            scope.launch { pager.scrollToPage(page) }
+                        }
+                        select(down.position.x)
+                        try {
+                            while (true) {
+                                val change = awaitPointerEvent().changes.firstOrNull { it.id == down.id } ?: break
+                                if (!change.pressed) break
+                                change.consume()
+                                select(change.position.x)
+                            }
+                        } finally {
+                            scrubbing = false
+                        }
+                    }
+                }
+                .padding(horizontal = INDICATOR_PADDING, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            repeat(homePages) { page ->
+                Box(Modifier.width(DOT_SLOT), contentAlignment = Alignment.Center) {
+                    Box(
+                        Modifier
+                            .size(7.dp)
+                            .clip(CircleShape)
+                            .background(color.copy(alpha = if (page == current) 0.95f else 0.35f)),
+                    )
+                }
+            }
+            // The App Library, drawn as a tiny grid like on iOS.
+            Box(Modifier.width(DOT_SLOT), contentAlignment = Alignment.Center) {
+                Column(Modifier.size(7.dp), verticalArrangement = Arrangement.SpaceBetween) {
                     repeat(2) {
-                        Box(Modifier.size(3.dp).background(color.copy(alpha = if (current >= homePages) 0.95f else 0.35f)))
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            repeat(2) {
+                                Box(Modifier.size(3.dp).background(color.copy(alpha = if (current >= homePages) 0.95f else 0.35f)))
+                            }
+                        }
                     }
                 }
             }
         }
     }
 }
+
+private val INDICATOR_HEIGHT = 23.dp
+private val INDICATOR_PADDING = 8.dp
+private val DOT_SLOT = 15.dp
+
+/** 30 % lower than the first version's 32 dp. */
+private val SEARCH_BUTTON_HEIGHT = 22.dp
 
 /** A small pill like the "Search" button on iOS home screens; tapping opens the search. */
 @Composable
@@ -539,21 +732,23 @@ private fun SearchButton(onClick: () -> Unit) {
                 .clip(RoundedCornerShape(50))
                 .background(color.copy(alpha = 0.16f))
                 .clickable(onClick = onClick)
-                .padding(horizontal = 10.dp, vertical = 4.dp),
+                .height(SEARCH_BUTTON_HEIGHT)
+                .padding(horizontal = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Icon(painterResource(R.drawable.ic_search), null, Modifier.size(11.dp), tint = color)
             Spacer(Modifier.width(4.dp))
-            Text(stringResource(R.string.search_button), color = color, fontSize = 11.sp)
+            Text(stringResource(R.string.search_button), color = color, fontSize = 11.sp, lineHeight = 13.sp)
         }
     }
 }
 
 @Composable
-private fun Dock(workspace: Workspace, apps: Map<String, AppTarget>, controller: HomeController) {
+private fun Dock(workspace: Workspace, apps: Map<String, AppTarget>, controller: HomeController, suggestion: AppTarget?) {
     val tint = if (LocalLightWallpaper.current) Color.White.copy(alpha = 0.35f) else Color.White.copy(alpha = 0.16f)
     val dragging = controller.drag
     val dropIndex = (dragging?.target as? DropTarget.Dock)?.index
+    val wiggle = wiggleAngle(controller.editMode)
     Row(
         Modifier
             .fillMaxWidth()
@@ -566,17 +761,82 @@ private fun Dock(workspace: Workspace, apps: Map<String, AppTarget>, controller:
         horizontalArrangement = Arrangement.SpaceEvenly,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        workspace.dock.forEach { appKey ->
-            val app = apps[appKey] ?: return@forEach
+        workspace.dock.forEachIndexed { index, appKey ->
+            val app = apps[appKey] ?: return@forEachIndexed
             key(appKey) {
                 Box(
                     Modifier
                         .weight(1f)
                         .height(64.dp)
-                        .graphicsLayer { alpha = if ((dragging?.source as? DragSource.Dock)?.appKey == appKey) 0.25f else 1f },
+                        .graphicsLayer {
+                            alpha = if ((dragging?.source as? DragSource.Dock)?.appKey == appKey) 0.25f else 1f
+                            rotationZ = if (index % 2 == 0) wiggle.value else -wiggle.value
+                        },
                 ) {
                     HomeAppIcon(app, DragSource.Dock(appKey), controller, showLabel = false)
+                    if (controller.editMode) {
+                        RemoveBadge(
+                            onClick = { controller.repository.removeApp(appKey) },
+                            modifier = Modifier.align(Alignment.TopCenter).offset(x = -ICON_SIZE / 2 + 2.dp, y = 0.dp),
+                        )
+                    }
                 }
+            }
+        }
+        // A free place shows the app most likely needed now, like the suggestions of the Pixel Launcher.
+        if (suggestion != null && !controller.editMode && workspace.dock.size < Workspace.DOCK_SIZE) {
+            key("suggestion") {
+                Box(Modifier.weight(1f).height(64.dp)) { DockSuggestion(suggestion, workspace, controller) }
+            }
+        }
+    }
+}
+
+/** The suggested app in the dock: a ring marks it; long press pins it or turns suggestions off. */
+@Composable
+private fun DockSuggestion(app: AppTarget, workspace: Workspace, controller: HomeController) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val haptics = LocalHapticFeedback.current
+    val bounds = remember { ScreenBounds() }
+    var menu by remember(controller.menuEpoch) { mutableStateOf(false) }
+    val ring = wallpaperTextColor().copy(alpha = 0.55f)
+    Box(
+        Modifier
+            .fillMaxSize()
+            .homeItemGestures(
+                key = "suggestion-${app.key}",
+                callbacks = HomeItemGestureCallbacks(
+                    onTap = { controller.actions.launchApp(app, bounds.rect) },
+                    onLongPress = {
+                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                        controller.itemHeld()
+                        menu = true
+                    },
+                    onDragStart = { _, _ -> },
+                    onDrag = {},
+                    onDragEnd = {},
+                    onDown = controller::itemDown,
+                    onRelease = controller::itemReleased,
+                ),
+            )
+            .padding(top = 6.dp),
+        contentAlignment = Alignment.TopCenter,
+    ) {
+        Box(
+            Modifier.size(ICON_SIZE).border(1.5.dp, ring, CircleShape),
+            contentAlignment = Alignment.Center,
+        ) {
+            AppIconImage(app, ICON_SIZE - 10.dp, Modifier.onGloballyPositioned(bounds::update))
+        }
+        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }, shape = RoundedCornerShape(18.dp)) {
+            MenuItem(R.string.dock_suggestion_pin, R.drawable.ic_pin) {
+                menu = false
+                controller.repository.toDock(app.key, workspace.dock.size)
+            }
+            MenuItem(R.string.dock_suggestion_off, R.drawable.ic_close) {
+                menu = false
+                scope.launch { context.launcherApp.settings.setDockSuggestion(false) }
             }
         }
     }
@@ -621,6 +881,10 @@ private fun AppMenu(
                 }
             }
         }
+        MenuItem(R.string.menu_edit_home, R.drawable.ic_edit) {
+            onDismiss()
+            controller.startEditing()
+        }
         MenuItem(R.string.menu_app_info, R.drawable.ic_info) {
             onDismiss()
             controller.actions.appInfo(app)
@@ -646,6 +910,10 @@ private fun FolderMenu(folder: FolderItem, expanded: Boolean, onDismiss: () -> U
         MenuItem(R.string.menu_remove_folder, R.drawable.ic_minus) {
             onDismiss()
             controller.repository.removeItem(folder.id)
+        }
+        MenuItem(R.string.menu_edit_home, R.drawable.ic_edit) {
+            onDismiss()
+            controller.startEditing()
         }
     }
 }
@@ -708,7 +976,7 @@ private fun LibraryBox(group: LibraryGroup, workspace: Workspace, controller: Ho
         ) {
             AppQuad(
                 apps = group.apps,
-                overflow = group.apps.size > FolderItem.DIRECT_SLOTS,
+                overflow = group.apps.size > LIBRARY_SLOTS,
                 onOpenApp = { app, bounds -> controller.actions.launchApp(app, bounds) },
                 onOverflow = { controller.openCategory = group },
                 onLongPressApp = { menuApp = it },

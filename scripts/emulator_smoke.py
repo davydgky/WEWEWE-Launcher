@@ -306,6 +306,8 @@ def main(apk):
         print(adb("logcat", "-d", "-s", "HomeController:*", "WorkspaceRepository:*", check=False)[-1500:])
         check(folder_made, "dragging an app onto another makes a folder")
         screenshot("7-folder")
+        go_home()  # dragging started edit mode; home ends it
+        time.sleep(1.5)
     else:
         check(False, "home screen shows apps to arrange")
 
@@ -317,13 +319,15 @@ def main(apk):
     screenshot("8-app-library")
     go_home()
 
-    # 6. A widget from the picker (binding allowed beforehand, as a user would allow it once).
+    # 6. A long press on empty background starts edit mode; its bar adds a widget (binding allowed
+    # beforehand, as a user would allow it once).
     shell(f"appwidget grantbind --package {PACKAGE} --user 0", check=False)
-    # Long press on empty background: beside the search button.
     pill = next((n for n in ui_nodes() if n.get("text") in ("Search", "Suchen")), None)
     py = center(pill)[1] if pill is not None else int(height * 0.8)
     shell(f"input swipe {int(width * 0.1)} {py} {int(width * 0.1)} {py} 1200")
     time.sleep(1.5)
+    check(wait_for_text("Done", timeout=5), "a long press on the background starts edit mode")
+    screenshot("9-edit-mode")
     added = False
     for node in ui_nodes():
         if node.get("text") in ("Add widget", "Widget hinzufügen"):
@@ -339,7 +343,7 @@ def main(apk):
                 added = not wait_for_text("Widgets", timeout=2)
             break
     check(added, "a widget can be added from the picker")
-    screenshot("9-widget")
+    screenshot("10-widget")
     go_home()
 
     # 7. Settings page.

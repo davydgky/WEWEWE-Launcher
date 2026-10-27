@@ -12,3 +12,4 @@
 *.keystore
 !debug.keystore
 /core/build/
+__pycache__/

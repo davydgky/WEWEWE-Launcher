@@ -208,6 +208,25 @@ private fun SettingsScreen(activity: ComponentActivity) {
                         onCheckedChange = { enabled -> scope.launch { app.settings.setAddNewAppsToHome(enabled) } },
                     )
                 }
+                HorizontalDivider()
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(stringResource(R.string.setting_dock_suggestion), style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            stringResource(R.string.setting_dock_suggestion_description),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    Switch(
+                        checked = prefs.dockSuggestion,
+                        onCheckedChange = { enabled -> scope.launch { app.settings.setDockSuggestion(enabled) } },
+                    )
+                }
             }
         }
         item {

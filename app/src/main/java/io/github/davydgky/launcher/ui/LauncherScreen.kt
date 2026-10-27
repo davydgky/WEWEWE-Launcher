@@ -30,6 +30,7 @@ import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.kyant.backdrop.backdrops.layerBackdrop
 import com.kyant.backdrop.backdrops.rememberLayerBackdrop
+import io.github.davydgky.launcher.data.LauncherPrefs
 import io.github.davydgky.launcher.home.AppLibrary
 import io.github.davydgky.launcher.home.CategoryOverlay
 import io.github.davydgky.launcher.home.DragOverlay
@@ -38,6 +39,7 @@ import io.github.davydgky.launcher.home.HomeController
 import io.github.davydgky.launcher.home.HomeScreen
 import io.github.davydgky.launcher.home.LibraryGroup
 import io.github.davydgky.launcher.home.WidgetPicker
+import io.github.davydgky.launcher.home.Workspace
 import io.github.davydgky.launcher.launcherApp
 import io.github.davydgky.launcher.search.ResultActions
 import io.github.davydgky.launcher.search.SearchViewModel
@@ -92,6 +94,13 @@ fun LauncherScreen(
             value = withContext(Dispatchers.Default) { AppLibrary.groups(list, suggested, prior) }
         }
     }
+    val suggestions by app.suggestions.current.collectAsStateWithLifecycle()
+    val prefs by app.settings.prefs.collectAsStateWithLifecycle(LauncherPrefs())
+    // The dock's free place shows the most likely app that is not in the dock already.
+    val dockSuggestion = workspace?.let { ws ->
+        if (!prefs.dockSuggestion || ws.dock.size >= Workspace.DOCK_SIZE) null
+        else suggestions.apps.firstOrNull { it.key !in ws.dock }
+    }
     LaunchedEffect(appList) { app.icons.preloadApps(appList) }
     LaunchedEffect(Unit) { app.workspace.cleanUpWidgets() }
 
@@ -103,11 +112,13 @@ fun LauncherScreen(
                 controller.openFolderId != null -> controller.openFolderId = null
                 controller.openCategory != null -> controller.openCategory = null
                 controller.widgetPickerOpen -> controller.widgetPickerOpen = false
+                controller.editMode -> controller.stopEditing()
                 else -> homeReset++
             }
         }
     }
     BackHandler(enabled = state.isActive) { state.close() }
+    BackHandler(enabled = controller.editMode && !state.isActive) { controller.stopEditing() }
     LaunchedEffect(state) { snapshotFlow { state.isActive }.collect(onSearchActive) }
     LaunchedEffect(state) { snapshotFlow { state.progress.value }.collect(onSearchProgress) }
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
@@ -117,7 +128,10 @@ fun LauncherScreen(
         // Focus without keyboard: the keyboard connection is ready before the next swipe.
         runCatching { focusRequester.requestFocus() }
     }
-    LifecycleEventEffect(Lifecycle.Event.ON_STOP) { state.reset() }
+    LifecycleEventEffect(Lifecycle.Event.ON_STOP) {
+        state.reset()
+        controller.stopEditing()
+    }
 
     val colors = glassColors()
     val homeBackdrop = rememberLayerBackdrop()
@@ -152,7 +166,7 @@ fun LauncherScreen(
                         },
                     ),
             ) {
-                workspace?.let { ws -> HomeScreen(ws, apps, library, controller, homeReset) }
+                workspace?.let { ws -> HomeScreen(ws, apps, library, controller, homeReset, dockSuggestion) }
             }
             if (state.isActive) {
                 Box(

@@ -28,6 +28,8 @@ data class LauncherPrefs(
     val usageHintDismissed: Boolean = false,
     /** Download updates on Wi-Fi and install them while the home screen is not in use. */
     val autoUpdate: Boolean = true,
+    /** A free place in the dock shows a suggested app. */
+    val dockSuggestion: Boolean = true,
 )
 
 class LauncherSettings(private val dataStore: DataStore<Preferences>) {
@@ -43,6 +45,7 @@ class LauncherSettings(private val dataStore: DataStore<Preferences>) {
                 addNewAppsToHome = prefs[AddNewAppsKey] ?: true,
                 usageHintDismissed = prefs[UsageHintDismissedKey] ?: false,
                 autoUpdate = prefs[AutoUpdateKey] ?: true,
+                dockSuggestion = prefs[DockSuggestionKey] ?: true,
             )
         }
         .distinctUntilChanged()
@@ -66,6 +69,10 @@ class LauncherSettings(private val dataStore: DataStore<Preferences>) {
         dataStore.edit { it[AddNewAppsKey] = enabled }
     }
 
+    suspend fun setDockSuggestion(enabled: Boolean) {
+        dataStore.edit { it[DockSuggestionKey] = enabled }
+    }
+
     suspend fun dismissUsageHint() {
         dataStore.edit { it[UsageHintDismissedKey] = true }
     }
@@ -87,6 +94,7 @@ class LauncherSettings(private val dataStore: DataStore<Preferences>) {
         val AddNewAppsKey = booleanPreferencesKey("add_new_apps_to_home")
         val UsageHintDismissedKey = booleanPreferencesKey("usage_hint_dismissed")
         val AutoUpdateKey = booleanPreferencesKey("auto_update")
+        val DockSuggestionKey = booleanPreferencesKey("dock_suggestion")
         val LastUpdateCheckKey = longPreferencesKey("last_update_check")
     }
 }

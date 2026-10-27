@@ -64,6 +64,22 @@ class HomeController(
     var drag by mutableStateOf<DragState?>(null)
         private set
     var openFolderId by mutableStateOf<Long?>(null)
+
+    /**
+     * Edit mode as on iOS: elements wiggle, show a remove badge and move without a long press. Entered by
+     * a long press on the background, from an element's menu or by dragging an element.
+     */
+    var editMode by mutableStateOf(false)
+        private set
+
+    fun startEditing() {
+        editMode = true
+        dismissMenus()
+    }
+
+    fun stopEditing() {
+        editMode = false
+    }
     var openCategory by mutableStateOf<LibraryGroup?>(null)
     var widgetPickerOpen by mutableStateOf(false)
 
@@ -123,13 +139,14 @@ class HomeController(
 
     /** No other gesture (search swipe, pager) while something is held, dragged or edited. */
     val isEditing: Boolean
-        get() = holding || drag != null || openFolderId != null || openCategory != null || widgetPickerOpen
+        get() = editMode || holding || drag != null || openFolderId != null || openCategory != null || widgetPickerOpen
 
     private var edgeJob: Job? = null
 
     fun startDrag(source: DragSource, pointer: Offset, grab: Offset, size: IntSize) {
         Log.i(TAG, "Drag $source")
         drag = DragState(source, pointer, grab, size)
+        editMode = true
     }
 
     fun moveDrag(pointer: Offset) {
@@ -188,7 +205,8 @@ class HomeController(
         if (appKey != null && under != null && under.id != dragged?.id) {
             // Close to the middle of an app or anywhere on a folder: group them.
             when (under) {
-                is FolderItem -> return DropTarget.IntoFolder(under.id)
+                // A full folder takes no more apps; the app lands beside it instead.
+                is FolderItem -> if (!under.isFull) return DropTarget.IntoFolder(under.id)
                 is AppItem -> {
                     val centerX = gridBounds.left + (col + 0.5f) * cellWidth
                     val centerY = gridBounds.top + (row + 0.5f) * cellHeight

@@ -18,17 +18,19 @@ data class AppItem(override val id: Long, override val cell: Cell, val appKey: S
 }
 
 /**
- * A folder in the style of Nothing OS: it covers 2×2 cells and shows its first apps as icons that open
- * directly, without opening the folder first.
+ * A folder in the style of Nothing OS: it covers 2×2 cells and shows all its apps as a 3×3 grid of small
+ * icons that open directly, without opening the folder first.
  */
 data class FolderItem(override val id: Long, override val cell: Cell, val name: String, val apps: List<String>) : HomeItem {
     override fun moved(cell: Cell) = copy(cell = cell.copy(w = SIZE, h = SIZE))
 
+    val isFull: Boolean get() = apps.size >= MAX_APPS
+
     companion object {
         const val SIZE = 2
 
-        /** Apps shown as full icons; with more apps the last slot shows the rest in miniature. */
-        const val DIRECT_SLOTS = 4
+        /** As many apps as fit in the 3×3 grid, so every app stays reachable without opening the folder. */
+        const val MAX_APPS = 9
     }
 }
 
@@ -135,7 +137,7 @@ data class Workspace(
 
     fun addToFolder(appKey: String, folderId: Long): Workspace {
         val folder = item(folderId) as? FolderItem ?: return this
-        if (appKey in folder.apps) return this
+        if (appKey in folder.apps || folder.isFull) return this
         val ws = withoutApp(appKey)
         val current = ws.item(folderId) as? FolderItem ?: return this
         return ws.with(current.copy(apps = current.apps + appKey)).let { it.withCells(it.cells()) }
@@ -207,6 +209,12 @@ data class Workspace(
             dock = dock.filter { it in present },
         )
         ws = ws.withCells(ws.cells())
+        // Folders from before the limit keep their first apps; the others get their own cells.
+        ws.items.filterIsInstance<FolderItem>().filter { it.apps.size > FolderItem.MAX_APPS }.forEach { folder ->
+            val extra = folder.apps.drop(FolderItem.MAX_APPS)
+            ws = ws.with(folder.copy(apps = folder.apps.take(FolderItem.MAX_APPS)))
+            extra.forEach { ws = ws.addApp(it, ws.grid.firstFree(ws.cells(), 1, 1, fromPage = folder.cell.page)) }
+        }
         if (addNew) {
             val onHome = ws.appsOnHome()
             installed.filter { it !in knownApps && it !in onHome }.forEach { ws = ws.addApp(it) }
@@ -222,7 +230,7 @@ data class Workspace(
     }
 
     companion object {
-        const val DOCK_SIZE = 4
+        const val DOCK_SIZE = 5
 
         /** A first arrangement: [dock] in the dock, all other apps in the given order on the pages. */
         fun initial(columns: Int, rows: Int, apps: List<String>, dock: List<String>): Workspace {
