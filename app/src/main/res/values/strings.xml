@@ -87,4 +87,42 @@
     <string name="settings_privacy">Privacy</string>
     <string name="privacy_description">Everything stays on this device. The launcher has no internet permission, its index is not backed up, and a web search only starts when you tap it.</string>
     <string name="rebuild_index">Rebuild index</string>
+    <!-- Home screen editing -->
+    <string name="menu_add_widget">Add widget</string>
+    <string name="menu_remove_from_home">Remove from home screen</string>
+    <string name="menu_add_to_home">Add to home screen</string>
+    <string name="menu_rename_folder">Rename folder</string>
+    <string name="menu_dissolve_folder">Ungroup folder</string>
+    <string name="menu_remove_folder">Remove folder</string>
+    <string name="menu_remove_widget">Remove widget</string>
+    <string name="menu_remove_from_folder">Remove from folder</string>
+    <string name="folder_default_name">Folder</string>
+    <string name="widget_unavailable">Widget not available</string>
+    <string name="widget_picker_title">Widgets</string>
+    <string name="widget_size">%1$d × %2$d</string>
+
+    <!-- App Library -->
+    <string name="library_search">App Library</string>
+    <string name="library_suggestions">Suggestions</string>
+    <string name="library_recent">Recently added</string>
+    <string name="category_social">Social</string>
+    <string name="category_productivity">Productivity</string>
+    <string name="category_games">Games</string>
+    <string name="category_photo">Photo &amp; video</string>
+    <string name="category_entertainment">Entertainment</string>
+    <string name="category_music">Music</string>
+    <string name="category_news">News</string>
+    <string name="category_travel">Travel &amp; maps</string>
+    <string name="category_utilities">Utilities</string>
+    <string name="category_other">Other</string>
+
+    <!-- Search hints -->
+    <string name="usage_hint_title">Better suggestions</string>
+    <string name="usage_hint_text">With usage access, suggestions and results follow which apps you really use and when.</string>
+    <string name="usage_hint_action">Allow usage access</string>
+
+    <!-- Settings: home screen -->
+    <string name="settings_home">Home screen</string>
+    <string name="setting_add_new_apps">Add new apps to the home screen</string>
+    <string name="setting_add_new_apps_description">Otherwise new apps are only in the App Library, to the right of the last page.</string>
 </resources>

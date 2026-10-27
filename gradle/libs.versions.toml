@@ -12,6 +12,9 @@ androidx-lifecycle = "2.11.0"
 mlkit-text-recognition = "16.0.1"
 
 junit = "4.13.2"
+org-json = "20240303"
+kyant-backdrop = "2.0.1"
+kyant-shapes = "1.2.1"
 
 [libraries]
 androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "androidx-activity" }
@@ -29,6 +32,9 @@ androidx-lifecycle-viewmodel-compose = { module = "androidx.lifecycle:lifecycle-
 kotlinx-coroutines-android = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-android", version.ref = "coroutines" }
 mlkit-text-recognition = { module = "com.google.mlkit:text-recognition", version.ref = "mlkit-text-recognition" }
 junit = { module = "junit:junit", version.ref = "junit" }
+org-json = { module = "org.json:json", version.ref = "org-json" }
+kyant-backdrop = { module = "io.github.kyant0:backdrop", version.ref = "kyant-backdrop" }
+kyant-shapes = { module = "io.github.kyant0:shapes", version.ref = "kyant-shapes" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

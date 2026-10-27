@@ -6,12 +6,14 @@ import androidx.datastore.preferences.preferencesDataStore
 import io.github.davydgky.launcher.apps.AppsRepository
 import io.github.davydgky.launcher.data.LaunchLog
 import io.github.davydgky.launcher.data.LauncherSettings
+import io.github.davydgky.launcher.home.WorkspaceRepository
 import io.github.davydgky.launcher.index.IndexStore
 import io.github.davydgky.launcher.perf.PerfStats
 import io.github.davydgky.launcher.search.IconCache
 import io.github.davydgky.launcher.search.SearchRepository
 import io.github.davydgky.launcher.search.Suggestions
 import io.github.davydgky.launcher.usage.UsageHistory
+import io.github.davydgky.launcher.widgets.WidgetHost
 import java.io.File
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -33,12 +35,15 @@ class LauncherApplication : Application() {
     val icons: IconCache by lazy { IconCache(this) }
     val search: SearchRepository by lazy { SearchRepository(this, appScope) }
     val suggestions: Suggestions by lazy { Suggestions(apps, usage, launchLog, appScope) }
+    val widgets: WidgetHost by lazy { WidgetHost(this) }
+    val workspace: WorkspaceRepository by lazy { WorkspaceRepository(this, apps, settings, usage, widgets, appScope) }
     val perf = PerfStats()
 
     override fun onCreate() {
         super.onCreate()
         // Start indexing right away, before the first frame needs it.
         search.start()
+        workspace.start()
     }
 }
 

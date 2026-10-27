@@ -2,6 +2,7 @@ package io.github.davydgky.launcher.data
 
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.stringPreferencesKey
@@ -15,10 +16,14 @@ import kotlinx.coroutines.flow.map
 data class LauncherPrefs(
     /** Ids of search sources the user switched off. All sources are on by default. */
     val disabledSources: Set<String> = emptySet(),
-    /** App keys in the dock, in order; null until the user changes the dock. */
+    /** Dock of the first version; only read once to carry it over into the home screen arrangement. */
     val dock: List<String>? = null,
     /** Folder trees (SAF URIs) whose text files are searched as notes. */
     val noteFolders: Set<String> = emptySet(),
+    /** Newly installed apps get a place on the home screen; otherwise they are only in the App Library. */
+    val addNewAppsToHome: Boolean = true,
+    /** The hint in the search asking for usage access was dismissed. */
+    val usageHintDismissed: Boolean = false,
 )
 
 class LauncherSettings(private val dataStore: DataStore<Preferences>) {
@@ -31,6 +36,8 @@ class LauncherSettings(private val dataStore: DataStore<Preferences>) {
                 // App keys never contain line breaks.
                 dock = prefs[DockKey]?.split('\n')?.filter { it.isNotBlank() },
                 noteFolders = prefs[NoteFoldersKey].orEmpty(),
+                addNewAppsToHome = prefs[AddNewAppsKey] ?: true,
+                usageHintDismissed = prefs[UsageHintDismissedKey] ?: false,
             )
         }
         .distinctUntilChanged()
@@ -42,10 +49,6 @@ class LauncherSettings(private val dataStore: DataStore<Preferences>) {
         }
     }
 
-    suspend fun setDock(keys: List<String>) {
-        dataStore.edit { it[DockKey] = keys.joinToString("\n") }
-    }
-
     suspend fun addNoteFolder(uri: String) {
         dataStore.edit { it[NoteFoldersKey] = it[NoteFoldersKey].orEmpty() + uri }
     }
@@ -54,9 +57,19 @@ class LauncherSettings(private val dataStore: DataStore<Preferences>) {
         dataStore.edit { it[NoteFoldersKey] = it[NoteFoldersKey].orEmpty() - uri }
     }
 
+    suspend fun setAddNewAppsToHome(enabled: Boolean) {
+        dataStore.edit { it[AddNewAppsKey] = enabled }
+    }
+
+    suspend fun dismissUsageHint() {
+        dataStore.edit { it[UsageHintDismissedKey] = true }
+    }
+
     private companion object {
         val DisabledSourcesKey = stringSetPreferencesKey("disabled_sources")
         val DockKey = stringPreferencesKey("dock")
         val NoteFoldersKey = stringSetPreferencesKey("note_folders")
+        val AddNewAppsKey = booleanPreferencesKey("add_new_apps_to_home")
+        val UsageHintDismissedKey = booleanPreferencesKey("usage_hint_dismissed")
     }
 }

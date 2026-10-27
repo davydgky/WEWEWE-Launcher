@@ -55,6 +55,7 @@ import io.github.davydgky.launcher.search.ShortcutTarget
 import io.github.davydgky.launcher.search.WebTarget
 import io.github.davydgky.launcher.search.rememberIcon
 import io.github.davydgky.launcher.sources.Velo
+import io.github.davydgky.launcher.ui.glass.LocalGlassColors
 import java.util.Calendar
 import java.util.TimeZone
 
@@ -94,6 +95,7 @@ fun ResultRow(
         Column(Modifier.weight(1f)) {
             Text(
                 text = item.title,
+                color = LocalGlassColors.current.content,
                 style = if (large) MaterialTheme.typography.titleMedium else MaterialTheme.typography.bodyLarge,
                 fontWeight = FontWeight.Medium,
                 maxLines = 1,
@@ -104,7 +106,7 @@ fun ResultRow(
                 Text(
                     text = second,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = LocalGlassColors.current.secondaryContent,
                     maxLines = if (item.payload is ImageTarget) 2 else 1,
                     overflow = TextOverflow.Ellipsis,
                 )

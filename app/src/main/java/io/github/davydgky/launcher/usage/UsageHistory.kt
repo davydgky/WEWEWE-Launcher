@@ -9,6 +9,8 @@ import io.github.davydgky.launcher.apps.AppsRepository
 import io.github.davydgky.launcher.core.UsageEvent
 import io.github.davydgky.launcher.data.LaunchLog
 import io.github.davydgky.launcher.search.AppTarget
+import kotlin.math.ln
+import kotlin.math.pow
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -32,6 +34,8 @@ class UsageHistory(
     private val appOps = context.getSystemService(AppOpsManager::class.java)
 
     private val systemState = MutableStateFlow<List<UsageEvent>>(emptyList())
+    private val priorState = MutableStateFlow<Map<String, Float>>(emptyMap())
+    private var priorComputedAt = 0L
     private var importedUntil = 0L
     private var lastPackage: String? = null
     private var refreshJob: Job? = null
@@ -41,6 +45,12 @@ class UsageHistory(
 
     /** System launch events, keyed like the apps they belong to. Empty without usage access. */
     val systemEvents: StateFlow<List<UsageEvent>> = systemState.asStateFlow()
+
+    /**
+     * How much each app was used in the last 30 days (screen time, fading with time since the last use),
+     * 0..1 by app key. Ranks apps in the search before the user ever opened anything through the launcher.
+     */
+    val appPrior: StateFlow<Map<String, Float>> = priorState.asStateFlow()
 
     fun checkAccess(): Boolean {
         val mode = appOps.unsafeCheckOpNoThrow(AppOpsManager.OPSTR_GET_USAGE_STATS, Process.myUid(), context.packageName)
@@ -62,9 +72,20 @@ class UsageHistory(
             if (appsByPackage.isEmpty()) return@launch
             val now = System.currentTimeMillis()
             val from = maxOf(importedUntil, now - WINDOW_MS)
+            val firstImport = importedUntil == 0L
             val fresh = withContext(Dispatchers.IO) { readLaunches(from, now, appsByPackage) }
             importedUntil = now
-            systemState.value = (systemState.value + fresh).filter { it.time >= now - WINDOW_MS }
+            var events = (systemState.value + fresh).filter { it.time >= now - WINDOW_MS }
+            if (firstImport) {
+                // Detailed events reach back only a few days; daily totals fill the older part of the window.
+                val oldest = events.minOfOrNull { it.time } ?: now
+                events = withContext(Dispatchers.IO) { dailyUse(now - WINDOW_MS, oldest, appsByPackage) } + events
+            }
+            systemState.value = events
+            if (now - priorComputedAt > PRIOR_INTERVAL_MS) {
+                priorComputedAt = now
+                priorState.value = withContext(Dispatchers.IO) { usagePrior(now, appsByPackage) }
+            }
         }
     }
 
@@ -101,7 +122,35 @@ class UsageHistory(
         return out
     }
 
+    /** One event per day an app was used, at the time it was last used that day; more for long use. */
+    private fun dailyUse(from: Long, until: Long, appsByPackage: Map<String, List<AppTarget>>): List<UsageEvent> {
+        if (until <= from) return emptyList()
+        val days = runCatching { usageStats.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, from, until) }.getOrNull().orEmpty()
+        return days.flatMap { day ->
+            val app = appsByPackage[day.packageName]?.first() ?: return@flatMap emptyList()
+            val minutes = day.totalTimeVisible / 60_000L
+            if (minutes < 1 || day.lastTimeVisible !in from until until) return@flatMap emptyList()
+            List(1 + (minutes / 15).toInt().coerceAtMost(3)) { UsageEvent(app.key, day.lastTimeVisible) }
+        }
+    }
+
+    private fun usagePrior(now: Long, appsByPackage: Map<String, List<AppTarget>>): Map<String, Float> {
+        val stats = runCatching { usageStats.queryAndAggregateUsageStats(now - PRIOR_WINDOW_MS, now) }.getOrNull().orEmpty()
+        val out = HashMap<String, Float>()
+        for ((pkg, stat) in stats) {
+            val app = appsByPackage[pkg]?.first() ?: continue
+            val minutes = stat.totalTimeVisible / 60_000.0
+            if (minutes < 1) continue
+            val days = (now - stat.lastTimeVisible).coerceAtLeast(0) / 86_400_000.0
+            val score = (ln(1 + minutes) / ln(1 + 600.0)).coerceAtMost(1.0) * 0.5.pow(days / 14.0)
+            out[app.key] = score.toFloat()
+        }
+        return out
+    }
+
     private companion object {
         const val WINDOW_MS = 28L * 24 * 60 * 60 * 1000
+        const val PRIOR_WINDOW_MS = 30L * 24 * 60 * 60 * 1000
+        const val PRIOR_INTERVAL_MS = 30L * 60 * 1000
     }
 }

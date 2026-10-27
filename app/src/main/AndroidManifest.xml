@@ -32,6 +32,10 @@
             <action android:name="android.intent.action.MAIN" />
             <category android:name="android.intent.category.LAUNCHER" />
         </intent>
+        <!-- Apps that only offer widgets. -->
+        <intent>
+            <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+        </intent>
         <package android:name="io.github.davydgky.browser" />
         <package android:name="md.obsidian" />
     </queries>

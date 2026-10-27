@@ -86,4 +86,42 @@
     <string name="settings_privacy">Datenschutz</string>
     <string name="privacy_description">Alles bleibt auf diesem Gerät. Der Launcher hat keine Internetberechtigung, sein Index wird nicht gesichert, und eine Websuche startet erst, wenn du sie antippst.</string>
     <string name="rebuild_index">Index neu aufbauen</string>
+    <!-- Homescreen bearbeiten -->
+    <string name="menu_add_widget">Widget hinzufügen</string>
+    <string name="menu_remove_from_home">Vom Home-Bildschirm entfernen</string>
+    <string name="menu_add_to_home">Zum Home-Bildschirm hinzufügen</string>
+    <string name="menu_rename_folder">Ordner umbenennen</string>
+    <string name="menu_dissolve_folder">Ordner auflösen</string>
+    <string name="menu_remove_folder">Ordner entfernen</string>
+    <string name="menu_remove_widget">Widget entfernen</string>
+    <string name="menu_remove_from_folder">Aus dem Ordner nehmen</string>
+    <string name="folder_default_name">Ordner</string>
+    <string name="widget_unavailable">Widget nicht verfügbar</string>
+    <string name="widget_picker_title">Widgets</string>
+    <string name="widget_size">%1$d × %2$d</string>
+
+    <!-- App-Mediathek -->
+    <string name="library_search">App-Mediathek</string>
+    <string name="library_suggestions">Vorschläge</string>
+    <string name="library_recent">Zuletzt hinzugefügt</string>
+    <string name="category_social">Soziale Netze</string>
+    <string name="category_productivity">Produktivität</string>
+    <string name="category_games">Spiele</string>
+    <string name="category_photo">Foto &amp; Video</string>
+    <string name="category_entertainment">Unterhaltung</string>
+    <string name="category_music">Musik</string>
+    <string name="category_news">Nachrichten</string>
+    <string name="category_travel">Reisen &amp; Karten</string>
+    <string name="category_utilities">Dienstprogramme</string>
+    <string name="category_other">Andere</string>
+
+    <!-- Hinweise in der Suche -->
+    <string name="usage_hint_title">Bessere Vorschläge</string>
+    <string name="usage_hint_text">Mit Nutzungsdatenzugriff richten sich Vorschläge und Treffer danach, welche Apps du wann wirklich nutzt.</string>
+    <string name="usage_hint_action">Nutzungsdatenzugriff erlauben</string>
+
+    <!-- Einstellungen: Homescreen -->
+    <string name="settings_home">Home-Bildschirm</string>
+    <string name="setting_add_new_apps">Neue Apps zum Home-Bildschirm hinzufügen</string>
+    <string name="setting_add_new_apps_description">Sonst liegen neue Apps nur in der App-Mediathek rechts neben der letzten Seite.</string>
 </resources>

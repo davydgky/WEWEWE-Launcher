@@ -119,47 +119,54 @@ class SearchState(
 }
 
 /**
- * Opens the search with a downward swipe that starts in the upper part of the screen (below the
- * status bar, whose edge belongs to the notification shade). Horizontal swipes go to the pager.
+ * Opens the search with a downward swipe anywhere on the home screen except the status bar, whose edge
+ * belongs to the notification shade. Horizontal swipes go to the pager; [enabled] is false while an
+ * element is held, dragged or edited.
  */
-fun Modifier.searchGesture(state: SearchState, distancePx: Float, upperFraction: Float = 0.5f): Modifier =
-    pointerInput(state, distancePx) {
-        val config: ViewConfiguration = viewConfiguration
-        awaitPointerEventScope {
+fun Modifier.searchGesture(
+    state: SearchState,
+    distancePx: Float,
+    topInsetPx: Float,
+    enabled: () -> Boolean,
+): Modifier = pointerInput(state, distancePx, topInsetPx) {
+    val config: ViewConfiguration = viewConfiguration
+    awaitPointerEventScope {
+        while (true) {
+            val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+            if (state.isActive || !enabled() || down.position.y < topInsetPx) continue
+            var total = Offset.Zero
+            var dragging = false
+            val tracker = VelocityTracker()
+            tracker.addPosition(down.uptimeMillis, down.position)
             while (true) {
-                val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
-                if (state.isActive || down.position.y > size.height * upperFraction) continue
-                var total = Offset.Zero
-                var dragging = false
-                val tracker = VelocityTracker()
-                tracker.addPosition(down.uptimeMillis, down.position)
-                while (true) {
-                    val event = awaitPointerEvent(PointerEventPass.Initial)
-                    val change = event.changes.firstOrNull { it.id == down.id } ?: break
-                    if (!change.pressed) {
-                        if (dragging) {
-                            change.consume()
-                            state.onDragEnd(tracker.calculateVelocity().y / distancePx)
-                        }
-                        break
-                    }
-                    tracker.addPosition(change.uptimeMillis, change.position)
-                    val delta = change.position - change.previousPosition
-                    total += delta
-                    if (!dragging) {
-                        val slop = config.touchSlop
-                        if (abs(total.x) > slop && abs(total.x) > abs(total.y)) break // a page swipe
-                        if (total.y < -slop) break // swipe up: not ours
-                        if (total.y > slop && total.y > abs(total.x)) {
-                            dragging = true
-                            state.onDragStart(change.uptimeMillis)
-                        }
-                    }
+                val event = awaitPointerEvent(PointerEventPass.Initial)
+                val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                if (!change.pressed) {
                     if (dragging) {
                         change.consume()
-                        state.onDrag(delta.y / distancePx)
+                        state.onDragEnd(tracker.calculateVelocity().y / distancePx)
                     }
+                    break
+                }
+                tracker.addPosition(change.uptimeMillis, change.position)
+                val delta = change.position - change.previousPosition
+                total += delta
+                if (!dragging) {
+                    // A long press on an app started its menu or a drag: not ours.
+                    if (!enabled()) break
+                    val slop = config.touchSlop
+                    if (abs(total.x) > slop && abs(total.x) > abs(total.y)) break // a page swipe
+                    if (total.y < -slop) break // swipe up: not ours
+                    if (total.y > slop && total.y > abs(total.x)) {
+                        dragging = true
+                        state.onDragStart(change.uptimeMillis)
+                    }
+                }
+                if (dragging) {
+                    change.consume()
+                    state.onDrag(delta.y / distancePx)
                 }
             }
         }
     }
+}

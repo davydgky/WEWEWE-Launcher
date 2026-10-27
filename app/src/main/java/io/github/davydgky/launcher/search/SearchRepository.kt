@@ -87,9 +87,14 @@ class SearchRepository(private val app: LauncherApplication, private val scope: 
         // Velo was installed or removed: its source may have become (un)available.
         scope.launch { app.apps.packageChanges.collect { if (it == Velo.PACKAGE) applyAvailability() } }
         scope.launch {
-            combine(app.launchLog.events, app.usage.systemEvents) { _, _ -> app.usage.combinedEvents() }
-                .collect { events ->
-                    engagementState.value = withContext(Dispatchers.Default) { Engagement.scores(events, System.currentTimeMillis()) }
+            combine(app.launchLog.events, app.usage.systemEvents, app.usage.appPrior) { _, _, prior -> app.usage.combinedEvents() to prior }
+                .collect { (events, prior) ->
+                    engagementState.value = withContext(Dispatchers.Default) {
+                        // Recent launches count most; screen time of the last month ranks apps never opened from here.
+                        val scores = Engagement.scores(events, System.currentTimeMillis()).toMutableMap()
+                        prior.forEach { (key, value) -> scores.merge(key, value * PRIOR_WEIGHT, ::maxOf) }
+                        scores
+                    }
                 }
         }
     }
@@ -182,5 +187,6 @@ class SearchRepository(private val app: LauncherApplication, private val scope: 
     private companion object {
         const val TAG = "SearchRepository"
         const val CHANGE_DEBOUNCE_MS = 1_500L
+        const val PRIOR_WEIGHT = 0.8f
     }
 }

@@ -22,6 +22,7 @@ import io.github.davydgky.launcher.ui.ImeController
 import io.github.davydgky.launcher.ui.LauncherScreen
 import io.github.davydgky.launcher.ui.LauncherTheme
 import io.github.davydgky.launcher.ui.LocalLightWallpaper
+import io.github.davydgky.launcher.widgets.WidgetAdder
 import kotlinx.coroutines.flow.MutableSharedFlow
 
 /** The home screen. Stays alive while other apps run, so the search is always one swipe away. */
@@ -31,12 +32,15 @@ class MainActivity : ComponentActivity() {
     private val homePressed = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     private var lightWallpaper by mutableStateOf(false)
     private var searchActive = false
+    private lateinit var widgetAdder: WidgetAdder
+    private var wallpaperBlur = -1
     private val wallpaperManager by lazy { WallpaperManager.getInstance(this) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val ime = ImeController(window.decorView, launcherApp.perf)
         val actions = ResultActions(this)
+        widgetAdder = WidgetAdder(this)
         // Back on the home screen does nothing; the search panel handles back itself.
         onBackPressedDispatcher.addCallback(this) { }
         updateWallpaperColors(wallpaperManager.getWallpaperColors(WallpaperManager.FLAG_SYSTEM))
@@ -45,13 +49,49 @@ class MainActivity : ComponentActivity() {
         setContent {
             CompositionLocalProvider(LocalLightWallpaper provides lightWallpaper) {
                 LauncherTheme {
-                    LauncherScreen(viewModel, actions, ime, homePressed) { active ->
-                        searchActive = active
-                        updateSystemBars()
-                    }
+                    LauncherScreen(
+                        viewModel = viewModel,
+                        actions = actions,
+                        ime = ime,
+                        homePressed = homePressed,
+                        addWidget = widgetAdder::add,
+                        onSearchActive = { active ->
+                            searchActive = active
+                            updateSystemBars()
+                        },
+                        onSearchProgress = ::blurWallpaper,
+                    )
                 }
             }
         }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        launcherApp.widgets.startListening()
+    }
+
+    override fun onStop() {
+        launcherApp.widgets.stopListening()
+        super.onStop()
+    }
+
+    @Deprecated("Widget configuration screens still report through onActivityResult")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        @Suppress("DEPRECATION")
+        if (!widgetAdder.onActivityResult(requestCode, resultCode)) super.onActivityResult(requestCode, resultCode, data)
+    }
+
+    /**
+     * Blurs the wallpaper behind the search with the system's cross-window blur. The radius changes in
+     * steps, so the window is not re-laid out on every frame of the gesture.
+     */
+    private fun blurWallpaper(progress: Float) {
+        if (!windowManager.isCrossWindowBlurEnabled) return
+        val radius = ((progress.coerceIn(0f, 1f) * MAX_WALLPAPER_BLUR_DP * resources.displayMetrics.density) / BLUR_STEP_PX).toInt() * BLUR_STEP_PX
+        if (radius == wallpaperBlur) return
+        wallpaperBlur = radius
+        window.setBackgroundBlurRadius(radius)
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -84,5 +124,10 @@ class MainActivity : ComponentActivity() {
             SystemBarStyle.dark(android.graphics.Color.TRANSPARENT)
         }
         enableEdgeToEdge(statusBarStyle = style, navigationBarStyle = style)
+    }
+
+    private companion object {
+        const val MAX_WALLPAPER_BLUR_DP = 30f
+        const val BLUR_STEP_PX = 6
     }
 }

@@ -7,6 +7,7 @@ import android.util.Log
 import android.view.Choreographer
 import android.view.View
 import android.view.WindowInsets
+import android.view.WindowInsetsAnimation
 import android.view.WindowInsetsAnimationControlListener
 import android.view.WindowInsetsAnimationController
 import io.github.davydgky.launcher.perf.Metric
@@ -33,6 +34,16 @@ class ImeController(private val view: View, private val perf: PerfStats) {
 
     private var measureFrom = 0L
     private var measuring = false
+
+    init {
+        // Also measures when the system refused control and the keyboard came up on its own.
+        view.setWindowInsetsAnimationCallback(object : WindowInsetsAnimation.Callback(DISPATCH_MODE_CONTINUE_ON_SUBTREE) {
+            override fun onProgress(insets: WindowInsets, running: MutableList<WindowInsetsAnimation>): WindowInsets {
+                if (measuring && insets.getInsets(WindowInsets.Type.ime()).bottom > 0) recordVisible()
+                return insets
+            }
+        })
+    }
 
     val isKeyboardVisible: Boolean
         get() = view.rootWindowInsets?.isVisible(WindowInsets.Type.ime()) == true
@@ -94,13 +105,15 @@ class ImeController(private val view: View, private val perf: PerfStats) {
         val shown = current.shownStateInsets.bottom
         val bottom = (hidden + (shown - hidden) * fraction).roundToInt()
         current.setInsetsAndAlpha(Insets.of(0, 0, 0, bottom), 1f, fraction)
-        if (measuring && bottom > hidden) {
-            measuring = false
-            val start = measureFrom
-            // The new keyboard position reaches the screen with the next frame.
-            Choreographer.getInstance().postFrameCallback {
-                perf.record(Metric.Keyboard, (SystemClock.uptimeMillis() - start).toDouble())
-            }
+        if (measuring && bottom > hidden) recordVisible()
+    }
+
+    private fun recordVisible() {
+        measuring = false
+        val start = measureFrom
+        // The new keyboard position reaches the screen with the next frame.
+        Choreographer.getInstance().postFrameCallback {
+            perf.record(Metric.Keyboard, (SystemClock.uptimeMillis() - start).toDouble())
         }
     }
 

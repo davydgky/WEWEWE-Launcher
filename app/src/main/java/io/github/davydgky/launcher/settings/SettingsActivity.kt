@@ -187,6 +187,28 @@ private fun SettingsScreen(activity: ComponentActivity) {
             }
         }
         item {
+            Group(stringResource(R.string.settings_home)) {
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(stringResource(R.string.setting_add_new_apps), style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            stringResource(R.string.setting_add_new_apps_description),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    Switch(
+                        checked = prefs.addNewAppsToHome,
+                        onCheckedChange = { enabled -> scope.launch { app.settings.setAddNewAppsToHome(enabled) } },
+                    )
+                }
+            }
+        }
+        item {
             Group(stringResource(R.string.settings_sources)) {
                 SourceInfos.forEachIndexed { index, info ->
                     if (index > 0) HorizontalDivider()

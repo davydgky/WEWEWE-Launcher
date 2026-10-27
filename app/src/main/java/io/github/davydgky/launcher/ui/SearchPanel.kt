@@ -1,6 +1,9 @@
 package io.github.davydgky.launcher.ui
 
+import android.content.Intent
 import android.graphics.Rect
+import android.net.Uri
+import android.provider.Settings
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -41,8 +44,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
@@ -70,11 +74,14 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import kotlin.math.abs
+import com.kyant.backdrop.Backdrop
+import com.kyant.shapes.Capsule
+import com.kyant.shapes.RoundedRectangle
 import io.github.davydgky.launcher.R
 import io.github.davydgky.launcher.core.ScoredItem
 import io.github.davydgky.launcher.core.SearchItem
 import io.github.davydgky.launcher.core.SourceKind
+import io.github.davydgky.launcher.data.LauncherPrefs
 import io.github.davydgky.launcher.launcherApp
 import io.github.davydgky.launcher.perf.Metric
 import io.github.davydgky.launcher.search.AppTarget
@@ -83,6 +90,10 @@ import io.github.davydgky.launcher.search.ResultActions
 import io.github.davydgky.launcher.search.ResultsState
 import io.github.davydgky.launcher.search.SearchViewModel
 import io.github.davydgky.launcher.search.SuggestionState
+import io.github.davydgky.launcher.ui.glass.LocalGlassColors
+import io.github.davydgky.launcher.ui.glass.glass
+import kotlin.math.abs
+import kotlinx.coroutines.launch
 
 /**
  * The search: results from the top of the screen, the search field directly above the keyboard. It
@@ -95,11 +106,16 @@ fun SearchPanel(
     viewModel: SearchViewModel,
     actions: ResultActions,
     focusRequester: FocusRequester,
+    backdrop: Backdrop,
     modifier: Modifier = Modifier,
 ) {
-    val app = LocalContext.current.launcherApp
+    val context = LocalContext.current
+    val app = context.launcherApp
     val results by viewModel.results.collectAsStateWithLifecycle()
     val suggestions by app.suggestions.current.collectAsStateWithLifecycle()
+    val usageAccess by app.usage.hasAccess.collectAsStateWithLifecycle()
+    val prefs by app.settings.prefs.collectAsStateWithLifecycle(initialValue = LauncherPrefs())
+    val scope = rememberCoroutineScope()
     val keyboard = LocalSoftwareKeyboardController.current
     val density = LocalDensity.current
 
@@ -157,12 +173,25 @@ fun SearchPanel(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             if (state.query.text.isBlank()) {
-                suggestionItems(suggestions, actions, state)
+                if (!usageAccess && !prefs.usageHintDismissed) {
+                    item("usage-hint") {
+                        UsageHint(
+                            backdrop = backdrop,
+                            onAllow = {
+                                context.startActivity(
+                                    Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS, Uri.fromParts("package", context.packageName, null)),
+                                )
+                            },
+                            onDismiss = { scope.launch { app.settings.dismissUsageHint() } },
+                        )
+                    }
+                }
+                suggestionItems(suggestions, actions, state, backdrop)
             } else {
-                resultItems(results, open, actions)
+                resultItems(results, open, actions, backdrop)
             }
         }
-        SearchField(state, focusRequester, onSubmit = {
+        SearchField(state, focusRequester, backdrop, onSubmit = {
             val first = results.results.top?.item ?: results.results.groups.firstOrNull()?.items?.firstOrNull()?.item
             if (first != null) open(first, null) else if (results.query.isNotBlank()) {
                 actions.webSearch(results.query)
@@ -174,10 +203,15 @@ fun SearchPanel(
 
 private const val OFFSCREEN_PX = 100_000
 
-private fun LazyListScope.suggestionItems(suggestions: SuggestionState, actions: ResultActions, state: SearchState) {
+private fun LazyListScope.suggestionItems(
+    suggestions: SuggestionState,
+    actions: ResultActions,
+    state: SearchState,
+    backdrop: Backdrop,
+) {
     if (suggestions.apps.isNotEmpty()) {
         item("suggested-apps") {
-            Section(stringResource(R.string.section_suggestions)) {
+            Section(stringResource(R.string.section_suggestions), backdrop) {
                 AppGrid(suggestions.apps) { app, bounds ->
                     actions.launchApp(app, bounds)
                     state.reset()
@@ -187,7 +221,7 @@ private fun LazyListScope.suggestionItems(suggestions: SuggestionState, actions:
     }
     if (suggestions.shortcuts.isNotEmpty()) {
         item("suggested-shortcuts") {
-            Section(stringResource(R.string.section_shortcuts)) {
+            Section(stringResource(R.string.section_shortcuts), backdrop) {
                 suggestions.shortcuts.forEachIndexed { index, shortcut ->
                     if (index > 0) RowDivider()
                     val label = shortcut.info.shortLabel?.toString().orEmpty()
@@ -202,12 +236,17 @@ private fun LazyListScope.suggestionItems(suggestions: SuggestionState, actions:
     }
 }
 
-private fun LazyListScope.resultItems(state: ResultsState, open: (SearchItem, Rect?) -> Unit, actions: ResultActions) {
+private fun LazyListScope.resultItems(
+    state: ResultsState,
+    open: (SearchItem, Rect?) -> Unit,
+    actions: ResultActions,
+    backdrop: Backdrop,
+) {
     val results = state.results
     val query = state.query
     results.top?.let { top ->
         item("top") {
-            Section(stringResource(R.string.section_top_hit)) {
+            Section(stringResource(R.string.section_top_hit), backdrop) {
                 ResultRow(top.item, query, open, large = true, trailing = contactTrailing(top.item, actions))
             }
         }
@@ -218,6 +257,7 @@ private fun LazyListScope.resultItems(state: ResultsState, open: (SearchItem, Re
             val visible = if (showAll) group.items else group.items.take(group.kind.groupLimit)
             Section(
                 title = stringResource(sectionTitle(group.kind)),
+                backdrop = backdrop,
                 action = if (group.items.size > group.kind.groupLimit) {
                     stringResource(if (showAll) R.string.show_less else R.string.show_more) to { showAll = !showAll }
                 } else null,
@@ -236,7 +276,7 @@ private fun LazyListScope.resultItems(state: ResultsState, open: (SearchItem, Re
         }
     }
     item("web") {
-        Section(null) {
+        Section(null, backdrop) {
             Row(
                 Modifier
                     .fillMaxWidth()
@@ -248,6 +288,7 @@ private fun LazyListScope.resultItems(state: ResultsState, open: (SearchItem, Re
                 Spacer(Modifier.width(14.dp))
                 Text(
                     stringResource(R.string.search_web, query),
+                    color = LocalGlassColors.current.content,
                     style = MaterialTheme.typography.bodyLarge,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -261,7 +302,7 @@ private fun LazyListScope.resultItems(state: ResultsState, open: (SearchItem, Re
                 stringResource(R.string.no_results),
                 Modifier.fillMaxWidth().padding(24.dp),
                 textAlign = TextAlign.Center,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = LocalGlassColors.current.secondaryContent,
             )
         }
     }
@@ -285,13 +326,15 @@ private fun sectionTitle(kind: SourceKind): Int = when (kind) {
     SourceKind.Image -> R.string.section_images
 }
 
-/** A group of results on a frosted platter, like Spotlight. */
+/** A group of results on a Liquid Glass platter, like Spotlight. */
 @Composable
 private fun Section(
     title: String?,
+    backdrop: Backdrop,
     action: Pair<String, () -> Unit>? = null,
     content: @Composable () -> Unit,
 ) {
+    val colors = LocalGlassColors.current
     Column {
         if (title != null) {
             Row(Modifier.fillMaxWidth().padding(start = 6.dp, end = 2.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -300,14 +343,14 @@ private fun Section(
                     Modifier.weight(1f),
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface,
+                    color = colors.content,
                 )
                 if (action != null) {
                     Text(
                         action.first,
                         Modifier.clip(RoundedCornerShape(8.dp)).clickable(onClick = action.second).padding(horizontal = 6.dp, vertical = 2.dp),
                         style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.primary,
+                        color = colors.secondaryContent,
                     )
                 }
             }
@@ -315,17 +358,45 @@ private fun Section(
         Column(
             Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(22.dp))
-                .background(MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.86f)),
+                .glass(backdrop, PlatterShape, colors),
         ) {
             content()
         }
     }
 }
 
+private val PlatterShape = RoundedRectangle(24.dp)
+
+/** Asks once for usage access, which makes suggestions and the order of results follow real use. */
+@Composable
+private fun UsageHint(backdrop: Backdrop, onAllow: () -> Unit, onDismiss: () -> Unit) {
+    val colors = LocalGlassColors.current
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .glass(backdrop, PlatterShape, colors)
+            .padding(start = 16.dp, top = 12.dp, bottom = 12.dp, end = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(stringResource(R.string.usage_hint_title), color = colors.content, style = MaterialTheme.typography.titleSmall)
+            Text(stringResource(R.string.usage_hint_text), color = colors.secondaryContent, style = MaterialTheme.typography.bodyMedium)
+            Text(
+                stringResource(R.string.usage_hint_action),
+                color = MaterialTheme.colorScheme.primary,
+                style = MaterialTheme.typography.labelLarge,
+                modifier = Modifier.padding(top = 6.dp).clip(RoundedCornerShape(8.dp)).clickable(onClick = onAllow).padding(vertical = 4.dp),
+            )
+        }
+        IconButton(onClick = onDismiss) {
+            Icon(painterResource(R.drawable.ic_close), stringResource(R.string.clear), Modifier.size(18.dp), tint = colors.secondaryContent)
+        }
+    }
+}
+
 @Composable
 private fun RowDivider() {
-    HorizontalDivider(Modifier.padding(start = 68.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+    HorizontalDivider(Modifier.padding(start = 68.dp), color = LocalGlassColors.current.hairline)
 }
 
 /** Apps as icons with labels, four per row. */
@@ -348,6 +419,7 @@ private fun AppGrid(apps: List<AppTarget>, onClick: (AppTarget, Rect?) -> Unit) 
                         Spacer(Modifier.height(4.dp))
                         Text(
                             app.label,
+                            color = LocalGlassColors.current.content,
                             style = MaterialTheme.typography.labelMedium,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
@@ -362,7 +434,8 @@ private fun AppGrid(apps: List<AppTarget>, onClick: (AppTarget, Rect?) -> Unit) 
 }
 
 @Composable
-private fun SearchField(state: SearchState, focusRequester: FocusRequester, onSubmit: () -> Unit) {
+private fun SearchField(state: SearchState, focusRequester: FocusRequester, backdrop: Backdrop, onSubmit: () -> Unit) {
+    val colors = LocalGlassColors.current
     Row(
         Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -371,21 +444,20 @@ private fun SearchField(state: SearchState, focusRequester: FocusRequester, onSu
             Modifier
                 .weight(1f)
                 .height(48.dp)
-                .clip(RoundedCornerShape(24.dp))
-                .background(MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.92f))
+                .glass(backdrop, Capsule(), colors, refraction = 12.dp)
                 .padding(start = 14.dp, end = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(painterResource(R.drawable.ic_search), null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            Icon(painterResource(R.drawable.ic_search), null, Modifier.size(20.dp), tint = colors.secondaryContent)
             Spacer(Modifier.width(10.dp))
             Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
                 if (state.query.text.isEmpty()) {
-                    Text(stringResource(R.string.search_hint), color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                    Text(stringResource(R.string.search_hint), color = colors.secondaryContent, maxLines = 1)
                 }
                 BasicTextField(
                     state = state.query,
                     modifier = Modifier.fillMaxWidth().focusRequester(focusRequester),
-                    textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
+                    textStyle = MaterialTheme.typography.bodyLarge.copy(color = colors.content),
                     cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                     lineLimits = TextFieldLineLimits.SingleLine,
                     keyboardOptions = KeyboardOptions(
@@ -399,12 +471,12 @@ private fun SearchField(state: SearchState, focusRequester: FocusRequester, onSu
             }
             if (state.query.text.isNotEmpty()) {
                 IconButton(onClick = { state.query.clearText() }) {
-                    Icon(painterResource(R.drawable.ic_close), stringResource(R.string.clear), Modifier.size(18.dp))
+                    Icon(painterResource(R.drawable.ic_close), stringResource(R.string.clear), Modifier.size(18.dp), tint = colors.secondaryContent)
                 }
             }
         }
         TextButton(onClick = state::close) {
-            Text(stringResource(R.string.cancel), color = MaterialTheme.colorScheme.onSurface)
+            Text(stringResource(R.string.cancel), color = colors.content)
         }
     }
 }

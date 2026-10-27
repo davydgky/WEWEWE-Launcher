@@ -79,8 +79,14 @@ dependencies {
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.kotlinx.coroutines.android)
 
+    // Liquid Glass, the same as in Velo.
+    implementation(libs.kyant.backdrop)
+    implementation(libs.kyant.shapes)
+
     // On-device text recognition with the model bundled in the APK (no Play services, no download).
     implementation(libs.mlkit.text.recognition)
 
     testImplementation(libs.junit)
+    // Real org.json for JVM unit tests (android.jar only contains stubs).
+    testImplementation(libs.org.json)
 }

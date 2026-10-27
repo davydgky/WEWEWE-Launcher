@@ -1,0 +1,109 @@
+package io.github.davydgky.launcher.home
+
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.composed
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.onGloballyPositioned
+
+/** Callbacks of [homeItemGestures]; positions are in root coordinates. */
+class HomeItemGestureCallbacks(
+    /** Null for elements that handle taps themselves (widgets, the icons inside a folder). */
+    val onTap: (() -> Unit)?,
+    val onLongPress: () -> Unit,
+    /** [grab] is where inside the element the finger holds it. */
+    val onDragStart: (pointer: Offset, grab: Offset) -> Unit,
+    val onDrag: (pointer: Offset) -> Unit,
+    val onDragEnd: () -> Unit,
+    /** A finger went down on the element (before anyone else decides what the gesture is). */
+    val onDown: () -> Unit = {},
+    /** The gesture on the element is over, whatever it was. */
+    val onRelease: () -> Unit = {},
+)
+
+private const val LONG_PRESS = 0
+private const val TAP = 1
+private const val TAKEN = 2
+
+private class CoordinatesHolder {
+    var coordinates: LayoutCoordinates? = null
+}
+
+/**
+ * Tap, long press and long press followed by dragging, as on a home screen. Events are watched before
+ * the element's children see them, but only taken once the long press fires, so a widget or a folder's
+ * icons still receive ordinary taps and scrolls.
+ */
+fun Modifier.homeItemGestures(key: Any, callbacks: HomeItemGestureCallbacks): Modifier = composed {
+    val holder = remember { CoordinatesHolder() }
+    // The gesture outlives recompositions; always call the latest callbacks.
+    val current by rememberUpdatedState(callbacks)
+    this
+        .onGloballyPositioned { holder.coordinates = it }
+        .pointerInput(key) {
+            val timeout = viewConfiguration.longPressTimeoutMillis
+            val slop = viewConfiguration.touchSlop
+            awaitPointerEventScope {
+                while (true) {
+                    val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                    current.onDown()
+                    try {
+                        var outcome = LONG_PRESS
+                        withTimeoutOrNull(timeout) {
+                            while (true) {
+                                val event = awaitPointerEvent(PointerEventPass.Initial)
+                                val change = event.changes.firstOrNull { it.id == down.id }
+                                if (change == null || change.isConsumed) {
+                                    // Someone else (the pager, the search swipe) took the gesture.
+                                    outcome = TAKEN
+                                    break
+                                }
+                                if (!change.pressed) {
+                                    outcome = TAP
+                                    break
+                                }
+                                if ((change.position - down.position).getDistance() > slop) {
+                                    outcome = TAKEN
+                                    break
+                                }
+                            }
+                        }
+                        when (outcome) {
+                            TAP -> current.onTap?.invoke()
+                            TAKEN -> Unit
+                            else -> {
+                                current.onLongPress()
+                                var dragging = false
+                                try {
+                                    while (true) {
+                                        val event = awaitPointerEvent(PointerEventPass.Initial)
+                                        val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                                        // From here on the gesture is ours: children and the pager get nothing.
+                                        change.consume()
+                                        if (!change.pressed) break
+                                        val coordinates = holder.coordinates ?: continue
+                                        if (!dragging && (change.position - down.position).getDistance() > slop) {
+                                            dragging = true
+                                            current.onDragStart(coordinates.localToRoot(change.position), down.position)
+                                        }
+                                        if (dragging) current.onDrag(coordinates.localToRoot(change.position))
+                                    }
+                                } finally {
+                                    // Also when the gesture is cancelled: never leave an element hanging under the finger.
+                                    if (dragging) current.onDragEnd()
+                                }
+                            }
+                        }
+                    } finally {
+                        current.onRelease()
+                    }
+                }
+            }
+        }
+}

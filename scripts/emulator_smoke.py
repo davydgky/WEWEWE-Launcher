@@ -221,7 +221,59 @@ def main(apk):
     shell("input keyevent KEYCODE_BACK")
     shell("input keyevent KEYCODE_BACK")
 
-    # 4. Settings page.
+    # 4. Home screen editing: a folder by dragging one app onto another.
+    go_home()
+    time.sleep(2)
+    labels = [n for n in ui_nodes() if n.get("text") not in ("Search", "Suchen")]
+    def center(node):
+        x1, y1, x2, y2 = map(int, re.findall(r"\d+", node.get("bounds")))
+        return (x1 + x2) // 2, (y1 + y2) // 2
+    page_labels = sorted((n for n in labels if center(n)[1] < height * 0.7), key=lambda n: (center(n)[1] // 50, center(n)[0]))
+    if len(page_labels) >= 2:
+        (ax, ay), (bx, by) = center(page_labels[0]), center(page_labels[1])
+        icon_offset = int(40 * width / 1080)
+        shell(f"input draganddrop {bx} {by - icon_offset} {ax} {ay - icon_offset} 1500")
+        time.sleep(2.5)
+        texts = ui_texts()
+        folder_made = page_labels[1].get("text") not in texts or any(t in texts for t in ["Folder", "Ordner", "Utilities", "Dienstprogramme", "Productivity", "Produktivität"])
+        check(folder_made, "dragging an app onto another makes a folder")
+        screenshot("7-folder")
+    else:
+        check(False, "home screen shows apps to arrange")
+
+    # 5. App Library to the right of the last page.
+    for _ in range(4):
+        shell(f"input swipe {int(width * 0.85)} {height // 2} {int(width * 0.15)} {height // 2} 200")
+        time.sleep(0.8)
+    check(wait_for_text("App Library", timeout=5), "App Library is right of the last page")
+    screenshot("8-app-library")
+    go_home()
+
+    # 6. A widget from the picker (binding allowed beforehand, as a user would allow it once).
+    shell(f"appwidget grantbind --package {PACKAGE} --user 0", check=False)
+    # Long press on empty background: beside the search button.
+    pill = next((n for n in ui_nodes() if n.get("text") in ("Search", "Suchen")), None)
+    py = center(pill)[1] if pill is not None else int(height * 0.8)
+    shell(f"input swipe {int(width * 0.1)} {py} {int(width * 0.1)} {py} 1200")
+    time.sleep(1.5)
+    added = False
+    for node in ui_nodes():
+        if node.get("text") in ("Add widget", "Widget hinzufügen"):
+            x, y = center(node)
+            shell(f"input tap {x} {y}")
+            time.sleep(4)
+            candidates = [n for n in ui_nodes() if re.search(r"clock|Clock|Uhr", n.get("text"))]
+            if candidates:
+                x, y = center(candidates[0])
+                shell(f"input tap {x} {y}")
+                time.sleep(4)
+                added = not wait_for_text("Widgets", timeout=2)
+            break
+    check(added, "a widget can be added from the picker")
+    screenshot("9-widget")
+    go_home()
+
+    # 7. Settings page.
     shell(f"am start -n {PACKAGE}/.settings.SettingsActivity")
     time.sleep(8)
     screenshot("6-settings")
