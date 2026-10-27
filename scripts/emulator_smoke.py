@@ -84,17 +84,26 @@ def record_anr(dialog):
         return
     critical.append(dialog)
     print(f"CRITICAL: {dialog}")
-    traces = adb("shell", "ls -t /data/anr/", check=False).split()
-    if traces:
-        text = adb("shell", f"cat /data/anr/{traces[0]}", check=False)
-        # The dump holds several processes; show why ours was stuck and its main thread.
-        for line in text.splitlines():
-            if line.startswith("Subject:") or line.startswith("Reason:"):
-                print("  " + line)
+    # Why the system considered us stuck: the lines after "ANR in" in the system log.
+    log = adb("logcat", "-d", "-b", "system", check=False).splitlines()
+    for i, line in enumerate(log):
+        if f"ANR in {PACKAGE}" in line:
+            print("\n".join(log[i:i + 12]))
+            break
+    # The newest trace that belongs to the launcher (other apps' ANRs land in the same folder).
+    for name in adb("shell", "ls -t /data/anr/", check=False).split():
+        text = adb("shell", f"cat /data/anr/{name}", check=False)
         ours = text.find(f"Cmd line: {PACKAGE}")
-        section = text[ours:] if ours >= 0 else text
+        if ours < 0:
+            continue
+        print(f"  trace {name}")
+        for line in text.splitlines()[:8]:
+            if line.startswith("Subject:"):
+                print("  " + line)
+        section = text[ours:]
         start = section.find('"main" prio')
         print(section[start:start + 5000] if start >= 0 else section[:5000])
+        break
 
 
 def screenshot(name):
@@ -110,6 +119,22 @@ def screenshot(name):
         return
     image.thumbnail((540, 1200))
     image.save(os.path.join(SHOTS, f"{name}.jpg"), "JPEG", quality=85)
+
+
+def wait_until_idle(limit=150):
+    """Right after boot the software-rendered emulator is busy for minutes; starting the launcher then
+    measures the emulator, not the launcher."""
+    deadline = time.time() + limit
+    time.sleep(20)
+    while time.time() < deadline:
+        try:
+            load = float(shell("cat /proc/loadavg", check=False).split()[0])
+        except (IndexError, ValueError):
+            load = 99.0
+        if load < 2.5:
+            break
+        time.sleep(10)
+    print(f"  load before start: {shell('cat /proc/loadavg', check=False).strip()}")
 
 
 def retry(command, attempts=6, wait=10):
@@ -167,7 +192,7 @@ def main(apk):
     # The emulator has a hardware keyboard; show the on-screen keyboard anyway, as on a phone.
     shell("settings put secure show_ime_with_hard_keyboard 1")
     adb("install", "-r", "-g", apk)
-    time.sleep(20)  # let the system settle after boot
+    wait_until_idle()
     retry(f"cmd role add-role-holder --user 0 android.app.role.HOME {PACKAGE}")
     for permission in ["READ_CONTACTS", "READ_CALENDAR", "READ_MEDIA_IMAGES"]:
         shell(f"pm grant {PACKAGE} android.permission.{permission}", check=False)

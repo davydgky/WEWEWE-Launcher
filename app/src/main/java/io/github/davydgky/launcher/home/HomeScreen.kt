@@ -120,7 +120,8 @@ fun HomeScreen(
         modifier
             .fillMaxSize()
             .onGloballyPositioned { controller.screenWidth = it.size.width.toFloat() }
-            .pointerInput(Unit) {
+            // Keyed by the menu epoch: the menu state is new after the home button closed the menus.
+            .pointerInput(controller.menuEpoch) {
                 detectTapGestures(onLongPress = {
                     // Long presses on apps, folders and widgets have their own menus.
                     if (controller.itemsPressed == 0) {

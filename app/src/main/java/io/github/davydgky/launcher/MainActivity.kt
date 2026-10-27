@@ -16,6 +16,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.lifecycle.lifecycleScope
 import io.github.davydgky.launcher.search.ResultActions
 import io.github.davydgky.launcher.search.SearchViewModel
 import io.github.davydgky.launcher.ui.ImeController
@@ -23,7 +24,10 @@ import io.github.davydgky.launcher.ui.LauncherScreen
 import io.github.davydgky.launcher.ui.LauncherTheme
 import io.github.davydgky.launcher.ui.LocalLightWallpaper
 import io.github.davydgky.launcher.widgets.WidgetAdder
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /** The home screen. Stays alive while other apps run, so the search is always one swipe away. */
 class MainActivity : ComponentActivity() {
@@ -43,7 +47,10 @@ class MainActivity : ComponentActivity() {
         widgetAdder = WidgetAdder(this)
         // Back on the home screen does nothing; the search panel handles back itself.
         onBackPressedDispatcher.addCallback(this) { }
-        updateWallpaperColors(wallpaperManager.getWallpaperColors(WallpaperManager.FLAG_SYSTEM))
+        // Asks the wallpaper service, which may first extract the colours: never on the main thread.
+        lifecycleScope.launch {
+            updateWallpaperColors(withContext(Dispatchers.IO) { wallpaperManager.getWallpaperColors(WallpaperManager.FLAG_SYSTEM) })
+        }
         wallpaperManager.addOnColorsChangedListener(wallpaperListener, Handler(Looper.getMainLooper()))
 
         setContent {
