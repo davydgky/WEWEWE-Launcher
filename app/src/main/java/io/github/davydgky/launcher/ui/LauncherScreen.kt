@@ -2,6 +2,8 @@ package io.github.davydgky.launcher.ui
 
 import android.appwidget.AppWidgetProviderInfo
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
@@ -19,6 +21,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
@@ -41,6 +44,7 @@ import io.github.davydgky.launcher.search.SearchViewModel
 import io.github.davydgky.launcher.ui.glass.LocalGlassColors
 import io.github.davydgky.launcher.ui.glass.frostedBackdrop
 import io.github.davydgky.launcher.ui.glass.glassColors
+import kotlin.math.max
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
@@ -129,9 +133,25 @@ fun LauncherScreen(
         ) {
             // Everything the glass refracts: the home screen without its overlays. Only recorded while
             // something made of glass is showing.
-            val glassShowing = state.isActive || controller.openFolderId != null ||
-                controller.openCategory != null || controller.widgetPickerOpen
-            Box(Modifier.fillMaxSize().then(if (glassShowing) Modifier.layerBackdrop(homeBackdrop) else Modifier)) {
+            val overlayOpen = controller.openFolderId != null || controller.openCategory != null || controller.widgetPickerOpen
+            val overlayFrost by animateFloatAsState(if (overlayOpen) 1f else 0f, tween(OVERLAY_FADE_MS), label = "overlayFrost")
+            val glassShowing = state.isActive || overlayOpen || overlayFrost > 0f
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .then(
+                        if (glassShowing) {
+                            Modifier
+                                // The home screen is transparent around its icons (the wallpaper is another
+                                // window), so its blurred copy cannot cover it: the sharp original fades out
+                                // while the copy is recorded for the glass.
+                                .graphicsLayer { alpha = 1f - max(state.progress.value, overlayFrost) }
+                                .layerBackdrop(homeBackdrop)
+                        } else {
+                            Modifier
+                        },
+                    ),
+            ) {
                 workspace?.let { ws -> HomeScreen(ws, apps, library, controller, homeReset) }
             }
             if (state.isActive) {
@@ -153,3 +173,5 @@ fun LauncherScreen(
         }
     }
 }
+
+private const val OVERLAY_FADE_MS = 220
