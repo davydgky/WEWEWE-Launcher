@@ -84,6 +84,15 @@ fun Modifier.glass(
     onDrawSurface = { drawRect(colors.surface) },
 )
 
+/** [glass] only while [active]; closed panels are never seen and should cost nothing to draw. */
+fun Modifier.glassWhen(
+    active: Boolean,
+    backdrop: Backdrop,
+    shape: RoundedRectangularShape,
+    colors: GlassColors,
+    refraction: Dp = 16.dp,
+): Modifier = if (active) glass(backdrop, shape, colors, refraction) else this
+
 /**
  * Full-screen frosted layer behind the search: the home screen blurred by [progress] (0..1) with the
  * glass scrim on top. Exports itself so the glass panels above can refract it.

@@ -126,8 +126,11 @@ fun LauncherScreen(
                 .fillMaxSize()
                 .searchGesture(state, distancePx, topInset) { !controller.isEditing && !controller.onLibrary },
         ) {
-            // Everything the glass refracts: the home screen without its overlays.
-            Box(Modifier.fillMaxSize().layerBackdrop(homeBackdrop)) {
+            // Everything the glass refracts: the home screen without its overlays. Only recorded while
+            // something made of glass is showing.
+            val glassShowing = state.isActive || controller.openFolderId != null ||
+                controller.openCategory != null || controller.widgetPickerOpen
+            Box(Modifier.fillMaxSize().then(if (glassShowing) Modifier.layerBackdrop(homeBackdrop) else Modifier)) {
                 workspace?.let { ws -> HomeScreen(ws, apps, library, controller, homeReset) }
             }
             if (state.isActive) {

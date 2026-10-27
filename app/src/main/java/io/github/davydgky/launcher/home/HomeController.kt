@@ -1,6 +1,7 @@
 package io.github.davydgky.launcher.home
 
 import android.appwidget.AppWidgetProviderInfo
+import android.util.Log
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
@@ -118,6 +119,7 @@ class HomeController(
     private var edgeJob: Job? = null
 
     fun startDrag(source: DragSource, pointer: Offset, grab: Offset, size: IntSize) {
+        Log.i(TAG, "Drag $source")
         drag = DragState(source, pointer, grab, size)
     }
 
@@ -135,7 +137,9 @@ class HomeController(
         edgeJob?.cancel()
         val workspace = workspace ?: return
         val source = state.source
-        when (val target = targetFor(workspace, state)) {
+        val target = targetFor(workspace, state)
+        Log.i(TAG, "Drop at ${state.pointer} on $target")
+        when (target) {
             is DropTarget.Move -> when (source) {
                 is DragSource.Item -> repository.move(source.item.id, target.cell)
                 is DragSource.Dock -> repository.fromDock(source.appKey, target.cell)
@@ -217,6 +221,7 @@ class HomeController(
     }
 
     private companion object {
+        const val TAG = "HomeController"
         const val EDGE_DELAY_MS = 650L
     }
 }

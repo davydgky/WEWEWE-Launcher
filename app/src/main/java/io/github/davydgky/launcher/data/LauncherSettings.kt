@@ -5,12 +5,14 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import java.io.IOException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 
 data class LauncherPrefs(
@@ -24,6 +26,8 @@ data class LauncherPrefs(
     val addNewAppsToHome: Boolean = true,
     /** The hint in the search asking for usage access was dismissed. */
     val usageHintDismissed: Boolean = false,
+    /** Download updates on Wi-Fi and install them while the home screen is not in use. */
+    val autoUpdate: Boolean = true,
 )
 
 class LauncherSettings(private val dataStore: DataStore<Preferences>) {
@@ -38,6 +42,7 @@ class LauncherSettings(private val dataStore: DataStore<Preferences>) {
                 noteFolders = prefs[NoteFoldersKey].orEmpty(),
                 addNewAppsToHome = prefs[AddNewAppsKey] ?: true,
                 usageHintDismissed = prefs[UsageHintDismissedKey] ?: false,
+                autoUpdate = prefs[AutoUpdateKey] ?: true,
             )
         }
         .distinctUntilChanged()
@@ -65,11 +70,23 @@ class LauncherSettings(private val dataStore: DataStore<Preferences>) {
         dataStore.edit { it[UsageHintDismissedKey] = true }
     }
 
+    suspend fun setAutoUpdate(enabled: Boolean) {
+        dataStore.edit { it[AutoUpdateKey] = enabled }
+    }
+
+    suspend fun lastUpdateCheck(): Long = dataStore.data.first()[LastUpdateCheckKey] ?: 0L
+
+    suspend fun setLastUpdateCheck(timeMillis: Long) {
+        dataStore.edit { it[LastUpdateCheckKey] = timeMillis }
+    }
+
     private companion object {
         val DisabledSourcesKey = stringSetPreferencesKey("disabled_sources")
         val DockKey = stringPreferencesKey("dock")
         val NoteFoldersKey = stringSetPreferencesKey("note_folders")
         val AddNewAppsKey = booleanPreferencesKey("add_new_apps_to_home")
         val UsageHintDismissedKey = booleanPreferencesKey("usage_hint_dismissed")
+        val AutoUpdateKey = booleanPreferencesKey("auto_update")
+        val LastUpdateCheckKey = longPreferencesKey("last_update_check")
     }
 }

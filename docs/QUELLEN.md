@@ -116,9 +116,9 @@ selbst noch die Speicherwurzel erfassen und ist deshalb nur die Ausweichlösung.
 ### Bilder mit erkanntem Text
 `READ_MEDIA_IMAGES`. Android stellt den Text in Bildern nirgends bereit, also erkennt ihn der Launcher
 selbst mit **ML Kit Text Recognition v2 im gebündelten Modus** (Modell in der APK, keine Google-Play-Dienste,
-funktioniert offline). Das Netz bleibt technisch ausgeschlossen, weil die App keine
-`INTERNET`-Berechtigung hat. Die Bibliotheken bringen sie mit, sie wird im Manifest entfernt, und die CI
-prüft das am fertigen APK.
+funktioniert offline). ML Kit würde Nutzungsstatistiken an Google melden. Der Build entfernt diesen
+Meldekanal aus dem Manifest, und die CI prüft das am fertigen APK. Bilder und erkannter Text verlassen das Gerät
+nie.
 
 - Die Erkennung läuft nur **während das Gerät lädt**: ein `JobScheduler`-Job mit `setRequiresCharging(true)`.
   Beim Abstecken stoppt Android den Job, der Fortschritt bleibt je Bild gespeichert.
@@ -156,8 +156,10 @@ Index, damit jeder Tastendruck ohne Interprozess-Aufruf auskommt. Ein Treffer ö
 5. **Jede Quelle ist abschaltbar** und zeigt in den Einstellungen, welche Berechtigung fehlt und wie man
    sie erteilt. Fehlt eine Berechtigung, liefert die Quelle einfach nichts. Ein Absturz ist damit
    ausgeschlossen.
-6. **Nichts verlässt das Gerät.** Keine `INTERNET`-Berechtigung, kein Backup (`allowBackup=false`). Der
-   Index liegt nur im App-Speicher. „Im Web suchen“ übergibt die Eingabe erst auf Antippen an Velo.
+6. **Nichts verlässt das Gerät.** Die einzige Netzverbindung ist der Updater, der bei GitHub nach eigenen
+   Updates sucht. Die CI prüft, dass sonst kein Code Verbindungen öffnet. Es gibt kein Backup
+   (`allowBackup=false`), und der Index liegt nur im App-Speicher. „Im Web suchen“ übergibt die Eingabe
+   erst auf Antippen an Velo.
 7. **Reiner Suchkern.** Normalisierung, Index, Ranking und Vorhersage stecken in einem
    Android-freien Kotlin-Modul (`:core`) mit Unit-Tests. Die App-Schicht übersetzt nur zwischen Android
    und Kern.

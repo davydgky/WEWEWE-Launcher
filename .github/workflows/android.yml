@@ -14,6 +14,8 @@ jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    outputs:
+      signed_with: ${{ steps.sign.outputs.signed_with }}
     steps:
       - uses: actions/checkout@v5
 
@@ -27,30 +29,50 @@ jobs:
       - name: Build, unit tests and lint
         run: ./gradlew --stacktrace :core:test assembleDebug assembleRelease testDebugUnitTest lintDebug
 
-      - name: Check that the APKs cannot reach the network
+      # Searches never leave the device: the updater is the only code that may open connections.
+      - name: Check that only the updater uses the network
+        run: |
+          OFFENDERS=$(grep -rlE "java\.net\.|HttpURLConnection|URLConnection|okhttp3|java\.nio\.channels\.SocketChannel" app/src/main/java core/src/main | grep -v "/update/" || true)
+          if [ -n "$OFFENDERS" ]; then
+            echo "::error::network code outside the updater: $OFFENDERS"
+            exit 1
+          fi
+
+      - name: Sign release APK
+        id: sign
+        env:
+          LAUNCHER_KEYSTORE_BASE64: ${{ secrets.LAUNCHER_KEYSTORE_BASE64 }}
+          LAUNCHER_KEYSTORE_PASSWORD: ${{ secrets.LAUNCHER_KEYSTORE_PASSWORD }}
+        run: scripts/sign_release.sh
+
+      - name: Check that ML Kit cannot report usage
         run: |
           BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
-          for APK in app/build/outputs/apk/debug/*.apk app/build/outputs/apk/release/*.apk; do
-            "$BT/aapt2" dump permissions "$APK" > permissions.txt
-            cat permissions.txt
-            if grep -q "android.permission.INTERNET" permissions.txt; then
-              echo "::error::$APK requests the INTERNET permission"
+          for APK in dist/*.apk app/build/outputs/apk/debug/*.apk; do
+            if "$BT/aapt2" dump xmltree --file AndroidManifest.xml "$APK" | grep -q "CctBackendFactory"; then
+              echo "::error::$APK registers ML Kit's usage reporting backend"
               exit 1
             fi
           done
 
       - name: Show APK signature and version
         run: |
-          APK=$(ls app/build/outputs/apk/release/*.apk)
           BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
-          "$BT/apksigner" verify --print-certs "$APK" | grep -E "SHA-256|DN"
-          "$BT/aapt2" dump badging "$APK" | head -1
+          "$BT/aapt2" dump badging dist/*.apk | head -1
+          "$BT/aapt2" dump permissions dist/*.apk
 
       - name: Upload release APK
         uses: actions/upload-artifact@v5
         with:
           name: launcher-apk
-          path: app/build/outputs/apk/release/*.apk
+          path: dist/*.apk
+          if-no-files-found: error
+
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v5
+        with:
+          name: launcher-debug-apk
+          path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
 
       - name: Upload reports
@@ -66,11 +88,11 @@ jobs:
   emulator-smoke-test:
     needs: build
     runs-on: ubuntu-latest
+    timeout-minutes: 40
     permissions:
       contents: write
-    # Informational: the software-rendered CI emulator is too slow to judge latency or to gate merges.
-    continue-on-error: true
-    timeout-minutes: 40
+    outputs:
+      critical: ${{ steps.result.outputs.critical }}
     steps:
       - uses: actions/checkout@v5
 
@@ -78,6 +100,11 @@ jobs:
         with:
           name: launcher-apk
           path: apk
+
+      - uses: actions/download-artifact@v5
+        with:
+          name: launcher-debug-apk
+          path: apk-debug
 
       - name: Free disk space for the emulator
         run: sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/share/boost /usr/local/lib/node_modules /opt/hostedtoolcache/CodeQL
@@ -91,7 +118,11 @@ jobs:
       - name: Install test dependencies
         run: pip install pillow
 
+      # Functional checks are informational (the software-rendered emulator is slow and flaky); crashes
+      # and "isn't responding" of the launcher are critical and stop the release.
       - name: Run smoke test on emulator
+        id: smoke
+        continue-on-error: true
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 36
@@ -100,7 +131,20 @@ jobs:
           profile: pixel_7
           disable-animations: false
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot
-          script: python3 scripts/emulator_smoke.py apk/*.apk
+          script: |
+            if [ "${{ needs.build.outputs.signed_with }}" = "release" ]; then scripts/check_key_rotation.sh apk-debug/app-debug.apk apk/launcher-*.apk || echo "critical=true" > smoke-result.txt; fi
+            python3 scripts/emulator_smoke.py apk/launcher-*.apk
+
+      - name: Smoke test result
+        id: result
+        if: always()
+        run: |
+          if grep -q "critical=true" smoke-result.txt 2>/dev/null || [ ! -f smoke-result.txt ]; then
+            echo "critical=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "critical=false" >> "$GITHUB_OUTPUT"
+          fi
+          cat "$GITHUB_OUTPUT"
 
       - name: Upload screenshots
         if: always()
@@ -120,3 +164,30 @@ jobs:
           git add .
           git -c user.name="CI" -c user.email="ci@users.noreply.github.com" commit -qm "Screenshots of run ${{ github.run_number }} (${{ github.sha }})"
           git push -qf "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" HEAD:refs/screenshots/latest
+
+  # Every build of main becomes a release; installed launchers find it and update themselves.
+  publish:
+    needs: [build, emulator-smoke-test]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.emulator-smoke-test.outputs.critical == 'false'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v5
+        with:
+          name: launcher-apk
+          path: dist
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NOTES: ${{ github.event.head_commit.message }}
+        run: |
+          APK=$(ls dist/launcher-*.apk)
+          CODE=$(basename "$APK" .apk | sed 's/launcher-//')
+          gh release create "v0.1.$CODE" "$APK" \
+            --repo "${{ github.repository }}" \
+            --target "${{ github.sha }}" \
+            --title "WEWEWE 0.1.$CODE" \
+            --notes "$NOTES" \
+            --latest

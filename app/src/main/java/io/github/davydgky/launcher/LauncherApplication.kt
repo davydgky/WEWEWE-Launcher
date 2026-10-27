@@ -12,6 +12,7 @@ import io.github.davydgky.launcher.perf.PerfStats
 import io.github.davydgky.launcher.search.IconCache
 import io.github.davydgky.launcher.search.SearchRepository
 import io.github.davydgky.launcher.search.Suggestions
+import io.github.davydgky.launcher.update.AppUpdater
 import io.github.davydgky.launcher.usage.UsageHistory
 import io.github.davydgky.launcher.widgets.WidgetHost
 import java.io.File
@@ -37,6 +38,7 @@ class LauncherApplication : Application() {
     val suggestions: Suggestions by lazy { Suggestions(apps, usage, launchLog, appScope) }
     val widgets: WidgetHost by lazy { WidgetHost(this) }
     val workspace: WorkspaceRepository by lazy { WorkspaceRepository(this, apps, settings, usage, widgets, appScope) }
+    val updater: AppUpdater by lazy { AppUpdater(this, settings, appScope) }
     val perf = PerfStats()
 
     override fun onCreate() {

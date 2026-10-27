@@ -84,7 +84,7 @@
     <string name="measurements_description">Gemessen auf diesem Gerät über die letzten 200 Wischgesten und Tastendrücke. Zusätzlich im Logcat unter dem Tag LauncherPerf.</string>
     <string name="measurements_reset">Zurücksetzen</string>
     <string name="settings_privacy">Datenschutz</string>
-    <string name="privacy_description">Alles bleibt auf diesem Gerät. Der Launcher hat keine Internetberechtigung, sein Index wird nicht gesichert, und eine Websuche startet erst, wenn du sie antippst.</string>
+    <string name="privacy_description">Alles, was du suchst, bleibt auf diesem Gerät. Die einzige Verbindung, die der Launcher aufbaut, ist die Suche nach eigenen Updates bei GitHub; sein Index wird nicht gesichert, und eine Websuche startet erst, wenn du sie antippst.</string>
     <string name="rebuild_index">Index neu aufbauen</string>
     <!-- Homescreen bearbeiten -->
     <string name="menu_add_widget">Widget hinzufügen</string>
@@ -124,4 +124,22 @@
     <string name="settings_home">Home-Bildschirm</string>
     <string name="setting_add_new_apps">Neue Apps zum Home-Bildschirm hinzufügen</string>
     <string name="setting_add_new_apps_description">Sonst liegen neue Apps nur in der App-Mediathek rechts neben der letzten Seite.</string>
+    <!-- Updates -->
+    <string name="update_section">Updates</string>
+    <string name="update_check">Nach Updates suchen</string>
+    <string name="update_checking">Suche nach Updates…</string>
+    <string name="update_current">Installiert: %1$s</string>
+    <string name="update_up_to_date">Der Launcher ist aktuell (%1$s)</string>
+    <string name="update_download">Update %1$s laden</string>
+    <string name="update_downloading">%1$s wird geladen… %2$d %%</string>
+    <string name="update_install">Update %1$s installieren</string>
+    <string name="update_needs_permission">Erlaube dem Launcher, Apps zu installieren, und tippe dann erneut</string>
+    <string name="update_scheduled">%1$s wird installiert, sobald du eine andere App öffnest</string>
+    <string name="update_install_now">Jetzt installieren</string>
+    <string name="update_installing">Wird installiert…</string>
+    <string name="update_error_network">Der Update-Server war nicht erreichbar</string>
+    <string name="update_error_download">Der Download ist fehlgeschlagen oder konnte nicht geprüft werden</string>
+    <string name="update_error_install">Die Installation ist fehlgeschlagen</string>
+    <string name="update_auto">Automatisch aktualisieren</string>
+    <string name="update_auto_hint">Lädt Updates im WLAN und installiert sie, während eine andere App offen ist. Beim ersten Update fragt Android einmal nach der Erlaubnis.</string>
 </resources>

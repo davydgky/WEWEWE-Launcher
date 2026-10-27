@@ -76,6 +76,8 @@ import io.github.davydgky.launcher.sources.ShortcutsSource
 import io.github.davydgky.launcher.sources.Velo
 import io.github.davydgky.launcher.sources.VeloSource
 import io.github.davydgky.launcher.ui.LauncherTheme
+import io.github.davydgky.launcher.update.UpdateState
+import kotlin.math.roundToInt
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -277,6 +279,16 @@ private fun SettingsScreen(activity: ComponentActivity) {
             }
         }
         item {
+            val update by app.updater.state.collectAsStateWithLifecycle()
+            UpdateGroup(
+                state = update,
+                currentVersion = app.updater.currentVersionName,
+                autoUpdate = prefs.autoUpdate,
+                onAction = app.updater::performAction,
+                onAutoUpdate = app.updater::setAutoUpdate,
+            )
+        }
+        item {
             Group(stringResource(R.string.settings_privacy)) {
                 Column(Modifier.padding(16.dp)) {
                     Text(stringResource(R.string.privacy_description), style = MaterialTheme.typography.bodyMedium)
@@ -284,6 +296,45 @@ private fun SettingsScreen(activity: ComponentActivity) {
                     OutlinedButton(onClick = app.search::rebuildAll) { Text(stringResource(R.string.rebuild_index)) }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun UpdateGroup(
+    state: UpdateState,
+    currentVersion: String,
+    autoUpdate: Boolean,
+    onAction: () -> Unit,
+    onAutoUpdate: (Boolean) -> Unit,
+) {
+    val (label, supporting) = when (state) {
+        UpdateState.Idle -> stringResource(R.string.update_check) to stringResource(R.string.update_current, currentVersion)
+        UpdateState.Checking -> stringResource(R.string.update_checking) to stringResource(R.string.update_current, currentVersion)
+        UpdateState.UpToDate -> stringResource(R.string.update_up_to_date, currentVersion) to stringResource(R.string.update_check)
+        is UpdateState.Available -> stringResource(R.string.update_download, state.release.versionName) to state.release.notes
+        is UpdateState.Downloading -> stringResource(R.string.update_downloading, state.release.versionName, (state.progress * 100).roundToInt()) to ""
+        is UpdateState.Ready -> stringResource(R.string.update_install, state.release.versionName) to state.release.notes
+        is UpdateState.NeedsPermission -> stringResource(R.string.update_install, state.release.versionName) to stringResource(R.string.update_needs_permission)
+        is UpdateState.Scheduled -> stringResource(R.string.update_scheduled, state.release.versionName) to stringResource(R.string.update_install_now)
+        is UpdateState.Installing -> stringResource(R.string.update_installing) to ""
+        is UpdateState.Failed -> stringResource(state.message) to stringResource(R.string.update_check)
+    }
+    Group(stringResource(R.string.update_section)) {
+        Column(Modifier.fillMaxWidth().clickable(onClick = onAction).padding(horizontal = 16.dp, vertical = 12.dp)) {
+            Text(label, style = MaterialTheme.typography.titleMedium)
+            if (supporting.isNotBlank()) {
+                Text(supporting, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 3)
+            }
+        }
+        HorizontalDivider()
+        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(stringResource(R.string.update_auto), style = MaterialTheme.typography.titleMedium)
+                Text(stringResource(R.string.update_auto_hint), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Spacer(Modifier.width(12.dp))
+            Switch(checked = autoUpdate, onCheckedChange = onAutoUpdate)
         }
     }
 }

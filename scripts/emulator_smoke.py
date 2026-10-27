@@ -19,6 +19,8 @@ import xml.etree.ElementTree as ET
 PACKAGE = "io.github.davydgky.launcher"
 SHOTS = "screenshots"
 failures = []
+# Crashes and "isn't responding" of the launcher itself; these stop a release.
+critical = []
 
 
 def adb(*args, check=True):
@@ -50,10 +52,14 @@ def ui_nodes():
 
 def ui_texts():
     nodes = ui_nodes()
-    # The emulator's previous launcher sometimes shows "isn't responding"; close such dialogs.
-    if any("isn't responding" in node.get("text") for node in nodes):
+    # Close "isn't responding" dialogs. Ours is a critical failure: keep the traces and wait for it.
+    dialog = next((node.get("text") for node in nodes if "isn't responding" in node.get("text")), None)
+    if dialog:
+        ours = dialog.startswith("WEWEWE")
+        if ours:
+            record_anr(dialog)
         for node in nodes:
-            if node.get("text") in ("Close app", "Wait"):
+            if node.get("text") == ("Wait" if ours else "Close app"):
                 x1, y1, x2, y2 = map(int, re.findall(r"\d+", node.get("bounds")))
                 shell(f"input tap {(x1 + x2) // 2} {(y1 + y2) // 2}")
                 time.sleep(1)
@@ -71,6 +77,18 @@ def wait_for_text(fragment, timeout=10):
         time.sleep(0.5)
     print(f"  visible texts: {texts[:40]}")
     return False
+
+
+def record_anr(dialog):
+    if dialog in critical:
+        return
+    critical.append(dialog)
+    print(f"CRITICAL: {dialog}")
+    traces = adb("shell", "ls -t /data/anr/", check=False).split()
+    if traces:
+        text = adb("shell", f"cat /data/anr/{traces[0]}", check=False)
+        start = text.find('"main"')
+        print(text[start:start + 6000] if start >= 0 else text[:6000])
 
 
 def screenshot(name):
@@ -134,6 +152,10 @@ def make_picture(path, lines):
 
 
 def main(apk):
+    adb("wait-for-device")
+    # Root lets the test read ANR traces; available on the google_apis emulator images.
+    adb("root", check=False)
+    time.sleep(3)
     adb("wait-for-device")
     shell("settings put global window_animation_scale 1")
     # The emulator has a hardware keyboard; show the on-screen keyboard anyway, as on a phone.
@@ -262,7 +284,8 @@ def main(apk):
             x, y = center(node)
             shell(f"input tap {x} {y}")
             time.sleep(4)
-            candidates = [n for n in ui_nodes() if re.search(r"clock|Clock|Uhr", n.get("text"))]
+            # Each widget shows its size ("2 × 2"); tap the first one.
+            candidates = [n for n in ui_nodes() if re.fullmatch(r"\d+ × \d+", n.get("text"))]
             if candidates:
                 x, y = center(candidates[0])
                 shell(f"input tap {x} {y}")
@@ -280,10 +303,16 @@ def main(apk):
     shell("input keyevent KEYCODE_BACK")
 
     # 5. Crashes and measurements.
+    anr = [line for line in adb("logcat", "-d", "-b", "system", check=False).splitlines() if f"ANR in {PACKAGE}" in line]
+    if anr:
+        record_anr(anr[0])
+    check(not anr, "the launcher never stopped responding")
     crashes = adb("logcat", "-d", "-b", "crash", check=False)
     check(PACKAGE not in crashes, "no crashes")
     if PACKAGE in crashes:
+        critical.append("crash")
         print(crashes[-4000:])
+    print(adb("logcat", "-d", "-s", "HomeController:I", "WorkspaceRepository:*", "WidgetAdder:*", check=False)[-2000:])
     perf = [line for line in adb("logcat", "-d", "-s", "LauncherPerf:I", check=False).splitlines() if "ms" in line]
     print("Latency measurements (software emulator, for information only):")
     print("\n".join(perf[-20:]) or "  none")
@@ -293,8 +322,16 @@ def main(apk):
 
     if failures:
         print(f"{len(failures)} check(s) failed: {failures}")
-        sys.exit(1)
 
 
 if __name__ == "__main__":
-    main(sys.argv[1])
+    try:
+        main(sys.argv[1])
+    except Exception as error:  # an adb failure is not a launcher failure
+        print(f"test aborted: {error}")
+        failures.append(str(error))
+    finally:
+        with open("smoke-result.txt", "a") as result:
+            result.write(f"critical={'true' if critical else 'false'}\n")
+    if failures:
+        sys.exit(1)

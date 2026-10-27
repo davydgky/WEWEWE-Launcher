@@ -69,10 +69,19 @@ class MainActivity : ComponentActivity() {
     override fun onStart() {
         super.onStart()
         launcherApp.widgets.startListening()
+        launcherApp.updater.isAppVisible = true
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // Checks at most every few hours; the home screen resumes often.
+        launcherApp.updater.onAppStarted()
+        launcherApp.updater.onAppResumed()
     }
 
     override fun onStop() {
         launcherApp.widgets.stopListening()
+        launcherApp.updater.isAppVisible = false
         super.onStop()
     }
 

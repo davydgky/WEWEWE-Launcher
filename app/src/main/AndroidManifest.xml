@@ -3,11 +3,13 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <!--
-        Everything stays on the device: the launcher has no network access at all. Libraries that ask
-        for it (ML Kit wants to send usage metrics) have it removed here; CI checks the final APK.
+        Network access exists only for the updater (update/AppUpdater.kt), which talks to this
+        repository's GitHub releases. CI checks that no other code opens connections, and ML Kit's
+        usage reporting is left out of the build, so nothing about searches leaves the device.
     -->
-    <uses-permission android:name="android.permission.INTERNET" tools:node="remove" />
-    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" tools:node="remove" />
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <!-- Search sources; each one is optional and only asked for when the user switches it on. -->
     <uses-permission android:name="android.permission.READ_CONTACTS" />
@@ -84,6 +86,23 @@
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </activity>
+
+        <receiver
+            android:name=".update.InstallResultReceiver"
+            android:exported="false" />
+
+        <!--
+            ML Kit reports usage metrics through Google's data transport. Without a registered backend
+            the events are dropped on the device. CI checks that the backend stays out.
+        -->
+        <service
+            android:name="com.google.android.datatransport.runtime.backends.TransportBackendDiscovery"
+            android:exported="false"
+            tools:node="merge">
+            <meta-data
+                android:name="backend:com.google.android.datatransport.cct.CctBackendFactory"
+                tools:node="remove" />
+        </service>
 
         <service
             android:name=".index.ContentIndexJob"

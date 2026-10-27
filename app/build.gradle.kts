@@ -18,6 +18,8 @@ android {
         versionCode = buildNumber
         versionName = "0.1.$buildNumber"
         androidResources.localeFilters += listOf("en", "de")
+        // GitHub repository whose releases the in-app updater follows.
+        buildConfigField("String", "UPDATE_REPOSITORY", "\"davydgky/WEWEWE-Launcher\"")
     }
 
     signingConfigs {
@@ -36,7 +38,9 @@ android {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            signingConfig = signingConfigs.getByName("debug")
+            // Left unsigned here: CI signs it with the secret release key and a rotation lineage from the
+            // public debug key (scripts/sign_release.sh), which the Gradle signing config cannot express.
+            signingConfig = null
         }
     }
 
@@ -47,6 +51,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     packaging {

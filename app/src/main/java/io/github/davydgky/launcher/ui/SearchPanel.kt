@@ -41,6 +41,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -48,6 +49,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -91,7 +93,7 @@ import io.github.davydgky.launcher.search.ResultsState
 import io.github.davydgky.launcher.search.SearchViewModel
 import io.github.davydgky.launcher.search.SuggestionState
 import io.github.davydgky.launcher.ui.glass.LocalGlassColors
-import io.github.davydgky.launcher.ui.glass.glass
+import io.github.davydgky.launcher.ui.glass.glassWhen
 import kotlin.math.abs
 import kotlinx.coroutines.launch
 
@@ -148,58 +150,63 @@ fun SearchPanel(
         }
     }
 
-    Column(
-        modifier
-            .fillMaxSize()
-            // Closed: off screen, so it cannot catch touches meant for the home screen.
-            .offset { IntOffset(0, if (state.isActive) 0 else OFFSCREEN_PX) }
-            .graphicsLayer { alpha = state.progress.value }
-            .pointerInput(state) { detectTapGestures { state.close() } }
-            .statusBarsPadding()
-            .windowInsetsPadding(WindowInsets.ime.union(WindowInsets.navigationBars)),
-    ) {
-        val listState = rememberLazyListState()
-        LaunchedEffect(results.query) { listState.scrollToItem(0) }
-        LazyColumn(
-            state = listState,
-            modifier = Modifier
-                .weight(1f)
-                .nestedScroll(hideKeyboardOnScroll)
-                .graphicsLayer {
-                    val p = state.progress.value
-                    translationY = (1f - p) * with(density) { -32.dp.toPx() }
-                },
-            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+    CompositionLocalProvider(LocalGlassActive provides state.isActive) {
+        Column(
+            modifier
+                .fillMaxSize()
+                // Closed: off screen, so it cannot catch touches meant for the home screen.
+                .offset { IntOffset(0, if (state.isActive) 0 else OFFSCREEN_PX) }
+                .graphicsLayer { alpha = state.progress.value }
+                .pointerInput(state) { detectTapGestures { state.close() } }
+                .statusBarsPadding()
+                .windowInsetsPadding(WindowInsets.ime.union(WindowInsets.navigationBars)),
         ) {
-            if (state.query.text.isBlank()) {
-                if (!usageAccess && !prefs.usageHintDismissed) {
-                    item("usage-hint") {
-                        UsageHint(
-                            backdrop = backdrop,
-                            onAllow = {
-                                context.startActivity(
-                                    Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS, Uri.fromParts("package", context.packageName, null)),
-                                )
-                            },
-                            onDismiss = { scope.launch { app.settings.dismissUsageHint() } },
-                        )
+            val listState = rememberLazyListState()
+            LaunchedEffect(results.query) { listState.scrollToItem(0) }
+            LazyColumn(
+                state = listState,
+                modifier = Modifier
+                    .weight(1f)
+                    .nestedScroll(hideKeyboardOnScroll)
+                    .graphicsLayer {
+                        val p = state.progress.value
+                        translationY = (1f - p) * with(density) { -32.dp.toPx() }
+                    },
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                if (state.query.text.isBlank()) {
+                    if (!usageAccess && !prefs.usageHintDismissed) {
+                        item("usage-hint") {
+                            UsageHint(
+                                backdrop = backdrop,
+                                onAllow = {
+                                    context.startActivity(
+                                        Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS, Uri.fromParts("package", context.packageName, null)),
+                                    )
+                                },
+                                onDismiss = { scope.launch { app.settings.dismissUsageHint() } },
+                            )
+                        }
                     }
+                    suggestionItems(suggestions, actions, state, backdrop)
+                } else {
+                    resultItems(results, open, actions, backdrop)
                 }
-                suggestionItems(suggestions, actions, state, backdrop)
-            } else {
-                resultItems(results, open, actions, backdrop)
             }
+            SearchField(state, focusRequester, backdrop, onSubmit = {
+                val first = results.results.top?.item ?: results.results.groups.firstOrNull()?.items?.firstOrNull()?.item
+                if (first != null) open(first, null) else if (results.query.isNotBlank()) {
+                    actions.webSearch(results.query)
+                    state.reset()
+                }
+            })
         }
-        SearchField(state, focusRequester, backdrop, onSubmit = {
-            val first = results.results.top?.item ?: results.results.groups.firstOrNull()?.items?.firstOrNull()?.item
-            if (first != null) open(first, null) else if (results.query.isNotBlank()) {
-                actions.webSearch(results.query)
-                state.reset()
-            }
-        })
     }
 }
+
+/** Glass is drawn only while the search is open. */
+private val LocalGlassActive = staticCompositionLocalOf { false }
 
 private const val OFFSCREEN_PX = 100_000
 
@@ -358,7 +365,7 @@ private fun Section(
         Column(
             Modifier
                 .fillMaxWidth()
-                .glass(backdrop, PlatterShape, colors),
+                .glassWhen(LocalGlassActive.current, backdrop, PlatterShape, colors),
         ) {
             content()
         }
@@ -374,7 +381,7 @@ private fun UsageHint(backdrop: Backdrop, onAllow: () -> Unit, onDismiss: () -> 
     Row(
         Modifier
             .fillMaxWidth()
-            .glass(backdrop, PlatterShape, colors)
+            .glassWhen(LocalGlassActive.current, backdrop, PlatterShape, colors)
             .padding(start = 16.dp, top = 12.dp, bottom = 12.dp, end = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -444,7 +451,7 @@ private fun SearchField(state: SearchState, focusRequester: FocusRequester, back
             Modifier
                 .weight(1f)
                 .height(48.dp)
-                .glass(backdrop, Capsule(), colors, refraction = 12.dp)
+                .glassWhen(LocalGlassActive.current, backdrop, Capsule(), colors, refraction = 12.dp)
                 .padding(start = 14.dp, end = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {

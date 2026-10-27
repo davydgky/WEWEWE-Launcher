@@ -85,7 +85,7 @@
     <string name="measurements_description">Measured on this device for the last 200 swipes and keystrokes. Also logged with the tag LauncherPerf.</string>
     <string name="measurements_reset">Reset</string>
     <string name="settings_privacy">Privacy</string>
-    <string name="privacy_description">Everything stays on this device. The launcher has no internet permission, its index is not backed up, and a web search only starts when you tap it.</string>
+    <string name="privacy_description">Everything you search stays on this device. The only connection the launcher makes is to look for its own updates on GitHub; its index is not backed up, and a web search only starts when you tap it.</string>
     <string name="rebuild_index">Rebuild index</string>
     <!-- Home screen editing -->
     <string name="menu_add_widget">Add widget</string>
@@ -125,4 +125,22 @@
     <string name="settings_home">Home screen</string>
     <string name="setting_add_new_apps">Add new apps to the home screen</string>
     <string name="setting_add_new_apps_description">Otherwise new apps are only in the App Library, to the right of the last page.</string>
+    <!-- Updates -->
+    <string name="update_section">Updates</string>
+    <string name="update_check">Check for updates</string>
+    <string name="update_checking">Checking for updates…</string>
+    <string name="update_current">Installed: %1$s</string>
+    <string name="update_up_to_date">The launcher is up to date (%1$s)</string>
+    <string name="update_download">Download update %1$s</string>
+    <string name="update_downloading">Downloading %1$s… %2$d %%</string>
+    <string name="update_install">Install update %1$s</string>
+    <string name="update_needs_permission">Allow the launcher to install apps, then tap again</string>
+    <string name="update_scheduled">%1$s installs as soon as you open another app</string>
+    <string name="update_install_now">Install now</string>
+    <string name="update_installing">Installing…</string>
+    <string name="update_error_network">Could not reach the update server</string>
+    <string name="update_error_download">The download failed or could not be verified</string>
+    <string name="update_error_install">The installation failed</string>
+    <string name="update_auto">Update automatically</string>
+    <string name="update_auto_hint">Downloads updates on Wi-Fi and installs them while another app is open. The first update asks once for permission.</string>
 </resources>
