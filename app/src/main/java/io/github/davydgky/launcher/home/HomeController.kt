@@ -26,7 +26,7 @@ sealed interface DragSource {
     data class Dock(val appKey: String) : DragSource
 
     /** The app being dragged, if it is one (folders and widgets are not). */
-    val appKey: String?
+    val draggedApp: String?
         get() = when (this) {
             is Dock -> appKey
             is Item -> (item as? AppItem)?.appKey
@@ -142,21 +142,21 @@ class HomeController(
             }
             is DropTarget.MakeFolder -> {
                 val targetApp = (workspace.item(target.targetId) as? AppItem)?.appKey ?: return
-                val name = folderName(listOfNotNull(targetApp, source.appKey))
+                val name = folderName(listOfNotNull(targetApp, source.draggedApp))
                 when (source) {
                     is DragSource.Item -> repository.makeFolder(source.item.id, target.targetId, name)
                     is DragSource.Dock -> repository.makeFolderFromDock(source.appKey, target.targetId, name)
                 }
             }
-            is DropTarget.IntoFolder -> source.appKey?.let { repository.addToFolder(it, target.folderId) }
-            is DropTarget.Dock -> source.appKey?.let { repository.toDock(it, target.index) }
+            is DropTarget.IntoFolder -> source.draggedApp?.let { repository.addToFolder(it, target.folderId) }
+            is DropTarget.Dock -> source.draggedApp?.let { repository.toDock(it, target.index) }
             null -> Unit
         }
     }
 
     private fun targetFor(workspace: Workspace, state: DragState): DropTarget? {
         val p = state.pointer
-        val appKey = state.source.appKey
+        val appKey = state.source.draggedApp
         if (dockBounds.contains(p)) {
             if (appKey == null) return null
             val inDock = state.source is DragSource.Dock
