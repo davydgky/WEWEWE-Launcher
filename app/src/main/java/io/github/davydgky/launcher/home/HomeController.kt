@@ -72,6 +72,13 @@ class HomeController(
     var editMode by mutableStateOf(false)
         private set
 
+    /**
+     * Elements wiggle in edit mode, but not while one is dragged or a panel covers the home screen: the
+     * glass behind a panel would otherwise blur a new picture every frame.
+     */
+    val wiggling: Boolean
+        get() = editMode && drag == null && openFolderId == null && openCategory == null && !widgetPickerOpen
+
     fun startEditing() {
         editMode = true
         dismissMenus()
