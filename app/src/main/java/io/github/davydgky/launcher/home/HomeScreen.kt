@@ -185,7 +185,7 @@ private const val LIBRARY_SLOTS = 4
 
 private const val WIGGLE_DEGREES = 1.6f
 
-/** The back-and-forth rotation of elements in edit mode; 0 outside it. */
+/** The back-and-forth rotation of elements in edit mode; 0 outside it and while something is dragged. */
 @Composable
 private fun wiggleAngle(active: Boolean): State<Float> {
     if (!active) return remember { mutableFloatStateOf(0f) }
@@ -268,7 +268,7 @@ private fun WorkspacePage(page: Int, workspace: Workspace, apps: Map<String, App
         val cellW = maxWidth / workspace.columns
         val cellH = maxHeight / workspace.rows
         val drag = controller.drag
-        val wiggle = wiggleAngle(controller.editMode)
+        val wiggle = wiggleAngle(controller.editMode && drag == null)
         // Where the dragged element would land.
         when (val target = drag?.target) {
             is DropTarget.Move -> if (target.cell.page == page) {
@@ -748,7 +748,7 @@ private fun Dock(workspace: Workspace, apps: Map<String, AppTarget>, controller:
     val tint = if (LocalLightWallpaper.current) Color.White.copy(alpha = 0.35f) else Color.White.copy(alpha = 0.16f)
     val dragging = controller.drag
     val dropIndex = (dragging?.target as? DropTarget.Dock)?.index
-    val wiggle = wiggleAngle(controller.editMode)
+    val wiggle = wiggleAngle(controller.editMode && dragging == null)
     Row(
         Modifier
             .fillMaxWidth()

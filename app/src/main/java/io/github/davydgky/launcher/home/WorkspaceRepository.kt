@@ -66,7 +66,8 @@ class WorkspaceRepository(
         val columns = if (config.smallestScreenWidthDp >= 600) 6 else 4
         val rows = if (config.smallestScreenWidthDp >= 600) 5 else 6
         val all = apps.apps.value
-        val dock = legacyDock?.filter { it in keys } ?: DefaultApps.resolve(context, all).take(Workspace.DOCK_SIZE).map { it.key }
+        // Four default apps: the fifth place is left to the suggested app.
+        val dock = legacyDock?.filter { it in keys } ?: DefaultApps.resolve(context, all).take(Workspace.DOCK_SIZE - 1).map { it.key }
         // Most used apps first, so the first page is the useful one; the rest alphabetically.
         if (usage.checkAccess()) {
             usage.refresh()
