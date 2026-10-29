@@ -8,10 +8,12 @@ import io.github.davydgky.launcher.data.LaunchLog
 import io.github.davydgky.launcher.data.LauncherSettings
 import io.github.davydgky.launcher.home.WorkspaceRepository
 import io.github.davydgky.launcher.index.IndexStore
+import io.github.davydgky.launcher.notifications.Notifications
 import io.github.davydgky.launcher.perf.PerfStats
 import io.github.davydgky.launcher.search.IconCache
 import io.github.davydgky.launcher.search.SearchRepository
 import io.github.davydgky.launcher.search.Suggestions
+import io.github.davydgky.launcher.search.Torch
 import io.github.davydgky.launcher.update.AppUpdater
 import io.github.davydgky.launcher.usage.UsageHistory
 import io.github.davydgky.launcher.widgets.WidgetHost
@@ -39,6 +41,8 @@ class LauncherApplication : Application() {
     val widgets: WidgetHost by lazy { WidgetHost(this) }
     val workspace: WorkspaceRepository by lazy { WorkspaceRepository(this, apps, settings, usage, widgets, appScope) }
     val updater: AppUpdater by lazy { AppUpdater(this, settings, appScope) }
+    val torch: Torch by lazy { Torch(this) }
+    val notifications: Notifications by lazy { Notifications(this) }
     val perf = PerfStats()
 
     override fun onCreate() {

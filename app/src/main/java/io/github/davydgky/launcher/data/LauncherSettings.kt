@@ -30,6 +30,10 @@ data class LauncherPrefs(
     val autoUpdate: Boolean = true,
     /** A free place in the dock shows a suggested app. */
     val dockSuggestion: Boolean = true,
+    /** Results stack upwards from the search field, so the best one is within reach of the thumb. */
+    val resultsAtBottom: Boolean = true,
+    /** Last searches that led somewhere, newest first; only on this device. */
+    val recentSearches: List<String> = emptyList(),
 )
 
 class LauncherSettings(private val dataStore: DataStore<Preferences>) {
@@ -46,6 +50,8 @@ class LauncherSettings(private val dataStore: DataStore<Preferences>) {
                 usageHintDismissed = prefs[UsageHintDismissedKey] ?: false,
                 autoUpdate = prefs[AutoUpdateKey] ?: true,
                 dockSuggestion = prefs[DockSuggestionKey] ?: true,
+                resultsAtBottom = prefs[ResultsAtBottomKey] ?: true,
+                recentSearches = prefs[RecentSearchesKey]?.split('\n')?.filter { it.isNotBlank() }.orEmpty(),
             )
         }
         .distinctUntilChanged()
@@ -67,6 +73,25 @@ class LauncherSettings(private val dataStore: DataStore<Preferences>) {
 
     suspend fun setAddNewAppsToHome(enabled: Boolean) {
         dataStore.edit { it[AddNewAppsKey] = enabled }
+    }
+
+    suspend fun setResultsAtBottom(enabled: Boolean) {
+        dataStore.edit { it[ResultsAtBottomKey] = enabled }
+    }
+
+    /** Remembers [query] as the newest recent search. */
+    suspend fun addRecentSearch(query: String) {
+        val clean = query.trim().replace('\n', ' ')
+        if (clean.isEmpty()) return
+        dataStore.edit { prefs ->
+            val old = prefs[RecentSearchesKey]?.split('\n').orEmpty()
+            val list = (listOf(clean) + old.filter { !it.equals(clean, ignoreCase = true) && it.isNotBlank() }).take(MAX_RECENT)
+            prefs[RecentSearchesKey] = list.joinToString("\n")
+        }
+    }
+
+    suspend fun clearRecentSearches() {
+        dataStore.edit { it.remove(RecentSearchesKey) }
     }
 
     suspend fun setDockSuggestion(enabled: Boolean) {
@@ -95,6 +120,9 @@ class LauncherSettings(private val dataStore: DataStore<Preferences>) {
         val UsageHintDismissedKey = booleanPreferencesKey("usage_hint_dismissed")
         val AutoUpdateKey = booleanPreferencesKey("auto_update")
         val DockSuggestionKey = booleanPreferencesKey("dock_suggestion")
+        val ResultsAtBottomKey = booleanPreferencesKey("results_at_bottom")
+        val RecentSearchesKey = stringPreferencesKey("recent_searches")
+        const val MAX_RECENT = 6
         val LastUpdateCheckKey = longPreferencesKey("last_update_check")
     }
 }

@@ -89,6 +89,7 @@ class ContactsSource(private val context: Context) : SearchSource(ID) {
                     photoUri = contact.photo?.let(Uri::parse),
                     phone = contact.phones.firstOrNull(),
                     initials = TextNormalizer.tokens(contact.name).take(2).joinToString("") { it.take(1) }.uppercase(),
+                    email = contact.emails.firstOrNull(),
                 ),
             )
         }

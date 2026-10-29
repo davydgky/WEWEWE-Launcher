@@ -3,11 +3,13 @@ package io.github.davydgky.launcher.core
 /**
  * Where a result comes from. The order is the display order of groups with equal scores; [weight] is
  * how strongly a match of this kind counts compared to the others (apps beat old browser history).
+ * [fuzzy] kinds are also found with a typo in the title ("spotfy" finds Spotify).
  */
-enum class SourceKind(val weight: Float, val groupLimit: Int) {
-    App(1.35f, 8),
-    Shortcut(1.15f, 4),
-    Contact(1.25f, 4),
+enum class SourceKind(val weight: Float, val groupLimit: Int, val fuzzy: Boolean = false) {
+    App(1.35f, 8, fuzzy = true),
+    Setting(1.2f, 4, fuzzy = true),
+    Shortcut(1.15f, 4, fuzzy = true),
+    Contact(1.25f, 4, fuzzy = true),
     Event(1.1f, 4),
     VeloBookmark(1.15f, 4),
     Note(1.1f, 4),

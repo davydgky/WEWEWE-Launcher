@@ -4,6 +4,8 @@ import android.app.Activity
 import android.app.ActivityOptions
 import android.app.SearchManager
 import android.content.ActivityNotFoundException
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.ContentUris
 import android.content.Intent
 import android.content.pm.LauncherApps
@@ -16,6 +18,7 @@ import android.widget.Toast
 import io.github.davydgky.launcher.R
 import io.github.davydgky.launcher.core.SearchItem
 import io.github.davydgky.launcher.launcherApp
+import io.github.davydgky.launcher.settings.SettingsActivity
 import io.github.davydgky.launcher.sources.Velo
 
 /**
@@ -45,6 +48,8 @@ class ResultActions(private val activity: Activity) {
                 Intent(Intent.ACTION_VIEW).setDataAndType(target.uri, "image/*").addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION),
                 bounds, item.key,
             )
+            is SettingTarget -> openSetting(target, bounds, item.key)
+            is AnswerTarget -> copy(target.copyText)
             else -> Log.w(TAG, "Nothing to open for $item")
         }
     }
@@ -79,6 +84,44 @@ class ResultActions(private val activity: Activity) {
         start(Intent(Intent.ACTION_SENDTO, Uri.fromParts("smsto", phone, null)), null, null)
     }
 
+    fun mail(contact: ContactTarget) {
+        val email = contact.email ?: return
+        start(Intent(Intent.ACTION_SENDTO, Uri.fromParts("mailto", email, null)), null, null)
+    }
+
+    /** Copies a calculated result; Android confirms the copy itself. */
+    fun copy(text: String) {
+        val clipboard = activity.getSystemService(ClipboardManager::class.java)
+        clipboard.setPrimaryClip(ClipData.newPlainText(text, text))
+    }
+
+    /** Searches the Play Store for apps (or its web page without the store). */
+    fun playStoreSearch(query: String) {
+        val encoded = Uri.encode(query)
+        val store = Intent(Intent.ACTION_VIEW, Uri.parse("market://search?q=$encoded&c=apps")).setPackage(PLAY_STORE)
+        if (!start(store, null, null, quiet = true)) {
+            start(Intent(Intent.ACTION_VIEW, Uri.parse("https://play.google.com/store/search?q=$encoded&c=apps")), null, null)
+        }
+    }
+
+    private fun openSetting(target: SettingTarget, bounds: Rect?, key: String) {
+        when (target.special) {
+            SettingTarget.Special.Torch -> {
+                if (app.torch.toggle()) app.launchLog.record(key) else toast(R.string.torch_unavailable)
+                return
+            }
+            SettingTarget.Special.Launcher -> {
+                start(Intent(activity, SettingsActivity::class.java), bounds, key)
+                return
+            }
+            null -> Unit
+        }
+        val action = target.action ?: return
+        val intent = if (action == Intent.ACTION_SET_WALLPAPER) Intent.createChooser(Intent(action), null) else Intent(action)
+        // Device makers rename or drop some pages; the main settings always exist.
+        if (!start(intent, bounds, key, quiet = true)) start(Intent(Settings.ACTION_SETTINGS), bounds, key)
+    }
+
     /** Hands the query to Velo (or the default browser). Only here does the input leave the launcher. */
     fun webSearch(query: String) {
         val intent = Intent(Intent.ACTION_WEB_SEARCH).putExtra(SearchManager.QUERY, query)
@@ -89,6 +132,16 @@ class ResultActions(private val activity: Activity) {
     fun appInfo(target: AppTarget) {
         runCatching { launcherApps.startAppDetailsActivity(target.component, target.user, null, null) }
             .onFailure { start(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", target.packageName, null)), null, null) }
+    }
+
+    /** Digital Wellbeing's page for the app (usage and app timer), if it is installed. */
+    fun appTimerIntent(target: AppTarget): Intent? =
+        Intent(Settings.ACTION_APP_USAGE_SETTINGS)
+            .putExtra(Intent.EXTRA_PACKAGE_NAME, target.packageName)
+            .takeIf { it.resolveActivity(activity.packageManager) != null }
+
+    fun openAppTimer(target: AppTarget) {
+        appTimerIntent(target)?.let { start(it, null, null) }
     }
 
     fun uninstall(target: AppTarget) {
@@ -135,5 +188,6 @@ class ResultActions(private val activity: Activity) {
     private companion object {
         const val TAG = "ResultActions"
         const val OBSIDIAN = "md.obsidian"
+        const val PLAY_STORE = "com.android.vending"
     }
 }

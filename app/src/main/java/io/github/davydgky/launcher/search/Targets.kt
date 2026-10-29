@@ -22,7 +22,7 @@ class AppTarget(
 
 class ShortcutTarget(val key: String, val info: ShortcutInfo, val appLabel: String) : Target
 
-class ContactTarget(val lookupUri: Uri, val photoUri: Uri?, val phone: String?, val initials: String) : Target
+class ContactTarget(val lookupUri: Uri, val photoUri: Uri?, val phone: String?, val initials: String, val email: String? = null) : Target
 
 class EventTarget(
     val eventId: Long,
@@ -38,3 +38,11 @@ class WebTarget(val url: String, val isBookmark: Boolean) : Target
 class FileTarget(val uri: Uri, val mimeType: String, val extension: String, val obsidianUri: Uri? = null) : Target
 
 class ImageTarget(val uri: Uri, val dateTaken: Long) : Target
+
+/** A page of the system settings ([action]), or something the launcher does itself. */
+class SettingTarget(val action: String?, val special: Special?) : Target {
+    enum class Special { Torch, Launcher }
+}
+
+/** A calculation or conversion; tapping copies [copyText]. */
+class AnswerTarget(val copyText: String) : Target

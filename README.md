@@ -26,10 +26,17 @@ Welche Quelle Android unter welcher Bedingung erlaubt und warum die Architektur 
   die Suche einmal darum.
 - **Treffer mit Eingabe**: „Top-Treffer“, darunter Gruppen je Quelle, sortiert nach ihrem besten Treffer.
   Jedes Wort ist ein Präfix („goo ma“ findet Google Maps). Umlaute gehen in beiden Schreibweisen
-  („Müller“, „Mueller“, „Muller“), Telefonnummern ab jeder Stelle, Initialen („gm“). Was man öfter
-  auswählt oder benutzt, steigt im Ranking.
-- **Quellen**: Apps (auch Arbeitsprofil), App-Verknüpfungen, Kontakte (mit Anrufen/Nachricht direkt im
-  Treffer), Kalender, Velo-Verlauf und -Favoriten, Notizen aus freigegebenen Ordnern (Obsidian öffnet
+  („Müller“, „Mueller“, „Muller“), Telefonnummern ab jeder Stelle, Initialen („gm“). Tippfehler in Apps,
+  Einstellungen, Verknüpfungen und Kontakten werden verziehen („spotfy“, „yuotube“, „bluetoth“). Was man
+  öfter auswählt oder benutzt, steigt im Ranking. Die Treffer stapeln sich vom Suchfeld nach oben, der
+  beste sitzt also direkt über dem Daumen (umschaltbar); Enter öffnet den Top-Treffer.
+- **Rechner und Einheiten** wie bei Spotlight: „12*7“, „(2+3)^2“, „15% * 80“, „5 km in mi“, „100 f in c“,
+  „3,5 kg in pfund“, „1 gb in mb“. Antippen kopiert das Ergebnis. Alles auf dem Gerät, deshalb ohne Währungen.
+- **Systemeinstellungen** als Quelle: WLAN, Bluetooth, Akku, Display, Ton, Bitte nicht stören, Standort …
+  auf Deutsch und Englisch; die Taschenlampe schaltet direkt aus der Suche.
+- **Aktionen in Treffern**: Kontakte direkt anrufen, schreiben oder mailen; „Im Play Store suchen“ neben der
+  Websuche; „Zuletzt gesucht“ in der leeren Suche (nur auf dem Gerät, löschbar).
+- **Quellen**: Apps (auch Arbeitsprofil), Systemeinstellungen, App-Verknüpfungen, Kontakte, Kalender, Velo-Verlauf und -Favoriten, Notizen aus freigegebenen Ordnern (Obsidian öffnet
   direkt die Notiz), Dokumente (Name, bei Text/Markdown/PDF auch Inhalt) und Fotos nach dem Text darin.
 - **Texterkennung nur beim Laden**: ML Kit mit gebündeltem Modell erkennt Text in Fotos auf dem Gerät.
   Das passiert in einem `JobScheduler`-Job, der nur bei angeschlossenem Ladegerät läuft und beim Abstecken
@@ -40,10 +47,18 @@ Welche Quelle Android unter welcher Bedingung erlaubt und warum die Architektur 
 - **Bearbeitungsmodus wie bei iOS**: Langes Drücken auf den Hintergrund, „Home-Bildschirm bearbeiten“ im
   Menü einer App oder das Ziehen eines Elements startet ihn. Alles wackelt, ein graues Minus nimmt Apps,
   Ordner und Widgets vom Home-Bildschirm (Apps bleiben in der App-Mediathek), und Elemente lassen sich
-  sofort verschieben. Die Leiste unten bietet „Widget hinzufügen“, Hintergrundbild, Einstellungen und
-  „Fertig“. Beenden auch per Tipp auf freie Fläche, Home oder Zurück.
-- **Homescreen frei anordnen**: Langes Drücken auf eine App zeigt ihr Menü (Verknüpfungen, Dock, „Vom
-  Home-Bildschirm entfernen“, App-Info, Deinstallieren). Was im Weg steht, rückt zur Seite. Am
+  sofort verschieben. Die Leiste unten bietet „Widget hinzufügen“, Seiten, Hintergrundbild, Einstellungen
+  und „Fertig“. Beenden auch per Tipp auf freie Fläche, Home oder Zurück.
+- **Ganze Seiten entfernen**: Im Bearbeitungsmodus zeigen „Seiten“ (oder ein Tipp auf die Seitenpunkte) alle
+  Seiten in Miniatur. Das Minus entfernt eine Seite nach Rückfrage; ihre Apps bleiben in der App-Mediathek,
+  Widgets und Ordner der Seite verschwinden, die folgenden Seiten rücken nach.
+- **Langes Drücken auf eine App wie beim Pixel Launcher**: ihre Benachrichtigungen (Antippen öffnet sie),
+  ihre Verknüpfungen mit Symbol, jede per „+“ auch als eigenes Symbol auf dem Home-Bildschirm, „Widgets“ der
+  App, „App-Timer“ (Digital Wellbeing), dazu Dock, „Vom Home-Bildschirm entfernen“, „Home-Bildschirm
+  bearbeiten“, App-Info und Deinstallieren. Benachrichtigungspunkte an Symbolen und in Ordnern, sobald der
+  Zugriff in den Einstellungen erlaubt ist. „Zum Startbildschirm hinzufügen“ aus anderen Apps (z. B. eine
+  Seite aus Chrome) legt die Verknüpfung nach Bestätigung auf den Home-Bildschirm.
+- **Homescreen frei anordnen**: Was im Weg steht, rückt zur Seite. Am
   Bildschirmrand blättert die Seite um, und hinter der letzten Seite entsteht eine neue. Die erste Anordnung
   stellt die meistgenutzten Apps nach vorn. Über die Seitenpunkte wischen springt zwischen den Seiten.
 - **Ordner wie bei Nothing OS**: Eine App auf eine andere ziehen erzeugt einen Ordner über 2×2 Felder. Er fasst
@@ -88,7 +103,11 @@ einem eigenen Thread, und eine neue Eingabe bricht die vorige Suche ab.
   das prüft die CI am fertigen APK. Suchanfragen, Index und Texterkennung bleiben auf dem Gerät.
 - Kein Backup (`allowBackup=false`). Der Index liegt im App-Speicher: OCR-Text, Dokument- und
   Notizinhalte in SQLite, alles andere nur im Arbeitsspeicher.
-- Eine Websuche (letzte Zeile der Treffer) übergibt die Eingabe erst auf Antippen an Velo.
+- Eine Websuche (letzte Zeile der Treffer) übergibt die Eingabe erst auf Antippen an Velo, die
+  Play-Store-Suche an den Play Store.
+- Benachrichtigungen liest der Launcher nur mit erteiltem Zugriff und nur in den Arbeitsspeicher (für Punkte
+  und das App-Menü); sie werden nie gespeichert oder weitergegeben. „Zuletzt gesucht“ liegt in den
+  App-Einstellungen auf dem Gerät und lässt sich löschen.
 
 ## Technik
 
@@ -199,6 +218,9 @@ Signiert wird mit `scripts/sign_release.sh`:
 - Die App-Vorschläge des Pixel Launchers kommen von „Android System Intelligence“ über eine System-API
   (`AppPredictionManager`), die nur vorinstallierte Launcher nutzen dürfen. Der Dock-Vorschlag nutzt
   deshalb die eigene Vorhersage.
+- Aus dem Pixel-Menü fehlen „App pausieren“ (pausieren dürfen nur System-Apps; „App-Timer“ öffnet stattdessen
+  Digital Wellbeing für die App) und „Geteilter Bildschirm“ (startet nur die Systemoberfläche). Widgets, die
+  andere Apps auf den Home-Bildschirm legen wollen, nimmt der Launcher noch nicht an, nur Verknüpfungen.
 - Texterkennung nur für lateinische Schrift. Office-Dateien werden nur über den Namen gefunden.
 - Für eine Veröffentlichung bei Google Play wären Erklärungen für `READ_CONTACTS` (ab Android 17),
   `MANAGE_EXTERNAL_STORAGE` und `PACKAGE_USAGE_STATS` nötig.

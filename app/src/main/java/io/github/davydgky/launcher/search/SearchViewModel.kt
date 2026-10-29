@@ -3,8 +3,11 @@ package io.github.davydgky.launcher.search
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import io.github.davydgky.launcher.core.Answer
+import io.github.davydgky.launcher.core.Answers
 import io.github.davydgky.launcher.core.SearchResults
 import io.github.davydgky.launcher.launcherApp
+import java.text.DecimalFormatSymbols
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -14,8 +17,11 @@ import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.withContext
 
-/** Results for one input; [inputNanos] is when the input changed (System.nanoTime). */
-class ResultsState(val query: String, val results: SearchResults, val inputNanos: Long) {
+/**
+ * Results for one input; [inputNanos] is when the input changed (System.nanoTime). [answer] is a
+ * calculation or unit conversion of the input itself.
+ */
+class ResultsState(val query: String, val results: SearchResults, val inputNanos: Long, val answer: Answer? = null) {
     companion object {
         val Empty = ResultsState("", SearchResults.Empty, 0L)
     }
@@ -35,7 +41,10 @@ class SearchViewModel(application: Application) : AndroidViewModel(application) 
     val results: StateFlow<ResultsState> = input
         .mapLatest { (query, nanos) ->
             if (query.isBlank()) ResultsState.Empty
-            else withContext(searchThread) { ResultsState(query, repository.search(query), nanos) }
+            else withContext(searchThread) {
+                val separator = DecimalFormatSymbols.getInstance().decimalSeparator
+                ResultsState(query, repository.search(query), nanos, Answers.compute(query, separator))
+            }
         }
         .stateIn(viewModelScope, SharingStarted.Eagerly, ResultsState.Empty)
 

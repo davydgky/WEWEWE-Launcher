@@ -38,6 +38,7 @@ import io.github.davydgky.launcher.home.FolderOverlay
 import io.github.davydgky.launcher.home.HomeController
 import io.github.davydgky.launcher.home.HomeScreen
 import io.github.davydgky.launcher.home.LibraryGroup
+import io.github.davydgky.launcher.home.PagesOverlay
 import io.github.davydgky.launcher.home.WidgetPicker
 import io.github.davydgky.launcher.home.Workspace
 import io.github.davydgky.launcher.launcherApp
@@ -86,6 +87,8 @@ fun LauncherScreen(
 
     val appList by app.apps.apps.collectAsStateWithLifecycle()
     val apps = remember(appList) { appList.associateBy { it.key } }
+    val shortcutList by app.apps.shortcuts.collectAsStateWithLifecycle()
+    val shortcuts = remember(shortcutList) { shortcutList.associateBy { it.key } }
     val workspace by app.workspace.workspace.collectAsStateWithLifecycle()
     val library by produceState(emptyList<LibraryGroup>(), app) {
         combine(app.apps.apps, app.suggestions.current, app.usage.appPrior) { list, suggestions, prior ->
@@ -112,6 +115,7 @@ fun LauncherScreen(
                 controller.openFolderId != null -> controller.openFolderId = null
                 controller.openCategory != null -> controller.openCategory = null
                 controller.widgetPickerOpen -> controller.widgetPickerOpen = false
+                controller.pagesOverviewOpen -> controller.pagesOverviewOpen = false
                 controller.editMode -> controller.stopEditing()
                 else -> homeReset++
             }
@@ -147,7 +151,8 @@ fun LauncherScreen(
         ) {
             // Everything the glass refracts: the home screen without its overlays. Only recorded while
             // something made of glass is showing.
-            val overlayOpen = controller.openFolderId != null || controller.openCategory != null || controller.widgetPickerOpen
+            val overlayOpen = controller.openFolderId != null || controller.openCategory != null ||
+                controller.widgetPickerOpen || controller.pagesOverviewOpen
             val overlayFrost by animateFloatAsState(if (overlayOpen) 1f else 0f, tween(OVERLAY_FADE_MS), label = "overlayFrost")
             val glassShowing = state.isActive || overlayOpen || overlayFrost > 0f
             Box(
@@ -166,7 +171,7 @@ fun LauncherScreen(
                         },
                     ),
             ) {
-                workspace?.let { ws -> HomeScreen(ws, apps, library, controller, homeReset, dockSuggestion) }
+                workspace?.let { ws -> HomeScreen(ws, apps, shortcuts, library, controller, homeReset, dockSuggestion) }
             }
             if (state.isActive) {
                 Box(
@@ -183,7 +188,8 @@ fun LauncherScreen(
                 CategoryOverlay(controller, ws, homeBackdrop)
             }
             WidgetPicker(controller, apps, homeBackdrop)
-            DragOverlay(controller, apps)
+            workspace?.let { ws -> PagesOverlay(controller, ws, apps, homeBackdrop) }
+            DragOverlay(controller, apps, shortcuts)
         }
     }
 }

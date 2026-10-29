@@ -38,6 +38,10 @@
         <intent>
             <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
         </intent>
+        <!-- App timers of Digital Wellbeing, offered in an app's long-press menu. -->
+        <intent>
+            <action android:name="android.settings.action.APP_USAGE_SETTINGS" />
+        </intent>
         <package android:name="io.github.davydgky.browser" />
         <package android:name="md.obsidian" />
     </queries>
@@ -103,6 +107,29 @@
                 android:name="backend:com.google.android.datatransport.cct.CctBackendFactory"
                 tools:node="remove" />
         </service>
+
+        <!-- Notification dots and the notifications in an app's long-press menu; only with the user's consent. -->
+        <service
+            android:name=".notifications.NotificationListener"
+            android:exported="true"
+            android:label="@string/notification_access_label"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
+
+        <!-- "Add to home screen" from other apps, e.g. a page from Chrome. -->
+        <activity
+            android:name=".home.AddShortcutActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.Translucent.NoTitleBar">
+            <intent-filter>
+                <action android:name="android.content.pm.action.CONFIRM_PIN_SHORTCUT" />
+            </intent-filter>
+        </activity>
 
         <service
             android:name=".index.ContentIndexJob"

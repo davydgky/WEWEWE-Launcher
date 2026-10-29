@@ -146,6 +146,35 @@ class WorkspaceTest {
     }
 
     @Test
+    fun removingAPageKeepsItsAppsInTheLibraryAndMovesLaterPagesUp() {
+        val many = Workspace.initial(4, 6, (1..60).map { "a$it" }, emptyList())
+        assertEquals(3, many.pageCount)
+        val onSecond = many.itemsOn(1).map { (it as AppItem).appKey }.toSet()
+        val onThird = many.itemsOn(2).map { (it as AppItem).appKey }.toSet()
+        val ws = many.removePage(1)
+        assertEquals(2, ws.pageCount)
+        assertTrue(ws.appsOnHome().none { it in onSecond })
+        assertEquals(onThird, ws.itemsOn(1).map { (it as AppItem).appKey }.toSet())
+        // Removed apps are new places for nothing: a later sync does not bring them back.
+        assertEquals(2, ws.sync((1..60).map { "a$it" }, addNew = true).pageCount)
+        ws.assertNoOverlaps()
+    }
+
+    @Test
+    fun pinnedShortcutsLiveOnThePagesUntilTheirAppGoes() {
+        val key = "shortcut:0/com.android.chrome/page/1"
+        val ws = initial().addShortcut(key, "Wetter", page = 0).addShortcut(key, "Wetter", page = 0)
+        val item = ws.items.filterIsInstance<ShortcutItem>().single()
+        assertEquals("com.android.chrome", item.packageName)
+        assertEquals("page/1", item.shortcutId)
+        assertEquals(mapOf((0L to "com.android.chrome") to setOf("page/1")), ws.pinnedShortcuts())
+        ws.assertNoOverlaps()
+        assertEquals(ws, WorkspaceCodec.decode(WorkspaceCodec.encode(ws)))
+        assertEquals(1, ws.sync(apps, addNew = false, packages = setOf("com.android.chrome")).items.count { it is ShortcutItem })
+        assertEquals(0, ws.sync(apps, addNew = false, packages = setOf("other")).items.count { it is ShortcutItem })
+    }
+
+    @Test
     fun codecRoundTrip() {
         val base = initial()
         val ws = base.makeFolder(base.appItem("app4").id, base.appItem("app3").id, "Spiele")

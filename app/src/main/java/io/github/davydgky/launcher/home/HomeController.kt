@@ -77,7 +77,7 @@ class HomeController(
      * glass behind a panel would otherwise blur a new picture every frame.
      */
     val wiggling: Boolean
-        get() = editMode && drag == null && openFolderId == null && openCategory == null && !widgetPickerOpen
+        get() = editMode && drag == null && openFolderId == null && openCategory == null && !widgetPickerOpen && !pagesOverviewOpen
 
     fun startEditing() {
         editMode = true
@@ -89,6 +89,17 @@ class HomeController(
     }
     var openCategory by mutableStateOf<LibraryGroup?>(null)
     var widgetPickerOpen by mutableStateOf(false)
+
+    /** Limits the widget picker to one app (from the app's long-press menu); null shows all. */
+    var widgetPickerPackage by mutableStateOf<String?>(null)
+
+    fun openWidgetPicker(packageName: String? = null) {
+        widgetPickerPackage = packageName
+        widgetPickerOpen = true
+    }
+
+    /** All pages side by side, to remove whole pages (edit mode). */
+    var pagesOverviewOpen by mutableStateOf(false)
 
     /** Latest arrangement; set by the home screen on every composition. */
     var workspace: Workspace? = null
@@ -106,6 +117,10 @@ class HomeController(
     var rows = 6
     var homePages = 1
     var dockSize = 0
+
+    /** The home page on screen, or the last one while the App Library shows. */
+    val currentHomePage: Int
+        get() = if (::pager.isInitialized) pager.currentPage.coerceIn(0, (homePages - 1).coerceAtLeast(0)) else 0
 
     /** The App Library is showing (the page after the last home page). */
     val onLibrary: Boolean get() = ::pager.isInitialized && pager.currentPage >= homePages
@@ -146,7 +161,8 @@ class HomeController(
 
     /** No other gesture (search swipe, pager) while something is held, dragged or edited. */
     val isEditing: Boolean
-        get() = editMode || holding || drag != null || openFolderId != null || openCategory != null || widgetPickerOpen
+        get() = editMode || holding || drag != null || openFolderId != null || openCategory != null || widgetPickerOpen ||
+            pagesOverviewOpen
 
     private var edgeJob: Job? = null
 
@@ -221,7 +237,7 @@ class HomeController(
                         return DropTarget.MakeFolder(under.id)
                     }
                 }
-                is WidgetItem -> Unit
+                is WidgetItem, is ShortcutItem -> Unit
             }
         }
         // Elements larger than one cell are anchored where the finger holds them.

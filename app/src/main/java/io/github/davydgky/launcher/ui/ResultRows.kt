@@ -51,6 +51,7 @@ import io.github.davydgky.launcher.search.ContactTarget
 import io.github.davydgky.launcher.search.EventTarget
 import io.github.davydgky.launcher.search.FileTarget
 import io.github.davydgky.launcher.search.ImageTarget
+import io.github.davydgky.launcher.search.SettingTarget
 import io.github.davydgky.launcher.search.ShortcutTarget
 import io.github.davydgky.launcher.search.WebTarget
 import io.github.davydgky.launcher.search.rememberIcon
@@ -127,13 +128,16 @@ private fun secondLine(item: SearchItem, query: String): String {
     return item.subtitle
 }
 
-/** Call and message buttons for contacts with a phone number. */
+/** E-mail, message and call buttons, as far as the contact has an address and a number. */
 @Composable
-fun ContactActions(contact: ContactTarget, onCall: () -> Unit, onMessage: () -> Unit) {
-    if (contact.phone == null) return
+fun ContactActions(contact: ContactTarget, onCall: () -> Unit, onMessage: () -> Unit, onMail: () -> Unit) {
+    if (contact.phone == null && contact.email == null) return
     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-        RoundAction(R.drawable.ic_message, R.string.action_message, onMessage)
-        RoundAction(R.drawable.ic_call, R.string.action_call, onCall)
+        if (contact.email != null) RoundAction(R.drawable.ic_mail, R.string.action_mail, onMail)
+        if (contact.phone != null) {
+            RoundAction(R.drawable.ic_message, R.string.action_message, onMessage)
+            RoundAction(R.drawable.ic_call, R.string.action_call, onCall)
+        }
     }
 }
 
@@ -165,7 +169,22 @@ fun ResultIcon(item: SearchItem, size: Dp) {
             val thumb by rememberIcon(icons, "thumb:${target.uri}") { icons.thumbnail(target.uri) }
             BitmapIcon(thumb, size, RoundedCornerShape(8.dp), ContentScale.Crop)
         }
+        is SettingTarget -> SymbolTile(
+            if (target.special == SettingTarget.Special.Torch) R.drawable.ic_flashlight else R.drawable.ic_settings,
+            size,
+        )
         else -> Box(Modifier.size(size))
+    }
+}
+
+/** A symbol on a round tile in the theme's colours, for settings and other launcher-made results. */
+@Composable
+fun SymbolTile(icon: Int, size: Dp) {
+    Box(
+        Modifier.size(size).clip(CircleShape).background(MaterialTheme.colorScheme.secondaryContainer),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(painterResource(icon), null, Modifier.size(size * 0.5f), tint = MaterialTheme.colorScheme.onSecondaryContainer)
     }
 }
 

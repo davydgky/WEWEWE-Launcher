@@ -72,6 +72,7 @@ import io.github.davydgky.launcher.sources.DocumentsSource
 import io.github.davydgky.launcher.sources.ImagesSource
 import io.github.davydgky.launcher.sources.NotesSource
 import io.github.davydgky.launcher.sources.Requirement
+import io.github.davydgky.launcher.sources.SettingsSource
 import io.github.davydgky.launcher.sources.ShortcutsSource
 import io.github.davydgky.launcher.sources.Velo
 import io.github.davydgky.launcher.sources.VeloSource
@@ -102,6 +103,7 @@ private class SourceInfo(val id: String, val title: Int, val description: Int)
 
 private val SourceInfos = listOf(
     SourceInfo(AppsSource.ID, R.string.source_apps, R.string.source_apps_description),
+    SourceInfo(SettingsSource.ID, R.string.source_settings, R.string.source_settings_description),
     SourceInfo(ShortcutsSource.ID, R.string.source_shortcuts, R.string.source_shortcuts_description),
     SourceInfo(ContactsSource.ID, R.string.source_contacts, R.string.source_contacts_description),
     SourceInfo(CalendarSource.ID, R.string.source_calendar, R.string.source_calendar_description),
@@ -122,12 +124,14 @@ private fun SettingsScreen(activity: ComponentActivity) {
     val usageAccess by app.usage.hasAccess.collectAsStateWithLifecycle()
     var resumeCount by remember { mutableIntStateOf(0) }
     var isDefaultLauncher by remember { mutableStateOf(isDefaultHome(context)) }
+    var notificationAccess by remember { mutableStateOf(app.notifications.hasAccess()) }
 
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
         // Permissions may have been granted in the system settings meanwhile.
         app.search.onResume()
         app.usage.checkAccess()
         isDefaultLauncher = isDefaultHome(context)
+        notificationAccess = app.notifications.hasAccess()
         resumeCount++
     }
 
@@ -227,10 +231,48 @@ private fun SettingsScreen(activity: ComponentActivity) {
                         onCheckedChange = { enabled -> scope.launch { app.settings.setDockSuggestion(enabled) } },
                     )
                 }
+                HorizontalDivider()
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(stringResource(R.string.notification_dots), style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            stringResource(R.string.notification_dots_description),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    // Access is granted (and taken back) on the system page; the launcher cannot switch it itself.
+                    OutlinedButton(onClick = { runCatching { context.startActivity(app.notifications.accessIntent()) } }) {
+                        Text(stringResource(if (notificationAccess) R.string.notification_dots_on else R.string.notification_dots_allow))
+                    }
+                }
             }
         }
         item {
             Group(stringResource(R.string.settings_sources)) {
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(stringResource(R.string.setting_results_bottom), style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            stringResource(R.string.setting_results_bottom_description),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    Switch(
+                        checked = prefs.resultsAtBottom,
+                        onCheckedChange = { enabled -> scope.launch { app.settings.setResultsAtBottom(enabled) } },
+                    )
+                }
+                HorizontalDivider()
                 SourceInfos.forEachIndexed { index, info ->
                     if (index > 0) HorizontalDivider()
                     SourceRow(info, status[info.id], onToggle = { enabled ->

@@ -98,4 +98,42 @@ class SearchIndexTest {
         assertEquals(1, out.size)
         assertTrue(out[0].score > 0f)
     }
+
+    @Test
+    fun typosFindAppsSettingsAndContacts() {
+        val index = SearchIndex.build(listOf(
+            item("spotify", "Spotify"),
+            item("youtube", "YouTube"),
+            item("whatsapp", "WhatsApp"),
+            item("bt", "Bluetooth", kind = SourceKind.Setting),
+            item("anna", "Annabelle Schneider", kind = SourceKind.Contact),
+            item("note", "Spotify Rechnung", kind = SourceKind.Note),
+        ))
+        assertEquals(listOf("spotify"), index.find("spotfy"))
+        assertEquals(listOf("youtube"), index.find("yuotube"))
+        assertEquals(listOf("whatsapp"), index.find("whatsap"))
+        assertEquals(listOf("bt"), index.find("bluetoth"))
+        assertEquals(listOf("anna"), index.find("schnieder"))
+        // Short words and wrong first letters stay exact; notes are never matched with typos.
+        assertEquals(emptyList<String>(), index.find("spo xyz"))
+        assertEquals(emptyList<String>(), index.find("xpotify"))
+        assertEquals(emptyList<String>(), index.find("rechnnug"))
+    }
+
+    @Test
+    fun exactMatchesOutrankTypos() {
+        val index = SearchIndex.build(listOf(item("maps", "Maps"), item("mapss", "Mapss Tool")))
+        val out = ArrayList<Match>()
+        index.match(Query.parse("maps"), out)
+        assertEquals("maps", out.maxBy { it.score }.item.key)
+    }
+
+    @Test
+    fun prefixDistance() {
+        assertEquals(0, Typos.prefixDistance("spot", "spotify", 1))
+        assertEquals(1, Typos.prefixDistance("spotfy", "spotify", 1))
+        assertEquals(1, Typos.prefixDistance("yuotube", "youtube", 1))
+        assertEquals(2, Typos.prefixDistance("einstelungne", "einstellungen", 2))
+        assertEquals(2, Typos.prefixDistance("mail", "maps", 1))
+    }
 }

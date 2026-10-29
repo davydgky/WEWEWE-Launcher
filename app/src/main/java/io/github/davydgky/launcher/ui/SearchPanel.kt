@@ -1,3 +1,5 @@
+@file:OptIn(ExperimentalLayoutApi::class)
+
 package io.github.davydgky.launcher.ui
 
 import android.content.Intent
@@ -10,6 +12,8 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -34,6 +38,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.input.TextFieldLineLimits
 import androidx.compose.foundation.text.input.clearText
+import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -80,6 +85,7 @@ import com.kyant.backdrop.Backdrop
 import com.kyant.shapes.Capsule
 import com.kyant.shapes.RoundedRectangle
 import io.github.davydgky.launcher.R
+import io.github.davydgky.launcher.core.Answer
 import io.github.davydgky.launcher.core.ScoredItem
 import io.github.davydgky.launcher.core.SearchItem
 import io.github.davydgky.launcher.core.SourceKind
@@ -91,6 +97,7 @@ import io.github.davydgky.launcher.search.ContactTarget
 import io.github.davydgky.launcher.search.ResultActions
 import io.github.davydgky.launcher.search.ResultsState
 import io.github.davydgky.launcher.search.SearchViewModel
+import io.github.davydgky.launcher.search.SettingTarget
 import io.github.davydgky.launcher.search.SuggestionState
 import io.github.davydgky.launcher.ui.glass.LocalGlassColors
 import io.github.davydgky.launcher.ui.glass.glassWhen
@@ -98,7 +105,8 @@ import kotlin.math.abs
 import kotlinx.coroutines.launch
 
 /**
- * The search: results from the top of the screen, the search field directly above the keyboard. It
+ * The search: results stacked upwards from the search field (or from the top, as set), the field
+ * directly above the keyboard, a calculated answer when the input is a sum or conversion. It
  * stays composed (and its field focused) while closed, so opening it never waits for composition or
  * for the keyboard connection.
  */
@@ -136,8 +144,17 @@ fun SearchPanel(
         }
     }
 
+    // A search that led somewhere is remembered (on this device only) for the empty search.
+    val rememberSearch: (String) -> Unit = { query -> if (query.isNotBlank()) scope.launch { app.settings.addRecentSearch(query) } }
     val open: (SearchItem, Rect?) -> Unit = { item, bounds ->
+        rememberSearch(results.query)
         actions.open(item, bounds)
+        // A switch (the flashlight) keeps the search open; everything else leaves it.
+        if ((item.payload as? SettingTarget)?.special != SettingTarget.Special.Torch) state.reset()
+    }
+    val external: (String, (String) -> Unit) -> Unit = { query, action ->
+        rememberSearch(query)
+        action(query)
         state.reset()
     }
     // Scrolling through results makes room by hiding the keyboard, as on iOS.
@@ -165,6 +182,8 @@ fun SearchPanel(
             LaunchedEffect(results.query) { listState.scrollToItem(0) }
             LazyColumn(
                 state = listState,
+                // From the search field upwards: the best result sits right above the thumb.
+                reverseLayout = prefs.resultsAtBottom,
                 modifier = Modifier
                     .weight(1f)
                     .nestedScroll(hideKeyboardOnScroll)
@@ -173,9 +192,19 @@ fun SearchPanel(
                         translationY = (1f - p) * with(density) { -32.dp.toPx() }
                     },
                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp, if (prefs.resultsAtBottom) Alignment.Bottom else Alignment.Top),
             ) {
                 if (state.query.text.isBlank()) {
+                    if (prefs.recentSearches.isNotEmpty()) {
+                        item("recent") {
+                            RecentSearches(
+                                queries = prefs.recentSearches,
+                                backdrop = backdrop,
+                                onPick = { state.query.setTextAndPlaceCursorAtEnd(it) },
+                                onClear = { scope.launch { app.settings.clearRecentSearches() } },
+                            )
+                        }
+                    }
                     if (!usageAccess && !prefs.usageHintDismissed) {
                         item("usage-hint") {
                             UsageHint(
@@ -191,14 +220,19 @@ fun SearchPanel(
                     }
                     suggestionItems(suggestions, actions, state, backdrop)
                 } else {
-                    resultItems(results, open, actions, backdrop)
+                    resultItems(results, open, external, actions, backdrop)
                 }
             }
             SearchField(state, focusRequester, backdrop, onSubmit = {
-                val first = results.results.top?.item ?: results.results.groups.firstOrNull()?.items?.firstOrNull()?.item
-                if (first != null) open(first, null) else if (results.query.isNotBlank()) {
-                    actions.webSearch(results.query)
-                    state.reset()
+                // Enter: the top hit, else the calculated answer, else the first result, else the web.
+                val top = results.results.top?.item
+                val answer = results.answer
+                val first = results.results.groups.firstOrNull()?.items?.firstOrNull()?.item
+                when {
+                    top != null -> open(top, null)
+                    answer != null -> actions.copy(answer.copyText)
+                    first != null -> open(first, null)
+                    results.query.isNotBlank() -> external(results.query, actions::webSearch)
                 }
             })
         }
@@ -246,11 +280,17 @@ private fun LazyListScope.suggestionItems(
 private fun LazyListScope.resultItems(
     state: ResultsState,
     open: (SearchItem, Rect?) -> Unit,
+    external: (String, (String) -> Unit) -> Unit,
     actions: ResultActions,
     backdrop: Backdrop,
 ) {
     val results = state.results
     val query = state.query
+    state.answer?.let { answer ->
+        item("answer") {
+            Section(null, backdrop) { AnswerRow(answer) { actions.copy(answer.copyText) } }
+        }
+    }
     results.top?.let { top ->
         item("top") {
             Section(stringResource(R.string.section_top_hit), backdrop) {
@@ -284,26 +324,14 @@ private fun LazyListScope.resultItems(
     }
     item("web") {
         Section(null, backdrop) {
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .clickable { actions.webSearch(query) }
-                    .padding(horizontal = 14.dp, vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                VeloIcon(40.dp)
-                Spacer(Modifier.width(14.dp))
-                Text(
-                    stringResource(R.string.search_web, query),
-                    color = LocalGlassColors.current.content,
-                    style = MaterialTheme.typography.bodyLarge,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
+            ExternalRow(stringResource(R.string.search_web, query), onClick = { external(query, actions::webSearch) }) { VeloIcon(40.dp) }
+            RowDivider()
+            ExternalRow(stringResource(R.string.search_play_store, query), onClick = { external(query, actions::playStoreSearch) }) {
+                SymbolTile(R.drawable.ic_store, 40.dp)
             }
         }
     }
-    if (results.isEmpty) {
+    if (results.isEmpty && state.answer == null) {
         item("empty") {
             Text(
                 stringResource(R.string.no_results),
@@ -317,12 +345,90 @@ private fun LazyListScope.resultItems(
 
 private fun contactTrailing(item: SearchItem, actions: ResultActions): (@Composable () -> Unit)? {
     val contact = item.payload as? ContactTarget ?: return null
-    if (contact.phone == null) return null
-    return { ContactActions(contact, onCall = { actions.call(contact) }, onMessage = { actions.message(contact) }) }
+    if (contact.phone == null && contact.email == null) return null
+    return {
+        ContactActions(
+            contact,
+            onCall = { actions.call(contact) },
+            onMessage = { actions.message(contact) },
+            onMail = { actions.mail(contact) },
+        )
+    }
+}
+
+/** A row that hands the query to another app: the web, the Play Store. */
+@Composable
+private fun ExternalRow(text: String, onClick: () -> Unit, icon: @Composable () -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        icon()
+        Spacer(Modifier.width(14.dp))
+        Text(
+            text,
+            color = LocalGlassColors.current.content,
+            style = MaterialTheme.typography.bodyLarge,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+/** The calculated answer, large like on a calculator; a tap copies it. */
+@Composable
+private fun AnswerRow(answer: Answer, onCopy: () -> Unit) {
+    val colors = LocalGlassColors.current
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clickable(onClickLabel = stringResource(R.string.answer_copy), onClick = onCopy)
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        SymbolTile(R.drawable.ic_calculator, 40.dp)
+        Spacer(Modifier.width(14.dp))
+        Column(Modifier.weight(1f)) {
+            Text(answer.expression, color = colors.secondaryContent, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(answer.result, color = colors.content, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+    }
+}
+
+/** The last searches as chips; a tap searches again. */
+@Composable
+private fun RecentSearches(queries: List<String>, backdrop: Backdrop, onPick: (String) -> Unit, onClear: () -> Unit) {
+    val colors = LocalGlassColors.current
+    Section(stringResource(R.string.section_recent), backdrop, action = stringResource(R.string.clear_recent) to onClear) {
+        FlowRow(
+            Modifier.fillMaxWidth().padding(10.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            queries.forEach { query ->
+                Row(
+                    Modifier
+                        .clip(RoundedCornerShape(50))
+                        .background(colors.fill)
+                        .clickable { onPick(query) }
+                        .padding(horizontal = 12.dp, vertical = 7.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(painterResource(R.drawable.ic_history), null, Modifier.size(15.dp), tint = colors.secondaryContent)
+                    Spacer(Modifier.width(6.dp))
+                    Text(query, color = colors.content, style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+            }
+        }
+    }
 }
 
 private fun sectionTitle(kind: SourceKind): Int = when (kind) {
     SourceKind.App -> R.string.section_apps
+    SourceKind.Setting -> R.string.section_settings
     SourceKind.Shortcut -> R.string.section_shortcuts
     SourceKind.Contact -> R.string.section_contacts
     SourceKind.Event -> R.string.section_events

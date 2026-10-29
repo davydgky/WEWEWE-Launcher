@@ -47,15 +47,23 @@ class WorkspaceRepository(
         started = true
         scope.launch {
             state.value = withContext(Dispatchers.IO) { runCatching { WorkspaceCodec.decode(file.readText()) }.getOrNull() }
+            pinned = state.value?.pinnedShortcuts().orEmpty()
             combine(apps.apps, settings.prefs) { list, prefs -> list to prefs }.collect { (list, prefs) ->
                 if (list.isEmpty()) return@collect
                 val keys = list.map { it.key }
+                val packages = list.mapTo(HashSet()) { it.packageName }
                 val current = state.value
                 if (current == null) {
                     state.value = createInitial(keys, prefs.dock)
                     scheduleSave()
                 } else {
-                    update { it.sync(keys, prefs.addNewAppsToHome).withoutMissingWidgets() }
+                    update { it.sync(keys, prefs.addNewAppsToHome, packages).withoutMissingWidgets() }
+                }
+                // Edits that came in before the arrangement was loaded (a shortcut added from another app).
+                if (pending.isNotEmpty()) {
+                    val edits = pending.toList()
+                    pending.clear()
+                    edits.forEach(::update)
                 }
             }
         }
@@ -90,7 +98,25 @@ class WorkspaceRepository(
         val next = runCatching { change(current) }.onFailure { Log.w(TAG, "Edit failed", it) }.getOrNull() ?: return
         if (next == current) return
         state.value = next
+        updatePins(next)
         scheduleSave()
+    }
+
+    /** Pinned shortcuts as last told to the system, per user serial and package. */
+    private var pinned: Map<Pair<Long, String>, Set<String>> = emptyMap()
+
+    /**
+     * The system keeps a shortcut only while a launcher has it pinned; it is told the complete list per
+     * app whenever shortcuts are added to or taken off the home screen.
+     */
+    private fun updatePins(ws: Workspace) {
+        val now = ws.pinnedShortcuts()
+        if (now == pinned) return
+        for (key in now.keys + pinned.keys) {
+            val ids = now[key].orEmpty()
+            if (ids != pinned[key]) apps.pinShortcuts(key.first, key.second, ids.toList())
+        }
+        pinned = now
     }
 
     fun move(id: Long, target: Cell) = update { it.move(id, target) }
@@ -100,7 +126,17 @@ class WorkspaceRepository(
         update { it.remove(id) }
     }
     fun removeApp(appKey: String) = update { it.removeApp(appKey) }
+    fun removePage(page: Int) {
+        state.value?.itemsOn(page)?.filterIsInstance<WidgetItem>()?.forEach { widgets.deleteId(it.widgetId) }
+        update { it.removePage(page) }
+    }
     fun addApp(appKey: String) = update { it.addApp(appKey) }
+    fun addShortcut(shortcutKey: String, label: String, page: Int) {
+        val change = { ws: Workspace -> ws.addShortcut(shortcutKey, label, page) }
+        if (state.value == null) pending += change else update(change)
+    }
+
+    private val pending = ArrayList<(Workspace) -> Workspace>()
     fun makeFolder(draggedId: Long, targetId: Long, name: String) = update { it.makeFolder(draggedId, targetId, name) }
     fun makeFolderFromDock(appKey: String, targetId: Long, name: String) = update { it.makeFolderWith(appKey, targetId, name) }
     fun addToFolder(appKey: String, folderId: Long) = update { it.addToFolder(appKey, folderId) }

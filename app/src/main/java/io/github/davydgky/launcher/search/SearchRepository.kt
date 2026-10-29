@@ -16,6 +16,7 @@ import io.github.davydgky.launcher.sources.ImagesSource
 import io.github.davydgky.launcher.sources.NotesSource
 import io.github.davydgky.launcher.sources.Requirement
 import io.github.davydgky.launcher.sources.SearchSource
+import io.github.davydgky.launcher.sources.SettingsSource
 import io.github.davydgky.launcher.sources.ShortcutsSource
 import io.github.davydgky.launcher.sources.Velo
 import io.github.davydgky.launcher.sources.VeloSource
@@ -53,6 +54,7 @@ class SearchRepository(private val app: LauncherApplication, private val scope: 
 
     val sources: List<SearchSource> = listOf(
         AppsSource(app, app.apps, scope),
+        SettingsSource(app),
         ShortcutsSource(app.apps, scope),
         ContactsSource(app),
         CalendarSource(app),
@@ -77,6 +79,7 @@ class SearchRepository(private val app: LauncherApplication, private val scope: 
         started = true
         app.apps.start()
         app.apps.checkShortcutAccess()
+        app.torch // starts following the flashlight's state for the search result
         scope.launch {
             app.settings.prefs.collect { newPrefs ->
                 val foldersChanged = newPrefs.noteFolders != prefs.noteFolders

@@ -80,6 +80,18 @@ class AppsRepository(private val context: Context, private val scope: CoroutineS
 
     fun appForKey(key: String): AppTarget? = appState.value.firstOrNull { it.key == key }
 
+    /** Tells the system which shortcuts of [packageName] the home screen shows (the complete list). */
+    fun pinShortcuts(userSerial: Long, packageName: String, ids: List<String>) {
+        val user = userManager.getUserForSerialNumber(userSerial) ?: return
+        runCatching { launcherApps.pinShortcuts(packageName, ids, user) }
+            .onFailure { Log.w(TAG, "Cannot pin shortcuts of $packageName", it) }
+        reloadShortcuts(SHORTCUT_DEBOUNCE_MS)
+    }
+
+    /** The app (main activity) of [packageName] for the user with [userSerial]. */
+    fun appOf(userSerial: Long, packageName: String): AppTarget? =
+        appState.value.firstOrNull { it.packageName == packageName && it.key.startsWith("app:$userSerial/") }
+
     /** Shortcuts of one app in the order the app ranks them, as shown in its long-press menu. */
     fun shortcutsOf(app: AppTarget): List<ShortcutTarget> = shortcutState.value
         .filter { it.info.`package` == app.packageName && it.info.userHandle == app.user && !it.info.isPinned }

@@ -7,6 +7,7 @@ import android.content.Intent
 import android.graphics.Rect
 import android.os.Bundle
 import android.util.SizeF
+import android.widget.Toast
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -22,6 +23,7 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -51,6 +53,8 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -59,8 +63,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -87,17 +93,25 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.davydgky.launcher.R
+import io.github.davydgky.launcher.core.SearchItem
+import io.github.davydgky.launcher.core.SourceKind
 import io.github.davydgky.launcher.launcherApp
+import io.github.davydgky.launcher.notifications.Notifications
 import io.github.davydgky.launcher.search.AppTarget
+import io.github.davydgky.launcher.search.ShortcutTarget
 import io.github.davydgky.launcher.settings.SettingsActivity
 import io.github.davydgky.launcher.ui.AppIconImage
 import io.github.davydgky.launcher.ui.LocalLightWallpaper
+import io.github.davydgky.launcher.ui.ResultIcon
 import io.github.davydgky.launcher.ui.ScreenBounds
 import io.github.davydgky.launcher.ui.wallpaperTextColor
 import io.github.davydgky.launcher.widgets.WidgetHost
 import kotlin.math.floor
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * The home screen: pages of apps, Nothing-style folders and widgets that the user arranges freely, the
@@ -107,6 +121,7 @@ import kotlinx.coroutines.launch
 fun HomeScreen(
     workspace: Workspace,
     apps: Map<String, AppTarget>,
+    shortcuts: Map<String, ShortcutTarget>,
     library: List<LibraryGroup>,
     controller: HomeController,
     resetSignal: Int,
@@ -160,14 +175,14 @@ fun HomeScreen(
                 beyondViewportPageCount = homePages,
             ) { page ->
                 if (page < homePages) {
-                    WorkspacePage(page, workspace, apps, controller)
+                    WorkspacePage(page, workspace, apps, shortcuts, controller)
                 } else {
                     AppLibraryPage(library, workspace, controller)
                 }
             }
         }
         val onLibrary = pagerState.currentPage >= homePages
-        PageIndicator(homePages, pagerState)
+        PageIndicator(homePages, pagerState, onEditTap = { controller.pagesOverviewOpen = true }.takeIf { controller.editMode })
         when {
             controller.editMode -> EditBar(controller)
             !onLibrary -> SearchButton(controller.openSearch)
@@ -223,7 +238,8 @@ private fun EditBar(controller: HomeController) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        EditPill(R.drawable.ic_add, stringResource(R.string.menu_add_widget)) { controller.widgetPickerOpen = true }
+        EditPill(R.drawable.ic_add, stringResource(R.string.menu_add_widget)) { controller.openWidgetPicker() }
+        EditPill(R.drawable.ic_pages, null, stringResource(R.string.edit_pages)) { controller.pagesOverviewOpen = true }
         EditPill(R.drawable.ic_image, null, stringResource(R.string.menu_wallpaper)) {
             runCatching { context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SET_WALLPAPER), null)) }
         }
@@ -257,7 +273,13 @@ private fun EditPill(icon: Int?, text: String?, description: String? = text, emp
 }
 
 @Composable
-private fun WorkspacePage(page: Int, workspace: Workspace, apps: Map<String, AppTarget>, controller: HomeController) {
+private fun WorkspacePage(
+    page: Int,
+    workspace: Workspace,
+    apps: Map<String, AppTarget>,
+    shortcuts: Map<String, ShortcutTarget>,
+    controller: HomeController,
+) {
     val density = LocalDensity.current
     BoxWithConstraints(
         Modifier
@@ -312,11 +334,16 @@ private fun WorkspacePage(page: Int, workspace: Workspace, apps: Map<String, App
                         is AppItem -> apps[item.appKey]?.let { HomeAppIcon(it, DragSource.Item(item), controller, showLabel = true) }
                         is FolderItem -> FolderCell(item, apps, controller)
                         is WidgetItem -> WidgetCell(item, workspace, cellW, cellH, controller)
+                        is ShortcutItem -> ShortcutCell(item, shortcuts[item.shortcutKey], controller)
                     }
                     if (controller.editMode) {
                         when (item) {
                             is AppItem -> RemoveBadge(
                                 onClick = { controller.repository.removeApp(item.appKey) },
+                                modifier = Modifier.align(Alignment.TopCenter).offset(x = -ICON_SIZE / 2 + 2.dp, y = 0.dp),
+                            )
+                            is ShortcutItem -> RemoveBadge(
+                                onClick = { controller.repository.removeItem(item.id) },
                                 modifier = Modifier.align(Alignment.TopCenter).offset(x = -ICON_SIZE / 2 + 2.dp, y = 0.dp),
                             )
                             is FolderItem, is WidgetItem -> RemoveBadge(
@@ -366,7 +393,10 @@ private fun HomeAppIcon(app: AppTarget, source: DragSource, controller: HomeCont
                 .padding(top = 6.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            AppIconImage(app, ICON_SIZE, Modifier.onGloballyPositioned(bounds::update))
+            Box {
+                AppIconImage(app, ICON_SIZE, Modifier.onGloballyPositioned(bounds::update))
+                if (notificationCount(app) > 0) NotificationDot(10.dp, Modifier.align(Alignment.TopEnd))
+            }
             if (showLabel) {
                 Spacer(Modifier.height(6.dp))
                 IconLabel(app.label)
@@ -464,13 +494,16 @@ private fun FolderGrid(apps: List<AppTarget>, onOpenApp: (AppTarget, Rect?) -> U
                             apps.getOrNull(row * 3 + col)?.let { app ->
                                 key(app.key) {
                                     val bounds = remember { ScreenBounds() }
-                                    AppIconImage(
-                                        app, icon,
-                                        Modifier
-                                            .onGloballyPositioned(bounds::update)
-                                            .clip(CircleShape)
-                                            .clickable { onOpenApp(app, bounds.rect) },
-                                    )
+                                    Box {
+                                        AppIconImage(
+                                            app, icon,
+                                            Modifier
+                                                .onGloballyPositioned(bounds::update)
+                                                .clip(CircleShape)
+                                                .clickable { onOpenApp(app, bounds.rect) },
+                                        )
+                                        if (notificationCount(app) > 0) NotificationDot(7.dp, Modifier.align(Alignment.TopEnd))
+                                    }
                                 }
                             }
                         }
@@ -643,10 +676,11 @@ private fun WidgetCell(item: WidgetItem, workspace: Workspace, cellW: Dp, cellH:
 
 /**
  * Page dots plus the App Library glyph. Touching them and sliding along jumps between pages, as on iOS;
- * a tap jumps to the page under the finger.
+ * a tap jumps to the page under the finger, or in edit mode ([onEditTap]) opens the page overview.
  */
 @Composable
-private fun PageIndicator(homePages: Int, pager: PagerState) {
+private fun PageIndicator(homePages: Int, pager: PagerState, onEditTap: (() -> Unit)?) {
+    val currentOnEditTap by rememberUpdatedState(onEditTap)
     val color = wallpaperTextColor()
     val scope = rememberCoroutineScope()
     val haptics = LocalHapticFeedback.current
@@ -664,6 +698,16 @@ private fun PageIndicator(homePages: Int, pager: PagerState) {
                     awaitEachGesture {
                         val down = awaitFirstDown()
                         down.consume()
+                        val editTap = currentOnEditTap
+                        if (editTap != null) {
+                            // Edit mode: a tap shows all pages, to remove whole ones.
+                            val up = waitForUpOrCancellation()
+                            if (up != null) {
+                                up.consume()
+                                editTap()
+                            }
+                            return@awaitEachGesture
+                        }
                         scrubbing = true
                         var shown = pager.currentPage
                         fun select(x: Float) {
@@ -852,17 +896,7 @@ private fun AppMenu(
     bounds: ScreenBounds,
 ) {
     DropdownMenu(expanded = expanded, onDismissRequest = onDismiss, shape = RoundedCornerShape(18.dp)) {
-        val shortcuts = remember(expanded) { if (expanded) controller.shortcutsOf(app).take(4) else emptyList() }
-        shortcuts.forEach { shortcut ->
-            DropdownMenuItem(
-                text = { Text(shortcut.info.shortLabel?.toString().orEmpty(), maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                onClick = {
-                    onDismiss()
-                    controller.actions.launchShortcut(shortcut, bounds.rect)
-                },
-            )
-        }
-        if (shortcuts.isNotEmpty()) HorizontalDivider()
+        AppMenuExtras(app, controller, onDismiss, bounds)
         when (source) {
             is DragSource.Dock -> MenuItem(R.string.menu_remove_from_dock, R.drawable.ic_pin) {
                 onDismiss()
@@ -914,6 +948,173 @@ private fun FolderMenu(folder: FolderItem, expanded: Boolean, onDismiss: () -> U
         MenuItem(R.string.menu_edit_home, R.drawable.ic_edit) {
             onDismiss()
             controller.startEditing()
+        }
+    }
+}
+
+/**
+ * What the Pixel Launcher shows when an app is held: its notifications, its shortcuts (each can go
+ * on the home screen), its widgets and its app timer. Followed by the launcher's own entries.
+ */
+@Composable
+private fun AppMenuExtras(app: AppTarget, controller: HomeController, onDismiss: () -> Unit, bounds: ScreenBounds?) {
+    val launcher = LocalContext.current.launcherApp
+    val byApp by launcher.notifications.byApp.collectAsStateWithLifecycle()
+    val notifications = byApp[Notifications.keyOf(app.packageName, app.user)].orEmpty().take(3)
+    notifications.forEach { notification ->
+        DropdownMenuItem(
+            text = {
+                Column {
+                    Text(notification.title.ifBlank { app.label }, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    if (notification.text.isNotBlank()) {
+                        Text(notification.text, style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    }
+                }
+            },
+            leadingIcon = { AppIconImage(app, 24.dp) },
+            onClick = {
+                onDismiss()
+                launcher.notifications.open(notification)
+            },
+        )
+    }
+    if (notifications.isNotEmpty()) HorizontalDivider()
+
+    val shortcuts = remember(app.key) { controller.shortcutsOf(app).take(4) }
+    shortcuts.forEach { shortcut ->
+        val label = (shortcut.info.shortLabel ?: shortcut.info.longLabel)?.toString().orEmpty()
+        DropdownMenuItem(
+            text = { Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+            leadingIcon = { ResultIcon(SearchItem(shortcut.key, SourceKind.Shortcut, label, payload = shortcut), 24.dp) },
+            trailingIcon = {
+                IconButton(onClick = {
+                    onDismiss()
+                    controller.repository.addShortcut(shortcut.key, label, controller.currentHomePage)
+                }) { Icon(painterResource(R.drawable.ic_add), stringResource(R.string.add_shortcut_title), Modifier.size(20.dp)) }
+            },
+            onClick = {
+                onDismiss()
+                controller.actions.launchShortcut(shortcut, bounds?.rect)
+            },
+        )
+    }
+    if (shortcuts.isNotEmpty()) HorizontalDivider()
+
+    val hasWidgets by produceState(false, app.key) {
+        value = withContext(Dispatchers.IO) {
+            launcher.widgets.providers().any { it.provider.packageName == app.packageName && it.profile == app.user }
+        }
+    }
+    if (hasWidgets) {
+        MenuItem(R.string.menu_widgets, R.drawable.ic_widget) {
+            onDismiss()
+            controller.openWidgetPicker(app.packageName)
+        }
+    }
+    val hasTimer = remember(app.key) { controller.actions.appTimerIntent(app) != null }
+    if (hasTimer) {
+        MenuItem(R.string.menu_app_timer, R.drawable.ic_history) {
+            onDismiss()
+            controller.actions.openAppTimer(app)
+        }
+    }
+}
+
+/** How many notifications [app] has right now (0 without notification access). */
+@Composable
+private fun notificationCount(app: AppTarget): Int {
+    val byApp by LocalContext.current.launcherApp.notifications.byApp.collectAsStateWithLifecycle()
+    return byApp[Notifications.keyOf(app.packageName, app.user)]?.size ?: 0
+}
+
+/** The dot of an app with notifications, as on Pixel phones. */
+@Composable
+private fun NotificationDot(size: Dp, modifier: Modifier = Modifier) {
+    Box(
+        modifier
+            .size(size)
+            .clip(CircleShape)
+            .background(Color.White)
+            .padding(1.5.dp)
+            .clip(CircleShape)
+            .background(MaterialTheme.colorScheme.primary),
+    )
+}
+
+/** A pinned shortcut: its icon with the app's icon in the corner, like on Pixel phones. */
+@Composable
+fun ShortcutIcon(item: ShortcutItem, target: ShortcutTarget?, app: AppTarget?, size: Dp, modifier: Modifier = Modifier) {
+    Box(modifier.size(size)) {
+        if (target != null) {
+            ResultIcon(SearchItem(target.key, SourceKind.Shortcut, item.label, payload = target), size)
+        } else {
+            Box(Modifier.fillMaxSize().clip(RoundedCornerShape(size * 0.28f)).background(Color.White.copy(alpha = 0.25f)))
+        }
+        app?.let { AppIconImage(it, size * 0.4f, Modifier.align(Alignment.BottomEnd)) }
+    }
+}
+
+/** A pinned shortcut on a page: tap opens it, long press offers removal, long press and move drags. */
+@Composable
+private fun ShortcutCell(item: ShortcutItem, target: ShortcutTarget?, controller: HomeController) {
+    val context = LocalContext.current
+    val launcher = context.launcherApp
+    val bounds = remember { ScreenBounds() }
+    var menu by remember(controller.menuEpoch) { mutableStateOf(false) }
+    var size by remember { mutableStateOf(IntSize.Zero) }
+    val haptics = LocalHapticFeedback.current
+    val app = remember(item.shortcutKey, target) { launcher.apps.appOf(item.userSerial, item.packageName) }
+    val label = target?.info?.shortLabel?.toString()?.ifBlank { null } ?: item.label
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+        Column(
+            Modifier
+                .fillMaxSize()
+                .onGloballyPositioned { size = it.size }
+                .homeItemGestures(
+                    key = item.id,
+                    callbacks = HomeItemGestureCallbacks(
+                        onTap = {
+                            if (target != null) controller.actions.launchShortcut(target, bounds.rect)
+                            else Toast.makeText(context, R.string.shortcut_unavailable, Toast.LENGTH_SHORT).show()
+                        },
+                        onLongPress = {
+                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                            controller.itemHeld()
+                            menu = true
+                        },
+                        onDragStart = { pointer, grab ->
+                            menu = false
+                            controller.startDrag(DragSource.Item(item), pointer, grab, size)
+                        },
+                        onDrag = controller::moveDrag,
+                        onDragEnd = controller::endDrag,
+                        onDown = controller::itemDown,
+                        onRelease = controller::itemReleased,
+                        editing = { controller.editMode },
+                    ),
+                )
+                .padding(top = 6.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            ShortcutIcon(item, target, app, ICON_SIZE, Modifier.onGloballyPositioned(bounds::update))
+            Spacer(Modifier.height(6.dp))
+            IconLabel(label)
+        }
+        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }, shape = RoundedCornerShape(18.dp)) {
+            MenuItem(R.string.menu_remove_from_home, R.drawable.ic_minus) {
+                menu = false
+                controller.repository.removeItem(item.id)
+            }
+            if (app != null) {
+                MenuItem(R.string.menu_app_info, R.drawable.ic_info) {
+                    menu = false
+                    controller.actions.appInfo(app)
+                }
+            }
+            MenuItem(R.string.menu_edit_home, R.drawable.ic_edit) {
+                menu = false
+                controller.startEditing()
+            }
         }
     }
 }
@@ -994,6 +1195,7 @@ private fun LibraryBox(group: LibraryGroup, workspace: Workspace, controller: Ho
 @Composable
 fun LibraryAppMenu(app: AppTarget, workspace: Workspace, onDismiss: () -> Unit, controller: HomeController, folderId: Long? = null) {
     DropdownMenu(expanded = true, onDismissRequest = onDismiss, shape = RoundedCornerShape(18.dp)) {
+        AppMenuExtras(app, controller, onDismiss, null)
         if (folderId != null) {
             MenuItem(R.string.menu_remove_from_folder, R.drawable.ic_minus) {
                 onDismiss()
