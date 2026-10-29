@@ -5,6 +5,8 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.davydgky.launcher.core.Answer
 import io.github.davydgky.launcher.core.Answers
+import io.github.davydgky.launcher.core.QuickAction
+import io.github.davydgky.launcher.core.QuickActions
 import io.github.davydgky.launcher.core.SearchResults
 import io.github.davydgky.launcher.launcherApp
 import java.text.DecimalFormatSymbols
@@ -19,9 +21,15 @@ import kotlinx.coroutines.withContext
 
 /**
  * Results for one input; [inputNanos] is when the input changed (System.nanoTime). [answer] is a
- * calculation or unit conversion of the input itself.
+ * calculation or unit conversion of the input itself, [action] a timer or alarm the input asks for.
  */
-class ResultsState(val query: String, val results: SearchResults, val inputNanos: Long, val answer: Answer? = null) {
+class ResultsState(
+    val query: String,
+    val results: SearchResults,
+    val inputNanos: Long,
+    val answer: Answer? = null,
+    val action: QuickAction? = null,
+) {
     companion object {
         val Empty = ResultsState("", SearchResults.Empty, 0L)
     }
@@ -43,7 +51,7 @@ class SearchViewModel(application: Application) : AndroidViewModel(application) 
             if (query.isBlank()) ResultsState.Empty
             else withContext(searchThread) {
                 val separator = DecimalFormatSymbols.getInstance().decimalSeparator
-                ResultsState(query, repository.search(query), nanos, Answers.compute(query, separator))
+                ResultsState(query, repository.search(query), nanos, Answers.compute(query, separator), QuickActions.parse(query))
             }
         }
         .stateIn(viewModelScope, SharingStarted.Eagerly, ResultsState.Empty)

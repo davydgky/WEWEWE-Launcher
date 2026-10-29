@@ -30,8 +30,12 @@ Welche Quelle Android unter welcher Bedingung erlaubt und warum die Architektur 
   Einstellungen, Verknüpfungen und Kontakten werden verziehen („spotfy“, „yuotube“, „bluetoth“). Was man
   öfter auswählt oder benutzt, steigt im Ranking. Die Treffer stapeln sich vom Suchfeld nach oben, der
   beste sitzt also direkt über dem Daumen (umschaltbar); Enter öffnet den Top-Treffer.
-- **Rechner und Einheiten** wie bei Spotlight: „12*7“, „(2+3)^2“, „15% * 80“, „5 km in mi“, „100 f in c“,
-  „3,5 kg in pfund“, „1 gb in mb“. Antippen kopiert das Ergebnis. Alles auf dem Gerät, deshalb ohne Währungen.
+- **Rechner und Einheiten** wie bei Spotlight: „12*7“, „5x5“, „(2+3)^2“, „200+15%“, „15% von 80“, „sin 30“,
+  „5!“, „2π“, „5 km in mi“, „100 f in c“, „3,5 kg in pfund“, „1 gb in mb“. Das Ergebnis steht direkt im
+  Suchfeld („= 84“, antippen rechnet damit weiter) und darüber als Treffer (antippen kopiert). Alles auf dem
+  Gerät, deshalb ohne Währungen.
+- **Timer und Wecker aus der Suche**: „timer 5 min“, „10 minuten timer“, „wecker 7:30“, „wake me at 7 am“;
+  Enter oder Antippen startet den Timer bzw. stellt den Wecker in der Uhr-App.
 - **Systemeinstellungen** als Quelle: WLAN, Bluetooth, Akku, Display, Ton, Bitte nicht stören, Standort …
   auf Deutsch und Englisch; die Taschenlampe schaltet direkt aus der Suche.
 - **Aktionen in Treffern**: Kontakte direkt anrufen, schreiben oder mailen; „Im Play Store suchen“ neben der
@@ -69,7 +73,7 @@ Welche Quelle Android unter welcher Bedingung erlaubt und warum die Architektur 
   Eine App auf eine andere ziehen erzeugt einen Ordner; der Rand einer Fläche öffnet ihn zum Umbenennen.
 - **Raster** wählbar (4×5 bis 6×7), Standard 5×6 auf Handys. Beim Wechsel bleibt alles an seinem Platz,
   soweit es passt; Symbole werden bei vielen Spalten kleiner.
-- **App-Mediathek** rechts neben der letzten Seite, wie bei iOS: Vorschläge, zuletzt installiert und Kategorien,
+- **App-Mediathek** rechts neben der letzten Seite, wie bei iOS, oder mit einem Wisch nach oben wie die App-Übersicht beim Pixel: Vorschläge, zuletzt installiert und Kategorien,
   die die Apps selbst angeben, jeweils nach Nutzung sortiert. Neue Apps landen wahlweise nur hier.
 - **Widgets**: im Bearbeitungsmodus über „Widget hinzufügen“. Die Auswahl zeigt Vorschauen, danach folgt
   bei Bedarf die einmalige Erlaubnis und der Einrichtungsbildschirm des Widgets. Die Größe ändert ein Tipp
@@ -223,8 +227,10 @@ Signiert wird mit `scripts/sign_release.sh`:
 - Die App-Vorschläge des Pixel Launchers kommen von „Android System Intelligence“ über eine System-API
   (`AppPredictionManager`), die nur vorinstallierte Launcher nutzen dürfen. Der Dock-Vorschlag nutzt
   deshalb die eigene Vorhersage.
-- „Als Bubble öffnen“ aus dem Pixel-Menü startet die Systemoberfläche über eine interne Schnittstelle, die
-  nur der vorinstallierte Launcher nutzen darf; Apps selbst können Unterhaltungen weiter als Bubble anbieten.
+- „Bubble“ im App-Menü: Andere Apps direkt in eine Bubble legen darf nur die Systemoberfläche. WEWEWE
+  öffnet deshalb eine eigene Bubble und startet die App darin. Apps, die auf einer eigenen Aufgabe
+  bestehen, öffnen sich trotzdem im Vollbild. Beim ersten Mal fragt Android nach Benachrichtigungen und
+  Bubbles für WEWEWE (eine Benachrichtigung erscheint nie). Apps des Arbeitsprofils gehen nicht.
 - Aus dem Pixel-Menü fehlen außerdem „App pausieren“ (pausieren dürfen nur System-Apps; „App-Timer“ öffnet stattdessen
   Digital Wellbeing für die App) und „Geteilter Bildschirm“ (startet nur die Systemoberfläche). Widgets, die
   andere Apps auf den Home-Bildschirm legen wollen, nimmt der Launcher noch nicht an, nur Verknüpfungen.

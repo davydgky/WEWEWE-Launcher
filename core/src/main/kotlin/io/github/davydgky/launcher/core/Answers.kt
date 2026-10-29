@@ -3,9 +3,20 @@ package io.github.davydgky.launcher.core
 import java.math.BigDecimal
 import java.math.MathContext
 import java.math.RoundingMode
+import kotlin.math.E
+import kotlin.math.PI
 import kotlin.math.abs
+import kotlin.math.acos
+import kotlin.math.asin
+import kotlin.math.atan
+import kotlin.math.cos
+import kotlin.math.floor
+import kotlin.math.ln
+import kotlin.math.log10
 import kotlin.math.pow
+import kotlin.math.sin
 import kotlin.math.sqrt
+import kotlin.math.tan
 
 /** An answer computed from the input itself, shown above all results: "12*7" → "84". */
 class Answer(
@@ -30,15 +41,22 @@ object Answers {
         return Units.convert(text, decimalSeparator) ?: calculate(text, decimalSeparator)
     }
 
-    private fun calculate(text: String, separator: Char): Answer? {
+    private fun calculate(input: String, separator: Char): Answer? {
+        // "=5+5" and "5+5=" as typed into a calculator.
+        val text = input.trim().removePrefix("=").removeSuffix("=").trim()
         // Plain numbers ("2026", "0176 1234"), phone numbers and dates are searches, not sums.
-        if (text.none { it in OPERATORS } && !text.contains("sqrt", ignoreCase = true) && !text.contains('√')) return null
+        if (text.none { it in OPERATORS } && !function.containsMatchIn(text) && !times.containsMatchIn(text)) return null
         if (text.none { it.isDigit() } || phoneOrDate.matches(text)) return null
-        val value = runCatching { Parser(text).parse() }.getOrNull() ?: return null
+        val value = runCatching { Parser(normalize(text), separator).parse() }.getOrNull() ?: return null
         if (value.isNaN() || value.isInfinite()) return null
         val shown = format(value, separator)
         return Answer("$text =", shown, format(value, '.', grouping = false))
     }
+
+    /** "5x5" and "5 X 5" mean times; "15% von 200" and "20 % of 50" mean the share. */
+    private fun normalize(text: String): String = text
+        .replace(times, "*")
+        .replace(shareOf) { "(${it.groupValues[1]})/100*(${it.groupValues[2]})" }
 
     /** Ten significant digits without trailing zeros; [grouping] adds thousands separators. */
     fun format(value: Double, separator: Char, grouping: Boolean = true): String {
@@ -62,14 +80,24 @@ object Answers {
         }
     }
 
-    private const val OPERATORS = "+-*/×÷^%"
+    private const val OPERATORS = "+-*/×÷^%!√"
+
+    private val function = Regex("(?i)(?<![a-z])(?:sqrt|a?sin|a?cos|a?tan|ln|log|abs|pi)(?![a-z])|π")
+    private val times = Regex("(?<=[0-9)])\\s*[xX]\\s*(?=[0-9(√])")
+    private val shareOf = Regex("(?i)^(.+?)\\s*%\\s*(?:von|vom|of)\\s+(.+)$")
 
     private val phoneOrDate = Regex("^(?:[+0][0-9 /()-]{5,}|\\d{1,4}[-./]\\d{1,2}[-./]\\d{1,4})$")
 
-    /** Recursive descent over + - * / ^ % with parentheses, unary minus and sqrt. */
-    private class Parser(source: String) {
-        private val s = source.replace('×', '*').replace('÷', '/').replace(" ", "").lowercase()
+    /**
+     * Recursive descent over + - * / ^ % ! with parentheses, unary minus, implicit multiplication ("2π",
+     * "3(4+5)"), the constants π and e and the functions of a phone calculator (angles in degrees). As
+     * on a phone, "200 + 15%" adds 15 % of 200 and "100 - 20%" takes 20 % off.
+     */
+    private class Parser(source: String, private val separator: Char) {
+        private val s = source.replace('×', '*').replace('÷', '/').replace("π", "pi").replace(" ", "").lowercase()
         private var pos = 0
+        /** The term just parsed was a bare percentage such as "15%". */
+        private var percentTerm = false
 
         fun parse(): Double {
             val value = expression()
@@ -81,8 +109,8 @@ object Answers {
             var value = term()
             while (pos < s.length) {
                 when (s[pos]) {
-                    '+' -> { pos++; value += term() }
-                    '-' -> { pos++; value -= term() }
+                    '+' -> { pos++; val t = term(); value += if (percentTerm) value * t else t }
+                    '-' -> { pos++; val t = term(); value -= if (percentTerm) value * t else t }
                     else -> return value
                 }
             }
@@ -91,13 +119,21 @@ object Answers {
 
         private fun term(): Double {
             var value = power()
+            var factors = 1
+            var lastPercent = percentTerm
             while (pos < s.length) {
-                when (s[pos]) {
-                    '*' -> { pos++; value *= power() }
-                    '/' -> { pos++; value /= power() }
-                    else -> return value
+                val c = s[pos]
+                when {
+                    c == '*' -> { pos++; value *= power() }
+                    c == '/' -> { pos++; value /= power() }
+                    // Implicit multiplication: "2pi", "3(4+5)", "2sqrt9".
+                    c == '(' || c == '√' || c.isLetter() -> value *= power()
+                    else -> break
                 }
+                factors++
+                lastPercent = false
             }
+            percentTerm = factors == 1 && lastPercent
             return value
         }
 
@@ -105,6 +141,7 @@ object Answers {
             val base = unary()
             if (pos < s.length && s[pos] == '^') {
                 pos++
+                percentTerm = false
                 return base.pow(power())
             }
             return base
@@ -118,48 +155,112 @@ object Answers {
 
         private fun postfix(): Double {
             var value = primary()
-            while (pos < s.length && s[pos] == '%') {
+            percentTerm = false
+            while (pos < s.length && (s[pos] == '%' || s[pos] == '!')) {
+                if (s[pos] == '%') {
+                    value /= 100
+                    percentTerm = true
+                } else {
+                    value = factorial(value)
+                    percentTerm = false
+                }
                 pos++
-                value /= 100
             }
             return value
         }
 
         private fun primary(): Double {
             require(pos < s.length) { "Unexpected end" }
-            if (s.startsWith("sqrt", pos) || s[pos] == '√') {
-                pos += if (s[pos] == '√') 1 else 4
+            if (s[pos] == '√') {
+                pos++
                 return sqrt(primary())
             }
             if (s[pos] == '(') {
                 pos++
                 val value = expression()
-                require(pos < s.length && s[pos] == ')') { "Missing )" }
-                pos++
+                // A missing closing parenthesis at the end is forgiven, as on a phone calculator.
+                if (pos < s.length) {
+                    require(s[pos] == ')') { "Missing )" }
+                    pos++
+                }
                 return value
             }
+            if (s[pos].isLetter()) return named()
             return number()
+        }
+
+        private fun named(): Double {
+            val start = pos
+            while (pos < s.length && s[pos].isLetter()) pos++
+            return when (val name = s.substring(start, pos)) {
+                "pi" -> PI
+                "e" -> E
+                else -> {
+                    val f: (Double) -> Double = when (name) {
+                        "sqrt" -> ::sqrt
+                        "sin" -> { x -> sin(Math.toRadians(x)) }
+                        "cos" -> { x -> cos(Math.toRadians(x)) }
+                        "tan" -> { x -> tan(Math.toRadians(x)) }
+                        "asin" -> { x -> Math.toDegrees(asin(x)) }
+                        "acos" -> { x -> Math.toDegrees(acos(x)) }
+                        "atan" -> { x -> Math.toDegrees(atan(x)) }
+                        "ln" -> ::ln
+                        "log" -> ::log10
+                        "abs" -> ::abs
+                        else -> error("Unknown '$name'")
+                    }
+                    // sin(30°) is exactly 0.5, not 0.49999999999999994.
+                    roundNoise(f(postfix()))
+                }
+            }
         }
 
         private fun number(): Double {
             val start = pos
             while (pos < s.length && (s[pos].isDigit() || s[pos] == '.' || s[pos] == ',')) pos++
             require(pos > start) { "Number expected" }
-            return Numbers.parse(s.substring(start, pos)) ?: error("Bad number")
+            var value = Numbers.parse(s.substring(start, pos), separator) ?: error("Bad number")
+            // Scientific notation: "1e3", "2.5e-4".
+            if (pos + 1 < s.length && s[pos] == 'e' && (s[pos + 1].isDigit() || (s[pos + 1] in "+-" && pos + 2 < s.length && s[pos + 2].isDigit()))) {
+                pos++
+                val sign = if (s[pos] == '-') -1 else 1
+                if (s[pos] in "+-") pos++
+                val expStart = pos
+                while (pos < s.length && s[pos].isDigit()) pos++
+                value *= 10.0.pow(sign * s.substring(expStart, pos).toInt())
+            }
+            return value
+        }
+
+        private fun factorial(value: Double): Double {
+            require(value >= 0 && value <= 170 && value == floor(value)) { "Factorial of $value" }
+            var result = 1.0
+            for (i in 2..value.toInt()) result *= i
+            return result
+        }
+
+        private fun roundNoise(value: Double): Double {
+            val rounded = Math.round(value * 1e12) / 1e12
+            return if (abs(value - rounded) < 1e-12) rounded else value
         }
     }
 }
 
-/** Numbers as typed in German or English: "1,5", "1.5", "1.000,5", "1,000.5". */
+/**
+ * Numbers as typed in German or English: "1,5", "1.5", "1.000,5", "1,000.5". A single separator
+ * followed by exactly three digits is a thousands separator when it is not the [decimalSeparator] of
+ * the device: "1.000" is a thousand in German, "1,000" in English.
+ */
 internal object Numbers {
-    fun parse(raw: String): Double? {
+    fun parse(raw: String, decimalSeparator: Char = '.'): Double? {
         val text = raw.trim()
         if (text.isEmpty()) return null
         val commas = text.count { it == ',' }
         val dots = text.count { it == '.' }
+        fun grouped(mark: Char) = mark != decimalSeparator && Regex("^\\d{1,3}\\${mark}\\d{3}$").matches(text)
         val normalized = when {
-            commas == 0 -> if (dots > 1) text.replace(".", "") else text
-            dots == 0 -> if (commas > 1) text.replace(",", "") else text.replace(',', '.')
+            commas == 0 -> if (dots > 1 || grouped('.')) text.replace(".", "") else text
+            dots == 0 -> if (commas > 1 || grouped(',')) text.replace(",", "") else text.replace(',', '.')
             // Both: whichever comes last is the decimal separator.
             text.lastIndexOf(',') > text.lastIndexOf('.') -> text.replace(".", "").replace(',', '.')
             else -> text.replace(",", "")
@@ -248,7 +349,7 @@ object Units {
         val parts = text.trim().split(connector)
         if (parts.size != 2) return null
         val match = amount.find(parts[0].trim()) ?: return null
-        val value = Numbers.parse(match.groupValues[1]) ?: return null
+        val value = Numbers.parse(match.groupValues[1], separator) ?: return null
         val from = units[match.groupValues[2].trim().lowercase()] ?: return null
         val to = units[parts[1].trim().lowercase()] ?: return null
         if (from.category != to.category || from === to) return null

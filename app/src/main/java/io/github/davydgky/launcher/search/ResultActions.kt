@@ -11,11 +11,14 @@ import android.content.Intent
 import android.content.pm.LauncherApps
 import android.graphics.Rect
 import android.net.Uri
+import android.provider.AlarmClock
 import android.provider.CalendarContract
 import android.provider.Settings
 import android.util.Log
 import android.widget.Toast
 import io.github.davydgky.launcher.R
+import io.github.davydgky.launcher.bubbles.Bubbles
+import io.github.davydgky.launcher.core.QuickAction
 import io.github.davydgky.launcher.core.SearchItem
 import io.github.davydgky.launcher.launcherApp
 import io.github.davydgky.launcher.settings.SettingsActivity
@@ -142,6 +145,28 @@ class ResultActions(private val activity: Activity) {
 
     fun openAppTimer(target: AppTarget) {
         appTimerIntent(target)?.let { start(it, null, null) }
+    }
+
+    /** Starts a timer right away or sets an alarm (with the clock app's confirmation). */
+    fun run(action: QuickAction) {
+        val intent = when (action) {
+            is QuickAction.Timer -> Intent(AlarmClock.ACTION_SET_TIMER)
+                .putExtra(AlarmClock.EXTRA_LENGTH, action.seconds)
+                .putExtra(AlarmClock.EXTRA_SKIP_UI, true)
+            is QuickAction.Alarm -> Intent(AlarmClock.ACTION_SET_ALARM)
+                .putExtra(AlarmClock.EXTRA_HOUR, action.hour)
+                .putExtra(AlarmClock.EXTRA_MINUTES, action.minute)
+        }
+        if (start(intent, null, null) && action is QuickAction.Timer) {
+            toast(R.string.timer_started)
+        }
+    }
+
+    fun canOpenAsBubble(target: AppTarget): Boolean = Bubbles.canOpen(activity, target)
+
+    fun openAsBubble(target: AppTarget) {
+        Bubbles.open(activity, target)
+        app.launchLog.record(target.key)
     }
 
     fun uninstall(target: AppTarget) {

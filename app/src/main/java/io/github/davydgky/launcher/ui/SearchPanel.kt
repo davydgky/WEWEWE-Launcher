@@ -29,6 +29,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
@@ -86,6 +87,7 @@ import com.kyant.shapes.Capsule
 import com.kyant.shapes.RoundedRectangle
 import io.github.davydgky.launcher.R
 import io.github.davydgky.launcher.core.Answer
+import io.github.davydgky.launcher.core.QuickAction
 import io.github.davydgky.launcher.core.ScoredItem
 import io.github.davydgky.launcher.core.SearchItem
 import io.github.davydgky.launcher.core.SourceKind
@@ -101,6 +103,7 @@ import io.github.davydgky.launcher.search.SettingTarget
 import io.github.davydgky.launcher.search.SuggestionState
 import io.github.davydgky.launcher.ui.glass.LocalGlassColors
 import io.github.davydgky.launcher.ui.glass.glassWhen
+import java.text.DecimalFormatSymbols
 import kotlin.math.abs
 import kotlinx.coroutines.launch
 
@@ -223,12 +226,20 @@ fun SearchPanel(
                     resultItems(results, open, external, actions, backdrop)
                 }
             }
-            SearchField(state, focusRequester, backdrop, onSubmit = {
-                // Enter: the top hit, else the calculated answer, else the first result, else the web.
+            // The result of a sum shows in the field itself, as on a calculator.
+            val answer = results.answer?.takeIf { results.query == state.query.text.toString() }
+            SearchField(state, focusRequester, backdrop, answer, onSubmit = {
+                // Enter: a timer or alarm, the top hit, else the calculated answer, else the first result, else the web.
+                val action = results.action
                 val top = results.results.top?.item
                 val answer = results.answer
                 val first = results.results.groups.firstOrNull()?.items?.firstOrNull()?.item
                 when {
+                    action != null -> {
+                        rememberSearch(results.query)
+                        actions.run(action)
+                        state.reset()
+                    }
                     top != null -> open(top, null)
                     answer != null -> actions.copy(answer.copyText)
                     first != null -> open(first, null)
@@ -286,6 +297,11 @@ private fun LazyListScope.resultItems(
 ) {
     val results = state.results
     val query = state.query
+    state.action?.let { action ->
+        item("action") {
+            Section(null, backdrop) { QuickActionRow(action) { actions.run(action) } }
+        }
+    }
     state.answer?.let { answer ->
         item("answer") {
             Section(null, backdrop) { AnswerRow(answer) { actions.copy(answer.copyText) } }
@@ -396,6 +412,39 @@ private fun AnswerRow(answer: Answer, onCopy: () -> Unit) {
             Text(answer.result, color = colors.content, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
+}
+
+/** "Start a timer for 5 min" / "Set an alarm for 7:30", from what was typed. */
+@Composable
+private fun QuickActionRow(action: QuickAction, onRun: () -> Unit) {
+    val colors = LocalGlassColors.current
+    val text = when (action) {
+        is QuickAction.Timer -> stringResource(R.string.action_timer, durationText(action.seconds))
+        is QuickAction.Alarm -> stringResource(R.string.action_alarm, "%d:%02d".format(action.hour, action.minute))
+    }
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onRun)
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        SymbolTile(if (action is QuickAction.Timer) R.drawable.ic_timer else R.drawable.ic_alarm, 40.dp)
+        Spacer(Modifier.width(14.dp))
+        Text(text, color = colors.content, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+    }
+}
+
+/** "5 min", "1 h 30 min", "45 s". */
+private fun durationText(seconds: Int): String {
+    val h = seconds / 3600
+    val m = seconds % 3600 / 60
+    val s = seconds % 60
+    return listOfNotNull(
+        "$h h".takeIf { h > 0 },
+        "$m min".takeIf { m > 0 },
+        "$s s".takeIf { s > 0 },
+    ).joinToString(" ")
 }
 
 /** The last searches as chips; a tap searches again. */
@@ -547,7 +596,7 @@ private fun AppGrid(apps: List<AppTarget>, onClick: (AppTarget, Rect?) -> Unit) 
 }
 
 @Composable
-private fun SearchField(state: SearchState, focusRequester: FocusRequester, backdrop: Backdrop, onSubmit: () -> Unit) {
+private fun SearchField(state: SearchState, focusRequester: FocusRequester, backdrop: Backdrop, answer: Answer?, onSubmit: () -> Unit) {
     val colors = LocalGlassColors.current
     Row(
         Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
@@ -580,6 +629,26 @@ private fun SearchField(state: SearchState, focusRequester: FocusRequester, back
                         showKeyboardOnFocus = false,
                     ),
                     onKeyboardAction = { onSubmit() },
+                )
+            }
+            if (answer != null) {
+                // A tap keeps calculating with the result: "= 84" becomes the new input.
+                val separator = remember { DecimalFormatSymbols.getInstance().decimalSeparator }
+                Text(
+                    "= ${answer.result}",
+                    color = colors.content,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier
+                        .padding(start = 6.dp)
+                        .widthIn(max = 150.dp)
+                        .clip(RoundedCornerShape(50))
+                        .background(colors.fill)
+                        .clickable(onClickLabel = stringResource(R.string.answer_continue)) {
+                            state.query.setTextAndPlaceCursorAtEnd(answer.copyText.replace('.', separator))
+                        }
+                        .padding(horizontal = 10.dp, vertical = 6.dp),
                 )
             }
             if (state.query.text.isNotEmpty()) {

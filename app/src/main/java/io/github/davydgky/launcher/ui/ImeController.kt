@@ -31,6 +31,10 @@ class ImeController(private val view: View, private val perf: PerfStats) {
     private var fraction = 0f
     /** finish() was called before the keyboard was ready; holds the requested end state. */
     private var pendingFinish: Boolean? = null
+    /** Where the keyboard is headed once the finger let go; null while it follows the finger. */
+    private var goal: Boolean? = null
+    /** We gave up control ourselves; the system's cancel callback must not move the keyboard. */
+    private var cancelledByUs = false
 
     private var measureFrom = 0L
     private var measuring = false
@@ -59,9 +63,11 @@ class ImeController(private val view: View, private val perf: PerfStats) {
         }
         fraction = startFraction
         pendingFinish = null
+        goal = null
         if (controller != null || requested) return
         val insetsController = view.windowInsetsController ?: return
         requested = true
+        cancelledByUs = false
         val signal = CancellationSignal()
         cancellation = signal
         // Duration -1: the animation has no fixed length, it follows the finger.
@@ -71,6 +77,21 @@ class ImeController(private val view: View, private val perf: PerfStats) {
     fun setFraction(value: Float) {
         fraction = value.coerceIn(0f, 1f)
         apply()
+    }
+
+    /** The finger let go; the keyboard will end up [shown] or hidden, whatever happens on the way. */
+    fun aim(shown: Boolean) {
+        goal = shown
+    }
+
+    /**
+     * Shows or hides the keyboard with the system's own animation, for opening and closing without a
+     * finger (button, home, back): no waiting for control, nothing to jump.
+     */
+    fun animate(shown: Boolean) {
+        if (controller != null || requested) cancel()
+        val insets = view.windowInsetsController ?: return
+        if (shown) insets.show(WindowInsets.Type.ime()) else if (isKeyboardVisible) insets.hide(WindowInsets.Type.ime())
     }
 
     /** Ends the controlled animation with the keyboard [shown] or hidden. */
@@ -93,6 +114,7 @@ class ImeController(private val view: View, private val perf: PerfStats) {
     /** Drops control without moving the keyboard, e.g. when the activity goes away. */
     fun cancel() {
         fraction = 0f
+        cancelledByUs = true
         cancellation?.cancel()
         reset()
         measuring = false
@@ -126,6 +148,7 @@ class ImeController(private val view: View, private val perf: PerfStats) {
         cancellation = null
         requested = false
         pendingFinish = null
+        goal = null
     }
 
     private val listener = object : WindowInsetsAnimationControlListener {
@@ -143,11 +166,16 @@ class ImeController(private val view: View, private val perf: PerfStats) {
         }
 
         override fun onCancelled(controller: WindowInsetsAnimationController?) {
-            val wanted = pendingFinish ?: (fraction > 0.5f)
+            if (cancelledByUs) {
+                cancelledByUs = false
+                return
+            }
+            // Where the user was headed: a closing search never brings the keyboard back.
+            val wanted = pendingFinish ?: goal ?: (fraction > 0.5f)
             Log.d(TAG, "Keyboard control refused; showing it normally: $wanted")
             reset()
             // The system refused control (another animation was running); fall back to a plain request.
-            if (wanted) view.windowInsetsController?.show(WindowInsets.Type.ime())
+            if (wanted) view.windowInsetsController?.show(WindowInsets.Type.ime()) else view.windowInsetsController?.hide(WindowInsets.Type.ime())
         }
     }
 }

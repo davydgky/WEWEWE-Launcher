@@ -28,6 +28,10 @@
     <uses-permission android:name="io.github.davydgky.browser.permission.READ_SEARCH_DATA" />
 
     <uses-permission android:name="android.permission.REQUEST_DELETE_PACKAGES" />
+    <!-- Only for "Open as bubble": a bubble is a notification, whose notification itself stays hidden. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- "timer 5 min" and "wecker 7:30" in the search hand the timer or alarm to the clock app. -->
+    <uses-permission android:name="com.android.alarm.permission.SET_ALARM" />
 
     <queries>
         <intent>
@@ -37,6 +41,13 @@
         <!-- Apps that only offer widgets. -->
         <intent>
             <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+        </intent>
+        <!-- The clock app, for timers and alarms typed into the search. -->
+        <intent>
+            <action android:name="android.intent.action.SET_TIMER" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.SET_ALARM" />
         </intent>
         <!-- App timers of Digital Wellbeing, offered in an app's long-press menu. -->
         <intent>
@@ -130,6 +141,17 @@
                 <action android:name="android.content.pm.action.CONFIRM_PIN_SHORTCUT" />
             </intent-filter>
         </activity>
+
+        <!-- The content of a bubble from "Open as bubble"; the opened app joins its task. -->
+        <activity
+            android:name=".bubbles.BubbleActivity"
+            android:allowEmbedded="true"
+            android:documentLaunchMode="always"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:resizeableActivity="true"
+            android:taskAffinity="io.github.davydgky.launcher.bubble"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
 
         <service
             android:name=".index.ContentIndexJob"

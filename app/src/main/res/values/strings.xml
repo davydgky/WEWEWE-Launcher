@@ -205,6 +205,16 @@
     <string name="notification_access_label">Notification dots</string>
     <string name="menu_widgets">Widgets</string>
     <string name="menu_app_timer">App timer</string>
+    <string name="menu_bubble">Bubble</string>
+    <string name="timer_started">Timer started</string>
+    <string name="action_timer">Start a timer for %1$s</string>
+    <string name="action_alarm">Set an alarm for %1$s</string>
+    <string name="bubble_allow_notifications">Allow notifications for WEWEWE, then tap Bubble again. No notification is shown, a bubble only needs this permission.</string>
+    <string name="bubble_allow_bubbles">Allow bubbles for WEWEWE, then tap Bubble again.</string>
+    <string name="bubble_channel">Bubbles</string>
+    <string name="bubble_channel_description">Apps opened as a bubble from the home screen</string>
+    <string name="bubble_message">Opened as a bubble</string>
+    <string name="answer_continue">Continue calculating with the result</string>
     <string name="shortcut_unavailable">This shortcut is not available right now</string>
     <string name="notification_dots">Notification dots</string>
     <string name="notification_dots_description">Dots on app icons and the notifications in an app\'s long-press menu, like on Pixel phones. Notifications stay in memory and are never stored.</string>

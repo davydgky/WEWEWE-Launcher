@@ -24,6 +24,7 @@ import io.github.davydgky.launcher.ui.LauncherScreen
 import io.github.davydgky.launcher.ui.LauncherTheme
 import io.github.davydgky.launcher.ui.LocalLightWallpaper
 import io.github.davydgky.launcher.widgets.WidgetAdder
+import kotlin.math.ceil
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.launch
@@ -99,12 +100,13 @@ class MainActivity : ComponentActivity() {
     }
 
     /**
-     * Blurs the wallpaper behind the search with the system's cross-window blur. The radius changes in
-     * steps, so the window is not re-laid out on every frame of the gesture.
+     * Blurs the wallpaper behind the search with the system's cross-window blur. Every new radius makes
+     * the window lay itself out again, so it changes in a few steps only, not on every frame.
      */
     private fun blurWallpaper(progress: Float) {
         if (!windowManager.isCrossWindowBlurEnabled) return
-        val radius = ((progress.coerceIn(0f, 1f) * MAX_WALLPAPER_BLUR_DP * resources.displayMetrics.density) / BLUR_STEP_PX).toInt() * BLUR_STEP_PX
+        val step = ceil(progress.coerceIn(0f, 1f) * BLUR_STEPS)
+        val radius = (step / BLUR_STEPS * MAX_WALLPAPER_BLUR_DP * resources.displayMetrics.density).toInt()
         if (radius == wallpaperBlur) return
         wallpaperBlur = radius
         window.setBackgroundBlurRadius(radius)
@@ -144,6 +146,6 @@ class MainActivity : ComponentActivity() {
 
     private companion object {
         const val MAX_WALLPAPER_BLUR_DP = 30f
-        const val BLUR_STEP_PX = 6
+        const val BLUR_STEPS = 4f
     }
 }

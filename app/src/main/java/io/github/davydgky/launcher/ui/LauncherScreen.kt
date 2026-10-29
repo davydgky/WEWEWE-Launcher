@@ -142,13 +142,16 @@ fun LauncherScreen(
     val homeBackdrop = rememberLayerBackdrop()
     val panelBackdrop = rememberLayerBackdrop()
     val distancePx = with(density) { SearchState.DRAG_DISTANCE_DP.dp.toPx() }
+    val swipeUpPx = with(density) { 72.dp.toPx() }
     val topInset = WindowInsets.statusBars.getTop(density).toFloat()
 
     CompositionLocalProvider(LocalGlassColors provides colors) {
         Box(
             Modifier
                 .fillMaxSize()
-                .searchGesture(state, distancePx, topInset) { !controller.isEditing && !controller.onLibrary }
+                .searchGesture(state, distancePx, topInset, swipeUpPx, onSwipeUp = controller::showLibrary) {
+                    !controller.isEditing && !controller.onLibrary
+                }
                 .homeDragTracker(controller),
         ) {
             // Everything the glass refracts: the home screen without its overlays. Only recorded while

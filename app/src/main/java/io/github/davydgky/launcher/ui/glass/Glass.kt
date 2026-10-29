@@ -7,6 +7,7 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.kyant.backdrop.Backdrop
@@ -94,20 +95,23 @@ fun Modifier.glassWhen(
 ): Modifier = if (active) glass(backdrop, shape, colors, refraction) else this
 
 /**
- * Full-screen frosted layer behind the search: the home screen blurred by [progress] (0..1) with the
- * glass scrim on top. Exports itself so the glass panels above can refract it.
+ * Full-screen frosted layer behind the search: the home screen blurred, with the glass scrim on top,
+ * faded in by [progress] (0..1). The blur itself stays the same while it fades, so it is computed once
+ * and not again on every frame of the animation. Exports itself so the glass panels above can refract it.
  */
 fun Modifier.frostedBackdrop(
     backdrop: Backdrop,
     colors: GlassColors,
     progress: () -> Float,
     exportedBackdrop: LayerBackdrop? = null,
-): Modifier = drawBackdrop(
-    backdrop = backdrop,
-    shape = { RectangleShape },
-    effects = { blur(32.dp.toPx() * progress().coerceIn(0f, 1f)) },
-    highlight = null,
-    shadow = null,
-    exportedBackdrop = exportedBackdrop,
-    onDrawSurface = { drawRect(colors.scrim.copy(alpha = colors.scrim.alpha * progress().coerceIn(0f, 1f))) },
-)
+): Modifier = this
+    .graphicsLayer { alpha = progress().coerceIn(0f, 1f) }
+    .drawBackdrop(
+        backdrop = backdrop,
+        shape = { RectangleShape },
+        effects = { blur(32.dp.toPx()) },
+        highlight = null,
+        shadow = null,
+        exportedBackdrop = exportedBackdrop,
+        onDrawSurface = { drawRect(colors.scrim) },
+    )

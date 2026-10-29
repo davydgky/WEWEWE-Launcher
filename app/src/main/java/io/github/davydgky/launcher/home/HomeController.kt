@@ -152,6 +152,12 @@ class HomeController(
     val currentHomePage: Int
         get() = if (::pager.isInitialized) pager.currentPage.coerceIn(0, (homePages - 1).coerceAtLeast(0)) else 0
 
+    /** Swipe up on the home screen: the App Library, as the app drawer on Pixel phones. */
+    fun showLibrary() {
+        if (!::pager.isInitialized) return
+        scope.launch { pager.animateScrollToPage(homePages) }
+    }
+
     /** The App Library is showing (the page after the last home page). */
     val onLibrary: Boolean get() = ::pager.isInitialized && pager.currentPage >= homePages
 

@@ -1144,6 +1144,12 @@ private fun AppMenuExtras(app: AppTarget, controller: HomeController, onDismiss:
             controller.actions.openAppTimer(app)
         }
     }
+    if (controller.actions.canOpenAsBubble(app)) {
+        MenuItem(R.string.menu_bubble, R.drawable.ic_bubble) {
+            onDismiss()
+            controller.actions.openAsBubble(app)
+        }
+    }
 }
 
 /** How many notifications [app] has right now (0 without notification access). */

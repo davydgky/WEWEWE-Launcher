@@ -12,6 +12,7 @@ import android.os.Process
 import android.os.UserHandle
 import android.os.UserManager
 import android.util.Log
+import io.github.davydgky.launcher.bubbles.Bubbles
 import io.github.davydgky.launcher.search.AppTarget
 import io.github.davydgky.launcher.search.ShortcutTarget
 import java.text.Collator
@@ -159,7 +160,8 @@ class AppsRepository(private val context: Context, private val scope: CoroutineS
                 // The profile is locked.
                 emptyList()
             }
-            list.filter { it.isEnabled }.map { info ->
+            // The launcher's own bubble conversations are not shortcuts anyone looks for.
+            list.filter { it.isEnabled && !(it.`package` == context.packageName && Bubbles.isBubbleShortcut(it.id)) }.map { info ->
                 ShortcutTarget(
                     key = "shortcut:$serial/${info.`package`}/${info.id}",
                     info = info,

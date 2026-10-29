@@ -26,7 +26,49 @@ class AnswersTest {
     }
 
     @Test
+    fun calculatorHabits() {
+        assertEquals("25", result("5x5"))
+        assertEquals("25", result("5 X 5"))
+        assertEquals("10", result("=5+5"))
+        assertEquals("4", result("2+2="))
+        assertEquals("5", result("(2+3"))
+        assertEquals("24", result("4(5+1)"))
+    }
+
+    @Test
+    fun percentagesAsOnAPhone() {
+        assertEquals("80", result("100-20%"))
+        assertEquals("230", result("200+15%"))
+        assertEquals("1", result("2*50%"))
+        assertEquals("30", result("15% von 200"))
+        assertEquals("10", result("20 % of 50"))
+    }
+
+    @Test
+    fun functionsAndConstants() {
+        assertEquals("0,5", result("sin 30"))
+        assertEquals("0,5", result("cos(60)"))
+        assertEquals("120", result("5!"))
+        assertEquals("3", result("log 1000"))
+        assertEquals("4", result("sqrt16"))
+        assertEquals("6,283185307", result("2π"))
+        assertEquals("6,283185307", result("pi*2"))
+        assertEquals("0,005", result("2.5e-3*2"))
+    }
+
+    @Test
+    fun thousandsSeparatorsOfTheDevice() {
+        assertEquals("1001", result("1.000+1", ','))
+        assertEquals("1001", result("1,000+1", '.'))
+        assertEquals("2,5", result("1,5+1", ','))
+        assertEquals("2.5", result("1.5+1", '.'))
+    }
+
+    @Test
     fun searchesAreNotSums() {
+        assertNull(result("Pinterest"))
+        assertNull(result("Top 10!"))
+        assertNull(result("pi"))
         assertNull(result("2026"))
         assertNull(result("whatsapp"))
         assertNull(result("0176 1234567"))

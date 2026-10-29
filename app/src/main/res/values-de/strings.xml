@@ -204,6 +204,16 @@
     <string name="notification_access_label">Benachrichtigungspunkte</string>
     <string name="menu_widgets">Widgets</string>
     <string name="menu_app_timer">App-Timer</string>
+    <string name="menu_bubble">Bubble</string>
+    <string name="timer_started">Timer gestartet</string>
+    <string name="action_timer">Timer für %1$s starten</string>
+    <string name="action_alarm">Wecker auf %1$s stellen</string>
+    <string name="bubble_allow_notifications">Benachrichtigungen für WEWEWE erlauben, dann erneut auf Bubble tippen. Es wird keine Benachrichtigung angezeigt, eine Bubble braucht nur diese Berechtigung.</string>
+    <string name="bubble_allow_bubbles">Bubbles für WEWEWE erlauben, dann erneut auf Bubble tippen.</string>
+    <string name="bubble_channel">Bubbles</string>
+    <string name="bubble_channel_description">Apps, die vom Startbildschirm als Bubble geöffnet wurden</string>
+    <string name="bubble_message">Als Bubble geöffnet</string>
+    <string name="answer_continue">Mit dem Ergebnis weiterrechnen</string>
     <string name="shortcut_unavailable">Diese Verknüpfung ist gerade nicht verfügbar</string>
     <string name="notification_dots">Benachrichtigungspunkte</string>
     <string name="notification_dots_description">Punkte an App-Symbolen und die Benachrichtigungen im Menü beim langen Drücken, wie auf Pixel-Handys. Benachrichtigungen bleiben im Arbeitsspeicher und werden nie gespeichert.</string>
