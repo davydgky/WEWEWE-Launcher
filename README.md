@@ -131,7 +131,8 @@ einem eigenen Thread, und eine neue Eingabe bricht die vorige Suche ab.
   aber nur wenn kaum eine installierte App passt, ohne Konto und ohne Kennungen. Die CI bricht ab, sobald
   außerhalb von `update/` und `store/` Netzwerkcode auftaucht.
   Den Meldekanal, über den ML Kit Nutzungsstatistiken senden würde, entfernt der Build aus dem Manifest; auch
-  das prüft die CI am fertigen APK. Suchanfragen, Index und Texterkennung bleiben auf dem Gerät.
+  das prüft die CI am fertigen APK. Index, Texterkennung und Gemini Nano bleiben auf dem Gerät, Suchanfragen
+  auch, außer bei den Play-Store-Treffern (siehe oben).
 - Kein Backup (`allowBackup=false`). Der Index liegt im App-Speicher: OCR-Text, Dokument- und
   Notizinhalte in SQLite, alles andere nur im Arbeitsspeicher.
 - Eine Websuche (letzte Zeile der Treffer) übergibt die Eingabe erst auf Antippen an Velo, die
