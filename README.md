@@ -38,6 +38,16 @@ Welche Quelle Android unter welcher Bedingung erlaubt und warum die Architektur 
   (ML Kit Prompt API über AICore), live geschrieben, ohne Internet; nichts verlässt das Handy. Läuft auf
   Geräten mit Gemini Nano für Apps, vor allem Pixel 10; sonst erscheint einfach keine Antwort. Abschaltbar
   in den Einstellungen.
+- **Gemini Nano im ganzen Launcher** (nur auf dem Gerät, abschaltbar):
+  - Sätze werden zu Aktionen: „ruf Mama an“, „schreib Anna, dass ich später komme“, „navigiere nach Hause“,
+    „Termin morgen 15 Uhr Zahnarzt“. Ein Tippen öffnet Telefon, Nachrichten, Karten oder Kalender, wo man
+    bestätigt; Nano führt nie selbst etwas aus.
+  - Apps nach Zweck finden: Nano beschreibt jede App einmal mit Suchbegriffen („bank“, „musik“, „wetter“),
+    während der Startbildschirm offen ist; Apps ohne Kategorie bekommen eine in der App-Mediathek.
+  - „Benachrichtigungen zusammenfassen“ im App-Menü, sobald eine App mehrere hat.
+  - Neue Ordner bekommen von Nano einen passenden Namen.
+  Android erlaubt Gemini Nano nur Apps im Vordergrund und mit einem Akku-Kontingent pro App; Aufgaben, die
+  warten können, lassen der Suche immer den Vortritt.
 - **Timer und Wecker aus der Suche**: „timer 5 min“, „10 minuten timer“, „wecker 7:30“, „wake me at 7 am“;
   Enter oder Antippen startet den Timer bzw. stellt den Wecker in der Uhr-App.
 - **Systemeinstellungen** als Quelle: WLAN, Bluetooth, Akku, Display, Ton, Bitte nicht stören, Standort …

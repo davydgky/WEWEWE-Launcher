@@ -3,6 +3,7 @@ package io.github.davydgky.launcher
 import android.app.Application
 import android.content.Context
 import androidx.datastore.preferences.preferencesDataStore
+import io.github.davydgky.launcher.ai.AppKnowledge
 import io.github.davydgky.launcher.ai.NanoAnswers
 import io.github.davydgky.launcher.apps.AppsRepository
 import io.github.davydgky.launcher.data.LaunchLog
@@ -45,11 +46,13 @@ class LauncherApplication : Application() {
     val torch: Torch by lazy { Torch(this) }
     val notifications: Notifications by lazy { Notifications(this) }
     val nano: NanoAnswers by lazy { NanoAnswers(appScope) }
+    val appKnowledge: AppKnowledge by lazy { AppKnowledge(this, nano, apps, appScope) }
     val perf = PerfStats()
 
     override fun onCreate() {
         super.onCreate()
         // Start indexing right away, before the first frame needs it.
+        appKnowledge.start()
         search.start()
         workspace.start()
     }

@@ -93,6 +93,7 @@ import io.github.davydgky.launcher.core.Answer
 import io.github.davydgky.launcher.core.QuickAction
 import io.github.davydgky.launcher.core.ScoredItem
 import io.github.davydgky.launcher.core.SearchItem
+import io.github.davydgky.launcher.core.SmartAction
 import io.github.davydgky.launcher.core.SourceKind
 import io.github.davydgky.launcher.data.LauncherPrefs
 import io.github.davydgky.launcher.launcherApp
@@ -108,6 +109,8 @@ import io.github.davydgky.launcher.search.SuggestionState
 import io.github.davydgky.launcher.ui.glass.LocalGlassColors
 import io.github.davydgky.launcher.ui.glass.glassWhen
 import java.text.DecimalFormatSymbols
+import java.time.format.DateTimeFormatter
+import java.time.format.FormatStyle
 import com.kyant.backdrop.Backdrop
 import com.kyant.shapes.Capsule
 import com.kyant.shapes.RoundedRectangle
@@ -237,7 +240,9 @@ fun SearchPanel(
             // The result of a sum shows in the field itself, as on a calculator.
             val answer = results.answer?.takeIf { results.query == state.query.text.toString() }
             SearchField(state, focusRequester, backdrop, answer, onSubmit = {
-                // Enter: a timer or alarm, the top hit, else the calculated answer, else the first result, else the web.
+                // Enter: a timer or alarm, a request Gemini Nano understood, the top hit, else the calculated
+                // answer, else the first result, else the web.
+                val smart = aiAnswer?.takeIf { it.query == results.query.trim() }?.action
                 val action = results.action
                 val top = results.results.top?.item
                 val answer = results.answer
@@ -246,6 +251,11 @@ fun SearchPanel(
                     action != null -> {
                         rememberSearch(results.query)
                         actions.run(action)
+                        state.reset()
+                    }
+                    smart != null -> {
+                        rememberSearch(results.query)
+                        actions.runSmart(smart)
                         state.reset()
                     }
                     top != null -> open(top, null)
@@ -320,7 +330,10 @@ private fun LazyListScope.resultItems(
     val aiItem = {
         if (ai != null) {
             item("ai") {
-                Section(null, backdrop) { AiAnswerRow(ai) { actions.copy(ai.text) } }
+                Section(null, backdrop) {
+                    val action = ai.action
+                    if (action != null) SmartActionRow(action) { actions.runSmart(action) } else AiAnswerRow(ai) { actions.copy(ai.text) }
+                }
             }
         }
     }
@@ -494,6 +507,39 @@ private fun AiAnswerRow(answer: AiAnswer, onCopy: () -> Unit) {
                     }
                 }
             }
+        }
+    }
+}
+
+/** A request Gemini Nano understood ("Mama anrufen"), carried out with a tap in the app that does it. */
+@Composable
+private fun SmartActionRow(action: SmartAction, onRun: () -> Unit) {
+    val colors = LocalGlassColors.current
+    val dateFormat = remember { DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM, FormatStyle.SHORT) }
+    val (icon, text) = when (action) {
+        is SmartAction.Call -> R.drawable.ic_call to stringResource(R.string.smart_call, action.who)
+        is SmartAction.Message -> R.drawable.ic_message to stringResource(R.string.smart_message, action.who, action.text)
+        is SmartAction.Mail -> R.drawable.ic_mail to stringResource(R.string.smart_mail, action.who, action.subject.ifEmpty { action.text })
+        is SmartAction.Navigate -> R.drawable.ic_route to stringResource(R.string.smart_navigate, action.place)
+        is SmartAction.Event -> R.drawable.ic_event to stringResource(R.string.smart_event, action.title, action.start.format(dateFormat))
+        is SmartAction.WebSearch -> R.drawable.ic_globe to stringResource(R.string.smart_web, action.query)
+    }
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onRun)
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        SymbolTile(icon, 40.dp)
+        Spacer(Modifier.width(14.dp))
+        Column(Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(painterResource(R.drawable.ic_sparkle), null, Modifier.size(12.dp), tint = MaterialTheme.colorScheme.primary)
+                Spacer(Modifier.width(4.dp))
+                Text(stringResource(R.string.ai_title), color = colors.secondaryContent, style = MaterialTheme.typography.labelMedium)
+            }
+            Text(text, color = colors.content, style = MaterialTheme.typography.titleMedium, maxLines = 3, overflow = TextOverflow.Ellipsis)
         }
     }
 }

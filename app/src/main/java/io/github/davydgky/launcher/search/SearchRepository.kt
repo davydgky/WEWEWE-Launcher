@@ -53,7 +53,7 @@ class SearchRepository(private val app: LauncherApplication, private val scope: 
     private var prefs = LauncherPrefs()
 
     val sources: List<SearchSource> = listOf(
-        AppsSource(app, app.apps, scope),
+        AppsSource(app, app.apps, app.appKnowledge, scope),
         SettingsSource(app),
         ShortcutsSource(app.apps, scope),
         ContactsSource(app),

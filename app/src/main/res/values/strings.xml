@@ -115,6 +115,11 @@
     <string name="category_travel">Travel &amp; maps</string>
     <string name="category_utilities">Utilities</string>
     <string name="category_other">Other</string>
+    <string name="category_shopping">Shopping</string>
+    <string name="category_finance">Finance</string>
+    <string name="category_health">Health &amp; fitness</string>
+    <string name="category_education">Education</string>
+    <string name="category_food">Food &amp; drink</string>
 
     <!-- Search hints -->
     <string name="usage_hint_title">Better suggestions</string>
@@ -208,6 +213,14 @@
     <string name="menu_app_timer">App timer</string>
     <string name="menu_bubble">Bubble</string>
     <string name="ai_title">Gemini Nano</string>
+    <string name="menu_summarize">Summarise notifications</string>
+    <string name="smart_call">Call %1$s</string>
+    <string name="smart_message">Message %1$s: “%2$s”</string>
+    <string name="smart_mail">E-mail %1$s: %2$s</string>
+    <string name="smart_navigate">Directions to %1$s</string>
+    <string name="smart_event">Add to calendar: %1$s · %2$s</string>
+    <string name="smart_web">Search the web: %1$s</string>
+    <string name="smart_contact_not_found">No contact found for “%1$s”</string>
     <string name="ai_footnote">Written on this phone · may contain mistakes</string>
     <string name="setting_ai_answers">Answers from Gemini Nano</string>
     <string name="setting_ai_answers_description">A short answer above the results, written on the phone itself; nothing leaves the device.</string>

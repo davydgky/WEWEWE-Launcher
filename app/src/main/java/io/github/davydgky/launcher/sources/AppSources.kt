@@ -2,17 +2,24 @@ package io.github.davydgky.launcher.sources
 
 import android.content.Context
 import io.github.davydgky.launcher.R
+import io.github.davydgky.launcher.ai.AppKnowledge
 import io.github.davydgky.launcher.apps.AppsRepository
 import io.github.davydgky.launcher.core.SearchItem
 import io.github.davydgky.launcher.core.SourceKind
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 
-/** Installed apps of all visible profiles. */
+/**
+ * Installed apps of all visible profiles, also findable by what they are for ("bank", "musik"), as
+ * Gemini Nano described them ([AppKnowledge]).
+ */
 class AppsSource(
     private val context: Context,
     private val apps: AppsRepository,
+    private val knowledge: AppKnowledge,
     private val scope: CoroutineScope,
 ) : SearchSource(ID) {
 
@@ -20,24 +27,33 @@ class AppsSource(
 
     override suspend fun load(): List<SearchItem> {
         val work = context.getString(R.string.work_profile)
+        val known = knowledge.known.value
         return apps.apps.value.map { app ->
             SearchItem(
                 key = app.key,
                 kind = SourceKind.App,
                 title = app.label,
                 subtitle = if (app.isWorkProfile) work else "",
+                keywords = known[app.packageName]?.keywords.orEmpty(),
                 payload = app,
             )
         }
     }
 
+    @OptIn(FlowPreview::class)
     override fun observe(onChange: () -> Unit): AutoCloseable {
         val job = scope.launch { apps.apps.drop(1).collect { onChange() } }
-        return AutoCloseable { job.cancel() }
+        // New descriptions arrive one app at a time; the index is rebuilt once they pause.
+        val learned = scope.launch { knowledge.known.drop(1).debounce(KNOWLEDGE_PAUSE_MS).collect { onChange() } }
+        return AutoCloseable {
+            job.cancel()
+            learned.cancel()
+        }
     }
 
     companion object {
         const val ID = "apps"
+        private const val KNOWLEDGE_PAUSE_MS = 5_000L
     }
 }
 

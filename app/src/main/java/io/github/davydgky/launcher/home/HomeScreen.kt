@@ -106,6 +106,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.davydgky.launcher.R
 import io.github.davydgky.launcher.core.SearchItem
 import io.github.davydgky.launcher.core.SourceKind
+import io.github.davydgky.launcher.ai.NanoAnswers
 import io.github.davydgky.launcher.launcherApp
 import io.github.davydgky.launcher.notifications.Notifications
 import io.github.davydgky.launcher.search.AppTarget
@@ -150,6 +151,7 @@ fun HomeScreen(
     controller.dockSize = workspace.dock.size
     controller.density = LocalDensity.current.density
     controller.folderName = { keys -> folderName(context, keys.mapNotNull(apps::get)) }
+    controller.smartFolderName = { keys -> context.launcherApp.nano.folderName(keys.mapNotNull(apps::get).map { it.label }) }
 
     val pagerState = rememberPagerState { homePages + 1 }
     controller.pager = pagerState
@@ -1132,6 +1134,25 @@ private fun AppMenuExtras(app: AppTarget, controller: HomeController, onDismiss:
             onClick = {
                 onDismiss()
                 launcher.notifications.open(notification)
+            },
+        )
+    }
+    // Several notifications: Gemini Nano sums them up right here.
+    val all = byApp[Notifications.keyOf(app.packageName, app.user)].orEmpty()
+    val nanoState by launcher.nano.availability.collectAsStateWithLifecycle()
+    if (all.size >= 2 && nanoState == NanoAnswers.Availability.Ready) {
+        val scope = rememberCoroutineScope()
+        var summary by remember(app.key) { mutableStateOf<String?>(null) }
+        DropdownMenuItem(
+            text = { Text(summary ?: stringResource(R.string.menu_summarize), maxLines = if (summary == null) 1 else 8) },
+            leadingIcon = { Icon(painterResource(R.drawable.ic_sparkle), null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary) },
+            enabled = summary == null,
+            onClick = {
+                summary = "…"
+                scope.launch {
+                    launcher.nano.summarize(app.label, all.map { listOf(it.title, it.text).filter(String::isNotBlank).joinToString(": ") })
+                        .collect { summary = it }
+                }
             },
         )
     }

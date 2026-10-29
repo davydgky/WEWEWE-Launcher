@@ -137,6 +137,9 @@ class HomeController(
     /** Name for a new folder from the apps it starts with. */
     var folderName: (List<String>) -> String = { "" }
 
+    /** A better name from Gemini Nano, given a moment later; null without it. */
+    var smartFolderName: (suspend (List<String>) -> String?)? = null
+
     /** Grid area of each page and of the dock, in root coordinates. */
     val pageBounds = HashMap<Int, Rect>()
     var dockBounds = Rect.Zero
@@ -284,15 +287,28 @@ class HomeController(
             }
             is DropTarget.MakeFolder -> {
                 val targetApp = (workspace.item(target.targetId) as? AppItem)?.appKey ?: return
-                val name = folderName(listOfNotNull(targetApp, source.draggedApp))
+                val keys = listOfNotNull(targetApp, source.draggedApp)
+                val name = folderName(keys)
                 when (source) {
                     is DragSource.Item -> repository.update { madeRoom(it).makeFolder(source.item.id, target.targetId, name) }
                     is DragSource.Dock -> repository.makeFolderFromDock(source.appKey, target.targetId, name)
                 }
+                renameSmartly(keys, name)
             }
             is DropTarget.IntoFolder -> source.draggedApp?.let { app -> repository.update { madeRoom(it).addToFolder(app, target.folderId) } }
             is DropTarget.Dock -> source.draggedApp?.let { repository.toDock(it, target.index) }
             null -> Unit
+        }
+    }
+
+    /** Gives a new folder Gemini Nano's name for its apps, unless it was renamed in the meantime. */
+    private fun renameSmartly(keys: List<String>, name: String) {
+        val ask = smartFolderName ?: return
+        scope.launch {
+            val better = ask(keys) ?: return@launch
+            val folder = repository.workspace.value?.items?.filterIsInstance<FolderItem>()
+                ?.firstOrNull { it.name == name && it.apps.containsAll(keys) } ?: return@launch
+            if (better != name) repository.renameFolder(folder.id, better)
         }
     }
 

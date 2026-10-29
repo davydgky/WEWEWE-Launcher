@@ -5,11 +5,13 @@ import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.davydgky.launcher.ai.NanoAnswers
+import io.github.davydgky.launcher.ai.NanoReply
 import io.github.davydgky.launcher.core.Answer
 import io.github.davydgky.launcher.core.Answers
 import io.github.davydgky.launcher.core.QuickAction
 import io.github.davydgky.launcher.core.QuickActions
 import io.github.davydgky.launcher.core.SearchResults
+import io.github.davydgky.launcher.core.SmartAction
 import io.github.davydgky.launcher.launcherApp
 import java.text.DecimalFormatSymbols
 import kotlinx.coroutines.CancellationException
@@ -44,8 +46,11 @@ class ResultsState(
     }
 }
 
-/** Gemini Nano's answer to [query] so far; [done] once it is complete. */
-class AiAnswer(val query: String, val text: String, val done: Boolean)
+/**
+ * Gemini Nano's reply to [query]: an answer [text] so far ([done] once complete), or a request to the
+ * phone ([action], "ruf Mama an") to confirm with a tap.
+ */
+class AiAnswer(val query: String, val text: String, val done: Boolean, val action: SmartAction? = null)
 
 /**
  * Runs searches on a single background thread. A new input cancels the search for the previous one,
@@ -98,17 +103,29 @@ class SearchViewModel(application: Application) : AndroidViewModel(application) 
             if (nano.availability.value != NanoAnswers.Availability.Ready) return@transformLatest
             emit(AiAnswer(query, "", done = false))
             var last = ""
+            var action: SmartAction? = null
             try {
-                nano.answer(query).collect { text ->
-                    last = text
-                    emit(AiAnswer(query, text, done = false))
+                nano.reply(query).collect { reply ->
+                    when (reply) {
+                        is NanoReply.Text -> {
+                            last = reply.text
+                            emit(AiAnswer(query, reply.text, done = false))
+                        }
+                        is NanoReply.Command -> action = reply.action
+                    }
                 }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 Log.w(TAG, "Gemini Nano failed", e)
             }
-            emit(if (last.isEmpty()) null else AiAnswer(query, last, done = true))
+            emit(
+                when {
+                    action != null -> AiAnswer(query, "", done = true, action = action)
+                    last.isEmpty() -> null
+                    else -> AiAnswer(query, last, done = true)
+                },
+            )
         }
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 

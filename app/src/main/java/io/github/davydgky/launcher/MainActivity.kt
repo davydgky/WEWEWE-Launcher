@@ -27,6 +27,7 @@ import io.github.davydgky.launcher.widgets.WidgetAdder
 import kotlin.math.ceil
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -85,6 +86,13 @@ class MainActivity : ComponentActivity() {
         // Checks at most every few hours; the home screen resumes often.
         launcherApp.updater.onAppStarted()
         launcherApp.updater.onAppResumed()
+        // Gemini Nano describes new apps for the search, only while the home screen is in use.
+        lifecycleScope.launch { if (launcherApp.settings.prefs.first().aiAnswers) launcherApp.appKnowledge.resume() }
+    }
+
+    override fun onPause() {
+        launcherApp.appKnowledge.pause()
+        super.onPause()
     }
 
     override fun onStop() {

@@ -114,6 +114,11 @@
     <string name="category_travel">Reisen &amp; Karten</string>
     <string name="category_utilities">Dienstprogramme</string>
     <string name="category_other">Andere</string>
+    <string name="category_shopping">Shopping</string>
+    <string name="category_finance">Finanzen</string>
+    <string name="category_health">Gesundheit &amp; Fitness</string>
+    <string name="category_education">Bildung</string>
+    <string name="category_food">Essen &amp; Trinken</string>
 
     <!-- Hinweise in der Suche -->
     <string name="usage_hint_title">Bessere Vorschläge</string>
@@ -207,6 +212,14 @@
     <string name="menu_app_timer">App-Timer</string>
     <string name="menu_bubble">Bubble</string>
     <string name="ai_title">Gemini Nano</string>
+    <string name="menu_summarize">Benachrichtigungen zusammenfassen</string>
+    <string name="smart_call">%1$s anrufen</string>
+    <string name="smart_message">Nachricht an %1$s: „%2$s“</string>
+    <string name="smart_mail">E-Mail an %1$s: %2$s</string>
+    <string name="smart_navigate">Route nach %1$s</string>
+    <string name="smart_event">In den Kalender: %1$s · %2$s</string>
+    <string name="smart_web">Im Web suchen: %1$s</string>
+    <string name="smart_contact_not_found">Kein Kontakt für „%1$s“ gefunden</string>
     <string name="ai_footnote">Auf dem Handy erzeugt · kann Fehler enthalten</string>
     <string name="setting_ai_answers">Antworten von Gemini Nano</string>
     <string name="setting_ai_answers_description">Eine kurze Antwort über den Treffern, auf dem Handy selbst erzeugt; nichts verlässt das Gerät.</string>

@@ -28,8 +28,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.kyant.backdrop.backdrops.layerBackdrop
-import com.kyant.backdrop.backdrops.rememberLayerBackdrop
+import io.github.davydgky.launcher.ai.AppKnowledge
 import io.github.davydgky.launcher.data.LauncherPrefs
 import io.github.davydgky.launcher.home.AppLibrary
 import io.github.davydgky.launcher.home.CategoryOverlay
@@ -43,11 +42,14 @@ import io.github.davydgky.launcher.home.WidgetPicker
 import io.github.davydgky.launcher.home.Workspace
 import io.github.davydgky.launcher.home.homeDragTracker
 import io.github.davydgky.launcher.launcherApp
+import io.github.davydgky.launcher.search.AppTarget
 import io.github.davydgky.launcher.search.ResultActions
 import io.github.davydgky.launcher.search.SearchViewModel
 import io.github.davydgky.launcher.ui.glass.LocalGlassColors
 import io.github.davydgky.launcher.ui.glass.frostedBackdrop
 import io.github.davydgky.launcher.ui.glass.glassColors
+import com.kyant.backdrop.backdrops.layerBackdrop
+import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 import kotlin.math.max
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -92,10 +94,10 @@ fun LauncherScreen(
     val shortcuts = remember(shortcutList) { shortcutList.associateBy { it.key } }
     val workspace by app.workspace.workspace.collectAsStateWithLifecycle()
     val library by produceState(emptyList<LibraryGroup>(), app) {
-        combine(app.apps.apps, app.suggestions.current, app.usage.appPrior) { list, suggestions, prior ->
-            Triple(list, suggestions.apps, prior)
-        }.collect { (list, suggested, prior) ->
-            value = withContext(Dispatchers.Default) { AppLibrary.groups(list, suggested, prior) }
+        combine(app.apps.apps, app.suggestions.current, app.usage.appPrior, app.appKnowledge.known) { list, suggestions, prior, learned ->
+            LibraryInput(list, suggestions.apps, prior, learned)
+        }.collect { input ->
+            value = withContext(Dispatchers.Default) { AppLibrary.groups(input.apps, input.suggested, input.prior, input.learned) }
         }
     }
     val suggestions by app.suggestions.current.collectAsStateWithLifecycle()
@@ -200,3 +202,10 @@ fun LauncherScreen(
 }
 
 private const val OVERLAY_FADE_MS = 220
+
+private class LibraryInput(
+    val apps: List<AppTarget>,
+    val suggested: List<AppTarget>,
+    val prior: Map<String, Float>,
+    val learned: Map<String, AppKnowledge.Info>,
+)

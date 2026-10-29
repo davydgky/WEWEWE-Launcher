@@ -20,9 +20,11 @@ import io.github.davydgky.launcher.R
 import io.github.davydgky.launcher.bubbles.Bubbles
 import io.github.davydgky.launcher.core.QuickAction
 import io.github.davydgky.launcher.core.SearchItem
+import io.github.davydgky.launcher.core.SmartAction
 import io.github.davydgky.launcher.launcherApp
 import io.github.davydgky.launcher.settings.SettingsActivity
 import io.github.davydgky.launcher.sources.Velo
+import java.time.ZoneId
 
 /**
  * Opens results. Every launch is written to the launch log, which feeds the suggestions and ranks
@@ -91,6 +93,68 @@ class ResultActions(private val activity: Activity) {
         val email = contact.email ?: return
         start(Intent(Intent.ACTION_SENDTO, Uri.fromParts("mailto", email, null)), null, null)
     }
+
+    /**
+     * Carries out a request Gemini Nano recognised ("ruf Mama an"): always through the app that does it,
+     * where the user confirms (dialer, messages, mail, maps, calendar), never on its own.
+     */
+    fun runSmart(action: SmartAction) {
+        when (action) {
+            is SmartAction.Call -> {
+                val number = numberOf(action.who)
+                if (number == null) toast(activity.getString(R.string.smart_contact_not_found, action.who))
+                start(Intent(Intent.ACTION_DIAL, number?.let { Uri.fromParts("tel", it, null) }), null, null)
+            }
+            is SmartAction.Message -> {
+                val number = numberOf(action.who)
+                if (number == null) toast(activity.getString(R.string.smart_contact_not_found, action.who))
+                start(Intent(Intent.ACTION_SENDTO, Uri.fromParts("smsto", number.orEmpty(), null)).putExtra("sms_body", action.text), null, null)
+            }
+            is SmartAction.Mail -> {
+                val address = if ('@' in action.who) action.who else contactOf(action.who)?.email
+                if (address == null) toast(activity.getString(R.string.smart_contact_not_found, action.who))
+                start(
+                    Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:"))
+                        .putExtra(Intent.EXTRA_EMAIL, listOfNotNull(address).toTypedArray())
+                        .putExtra(Intent.EXTRA_SUBJECT, action.subject)
+                        .putExtra(Intent.EXTRA_TEXT, action.text),
+                    null, null,
+                )
+            }
+            is SmartAction.Navigate -> {
+                val place = Uri.encode(action.place)
+                if (!start(Intent(Intent.ACTION_VIEW, Uri.parse("google.navigation:q=$place")), null, null, quiet = true)) {
+                    start(Intent(Intent.ACTION_VIEW, Uri.parse("geo:0,0?q=$place")), null, null)
+                }
+            }
+            is SmartAction.Event -> {
+                val zone = ZoneId.systemDefault()
+                val begin = action.start.atZone(zone).toInstant().toEpochMilli()
+                val end = (action.end ?: action.start.plusHours(1)).atZone(zone).toInstant().toEpochMilli()
+                start(
+                    Intent(Intent.ACTION_INSERT, CalendarContract.Events.CONTENT_URI)
+                        .putExtra(CalendarContract.Events.TITLE, action.title)
+                        .putExtra(CalendarContract.Events.EVENT_LOCATION, action.place)
+                        .putExtra(CalendarContract.EXTRA_EVENT_BEGIN_TIME, begin)
+                        .putExtra(CalendarContract.EXTRA_EVENT_END_TIME, end),
+                    null, null,
+                )
+            }
+            is SmartAction.WebSearch -> webSearch(action.query)
+        }
+    }
+
+    /** A number as typed, or the number of the contact that best matches [who]. */
+    private fun numberOf(who: String): String? =
+        if (who.matches(PHONE)) who else contactOf(who)?.phone
+
+    private fun contactOf(who: String): ContactTarget? {
+        val results = app.search.search(who)
+        return (listOfNotNull(results.top) + results.groups.flatMap { it.items })
+            .firstNotNullOfOrNull { it.item.payload as? ContactTarget }
+    }
+
+    private fun toast(message: String) = Toast.makeText(activity, message, Toast.LENGTH_SHORT).show()
 
     /** Copies a calculated result; Android confirms the copy itself. */
     fun copy(text: String) {
@@ -226,5 +290,6 @@ class ResultActions(private val activity: Activity) {
         const val OBSIDIAN = "md.obsidian"
         const val PLAY_STORE = "com.android.vending"
         const val GOOGLE_PHOTOS = "com.google.android.apps.photos"
+        val PHONE = Regex("^[+0-9 ()/-]{3,}$")
     }
 }
