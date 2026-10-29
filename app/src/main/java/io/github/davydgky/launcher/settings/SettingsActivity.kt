@@ -309,6 +309,22 @@ private fun SettingsScreen(activity: ComponentActivity) {
                     if (enabled) app.nano.prepare()
                 }
                 HorizontalDivider()
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(stringResource(R.string.setting_store_results), style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            stringResource(R.string.setting_store_results_description),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    Switch(checked = prefs.storeResults, onCheckedChange = { enabled -> scope.launch { app.settings.setStoreResults(enabled) } })
+                }
+                HorizontalDivider()
                 SourceInfos.forEachIndexed { index, info ->
                     if (index > 0) HorizontalDivider()
                     SourceRow(info, status[info.id], onToggle = { enabled ->

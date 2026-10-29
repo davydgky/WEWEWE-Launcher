@@ -48,6 +48,9 @@ Welche Quelle Android unter welcher Bedingung erlaubt und warum die Architektur 
   - Neue Ordner bekommen von Nano einen passenden Namen.
   Android erlaubt Gemini Nano nur Apps im Vordergrund und mit einem Akku-Kontingent pro App; Aufgaben, die
   warten können, lassen der Suche immer den Vortritt.
+- **Apps aus dem Play Store**: Passt kaum eine installierte App („bahn tickets“), zeigt die Suche passende
+  Apps aus dem Play Store mit Icon, Bewertung und Download-Knopf (öffnet das Installationsfenster des
+  Stores). Ohne Netz schlägt Gemini Nano bekannte Apps vor.
 - **Timer und Wecker aus der Suche**: „timer 5 min“, „10 minuten timer“, „wecker 7:30“, „wake me at 7 am“;
   Enter oder Antippen startet den Timer bzw. stellt den Wecker in der Uhr-App.
 - **Systemeinstellungen** als Quelle: WLAN, Bluetooth, Akku, Display, Ton, Bitte nicht stören, Standort …
@@ -123,8 +126,10 @@ einem eigenen Thread, und eine neue Eingabe bricht die vorige Suche ab.
 
 ## Datenschutz
 
-- **Nur der Updater geht ins Netz.** Die Internetberechtigung gibt es ausschließlich für die Suche nach
-  eigenen Updates bei GitHub. Die CI bricht ab, sobald außerhalb von `update/` Netzwerkcode auftaucht.
+- **Nur zwei Stellen gehen ins Netz.** Der Updater fragt GitHub nach eigenen Updates. Die
+  Play-Store-Treffer (`store/`, in den Einstellungen abschaltbar) schicken die Suchwörter an Google Play,
+  aber nur wenn kaum eine installierte App passt, ohne Konto und ohne Kennungen. Die CI bricht ab, sobald
+  außerhalb von `update/` und `store/` Netzwerkcode auftaucht.
   Den Meldekanal, über den ML Kit Nutzungsstatistiken senden würde, entfernt der Build aus dem Manifest; auch
   das prüft die CI am fertigen APK. Suchanfragen, Index und Texterkennung bleiben auf dem Gerät.
 - Kein Backup (`allowBackup=false`). Der Index liegt im App-Speicher: OCR-Text, Dokument- und

@@ -12,6 +12,7 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -40,6 +41,7 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
@@ -57,6 +59,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -69,6 +72,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
@@ -85,6 +89,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -95,6 +100,7 @@ import io.github.davydgky.launcher.core.ScoredItem
 import io.github.davydgky.launcher.core.SearchItem
 import io.github.davydgky.launcher.core.SmartAction
 import io.github.davydgky.launcher.core.SourceKind
+import io.github.davydgky.launcher.core.StoreApp
 import io.github.davydgky.launcher.data.LauncherPrefs
 import io.github.davydgky.launcher.launcherApp
 import io.github.davydgky.launcher.perf.Metric
@@ -105,6 +111,7 @@ import io.github.davydgky.launcher.search.ResultActions
 import io.github.davydgky.launcher.search.ResultsState
 import io.github.davydgky.launcher.search.SearchViewModel
 import io.github.davydgky.launcher.search.SettingTarget
+import io.github.davydgky.launcher.search.StoreResults
 import io.github.davydgky.launcher.search.SuggestionState
 import io.github.davydgky.launcher.ui.glass.LocalGlassColors
 import io.github.davydgky.launcher.ui.glass.glassWhen
@@ -136,6 +143,7 @@ fun SearchPanel(
     val app = context.launcherApp
     val results by viewModel.results.collectAsStateWithLifecycle()
     val aiAnswer by viewModel.aiAnswer.collectAsStateWithLifecycle()
+    val storeApps by viewModel.storeApps.collectAsStateWithLifecycle()
     val suggestions by app.suggestions.current.collectAsStateWithLifecycle()
     val usageAccess by app.usage.hasAccess.collectAsStateWithLifecycle()
     val prefs by app.settings.prefs.collectAsStateWithLifecycle(initialValue = LauncherPrefs())
@@ -234,7 +242,12 @@ fun SearchPanel(
                     }
                     suggestionItems(suggestions, actions, state, backdrop)
                 } else {
-                    resultItems(results, aiAnswer?.takeIf { it.query == results.query.trim() }, open, external, actions, backdrop)
+                    resultItems(
+                        results,
+                        aiAnswer?.takeIf { it.query == results.query.trim() },
+                        storeApps?.takeIf { it.query == results.query.trim() },
+                        open, external, actions, backdrop,
+                    )
                 }
             }
             // The result of a sum shows in the field itself, as on a calculator.
@@ -309,6 +322,7 @@ private fun LazyListScope.suggestionItems(
 private fun LazyListScope.resultItems(
     state: ResultsState,
     ai: AiAnswer?,
+    store: StoreResults?,
     open: (SearchItem, Rect?) -> Unit,
     external: (String, (String) -> Unit) -> Unit,
     actions: ResultActions,
@@ -366,6 +380,17 @@ private fun LazyListScope.resultItems(
                         if (index > 0) RowDivider()
                         ResultRow(scored.item, query, open, trailing = contactTrailing(scored.item, actions))
                     }
+                }
+            }
+        }
+    }
+    // Not installed yet: apps from the Play Store, with a download button.
+    if (store != null) {
+        item("store") {
+            Section(stringResource(R.string.section_store), backdrop) {
+                store.apps.forEachIndexed { index, app ->
+                    if (index > 0) RowDivider()
+                    StoreAppRow(app, onOpen = { actions.openStorePage(app.packageName) }, onInstall = { actions.installFromStore(app.packageName) })
                 }
             }
         }
@@ -508,6 +533,54 @@ private fun AiAnswerRow(answer: AiAnswer, onCopy: () -> Unit) {
                 }
             }
         }
+    }
+}
+
+/** A Play Store app: tap for its page, the download button for the install sheet. */
+@Composable
+private fun StoreAppRow(app: StoreApp, onOpen: () -> Unit, onInstall: () -> Unit) {
+    val colors = LocalGlassColors.current
+    val subtitle = if (app.suggested) {
+        stringResource(R.string.store_suggested)
+    } else {
+        listOf(app.developer, app.rating.takeIf { it.isNotEmpty() }?.let { "$it ★" }).filterNot { it.isNullOrEmpty() }.joinToString(" · ")
+    }
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onOpen)
+            .padding(start = 14.dp, end = 8.dp, top = 10.dp, bottom = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        StoreIcon(app.iconUrl, 40.dp)
+        Spacer(Modifier.width(14.dp))
+        Column(Modifier.weight(1f)) {
+            Text(app.title, color = colors.content, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (subtitle.isNotEmpty()) {
+                Text(subtitle, color = colors.secondaryContent, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+        }
+        IconButton(onClick = onInstall) {
+            Box(
+                Modifier.size(34.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(painterResource(R.drawable.ic_download), stringResource(R.string.store_install), Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onPrimary)
+            }
+        }
+    }
+}
+
+/** A store icon, loaded once from the store; the store symbol until then or without one. */
+@Composable
+private fun StoreIcon(url: String?, size: Dp) {
+    val store = LocalContext.current.launcherApp.playStore
+    val bitmap by produceState<ImageBitmap?>(null, url) { value = url?.let { store.icon(it) } }
+    val image = bitmap
+    if (image != null) {
+        Image(image, null, Modifier.size(size).clip(RoundedCornerShape(size * 0.24f)))
+    } else {
+        SymbolTile(R.drawable.ic_store, size)
     }
 }
 

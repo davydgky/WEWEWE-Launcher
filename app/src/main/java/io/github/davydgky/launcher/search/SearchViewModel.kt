@@ -12,6 +12,8 @@ import io.github.davydgky.launcher.core.QuickAction
 import io.github.davydgky.launcher.core.QuickActions
 import io.github.davydgky.launcher.core.SearchResults
 import io.github.davydgky.launcher.core.SmartAction
+import io.github.davydgky.launcher.core.SourceKind
+import io.github.davydgky.launcher.core.StoreApp
 import io.github.davydgky.launcher.launcherApp
 import java.text.DecimalFormatSymbols
 import kotlinx.coroutines.CancellationException
@@ -22,6 +24,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.distinctUntilChangedBy
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapLatest
@@ -52,6 +55,9 @@ class ResultsState(
  */
 class AiAnswer(val query: String, val text: String, val done: Boolean, val action: SmartAction? = null)
 
+/** Apps from the Play Store for [query]; shown when few installed apps match. */
+class StoreResults(val query: String, val apps: List<StoreApp>)
+
 /**
  * Runs searches on a single background thread. A new input cancels the search for the previous one,
  * so fast typing never queues up work.
@@ -78,6 +84,9 @@ class SearchViewModel(application: Application) : AndroidViewModel(application) 
         /** Gemini Nano starts once typing pauses this long; every keystroke would only cancel it. */
         const val AI_PAUSE_MS = 280L
         const val MIN_AI_CHARS = 3
+        /** The store is asked once typing pauses this long, not for every letter. */
+        const val STORE_PAUSE_MS = 600L
+        const val MIN_STORE_CHARS = 3
     }
 
     private val nano = application.launcherApp.nano
@@ -126,6 +135,36 @@ class SearchViewModel(application: Application) : AndroidViewModel(application) 
                     else -> AiAnswer(query, last, done = true)
                 },
             )
+        }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
+    private val launcher = application.launcherApp
+
+    /**
+     * Play Store apps for the current input, once typing pauses, when at most one installed app matches
+     * and the input is not a sum or a timer: "bahn tickets" shows the store, "whatsapp" does not.
+     */
+    val storeApps: StateFlow<StoreResults?> = results
+        .distinctUntilChangedBy { it.query }
+        .transformLatest { state ->
+            emit(null)
+            val query = state.query.trim()
+            if (query.length < MIN_STORE_CHARS || state.answer != null || state.action != null) return@transformLatest
+            val top = if (state.results.top?.item?.kind == SourceKind.App) 1 else 0
+            val listed = state.results.groups.firstOrNull { it.kind == SourceKind.App }?.items?.size ?: 0
+            if (top + listed > 1) return@transformLatest
+            if (!settings.prefs.first().storeResults) return@transformLatest
+            delay(STORE_PAUSE_MS)
+            val installed = launcher.apps.apps.value.mapTo(HashSet()) { it.packageName }
+            val found = try {
+                launcher.playStore.search(query, installed)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.w(TAG, "Play Store search failed", e)
+                emptyList()
+            }
+            if (found.isNotEmpty()) emit(StoreResults(query, found))
         }
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 

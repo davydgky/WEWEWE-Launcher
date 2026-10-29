@@ -213,6 +213,11 @@
     <string name="menu_app_timer">App timer</string>
     <string name="menu_bubble">Bubble</string>
     <string name="ai_title">Gemini Nano</string>
+    <string name="section_store">From the Play Store</string>
+    <string name="store_install">Install</string>
+    <string name="store_suggested">Suggested by Gemini Nano</string>
+    <string name="setting_store_results">Play Store results</string>
+    <string name="setting_store_results_description">When hardly any installed app matches, apps from the Play Store with a download button. Sends the search words to Google Play.</string>
     <string name="menu_summarize">Summarise notifications</string>
     <string name="smart_call">Call %1$s</string>
     <string name="smart_message">Message %1$s: “%2$s”</string>

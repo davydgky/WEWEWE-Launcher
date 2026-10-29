@@ -42,9 +42,9 @@ jobs:
         run: ./gradlew --stacktrace :core:test assembleDebug assembleRelease testDebugUnitTest lintDebug
 
       # Searches never leave the device: the updater is the only code that may open connections.
-      - name: Check that only the updater uses the network
+      - name: Check that only the updater and the Play Store results use the network
         run: |
-          OFFENDERS=$(grep -rlE "java\.net\.|HttpURLConnection|URLConnection|okhttp3|java\.nio\.channels\.SocketChannel" app/src/main/java core/src/main | grep -v "/update/" || true)
+          OFFENDERS=$(grep -rlE "java\.net\.|HttpURLConnection|URLConnection|okhttp3|java\.nio\.channels\.SocketChannel" app/src/main/java core/src/main | grep -vE "/update/|/store/" || true)
           if [ -n "$OFFENDERS" ]; then
             echo "::error::network code outside the updater: $OFFENDERS"
             exit 1

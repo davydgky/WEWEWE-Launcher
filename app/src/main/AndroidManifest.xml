@@ -4,8 +4,10 @@
 
     <!--
         Network access exists only for the updater (update/AppUpdater.kt), which talks to this
-        repository's GitHub releases. CI checks that no other code opens connections, and ML Kit's
-        usage reporting is left out of the build, so nothing about searches leaves the device.
+        repository's GitHub releases, and for the Play Store results in the search (store/PlayStore.kt,
+        can be switched off), which send the search words to Google Play when hardly any installed app
+        matches. CI checks that no other code opens connections, and ML Kit's usage reporting is left
+        out of the build, so nothing else about searches leaves the device.
     -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />

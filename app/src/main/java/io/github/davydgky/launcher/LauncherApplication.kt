@@ -16,6 +16,7 @@ import io.github.davydgky.launcher.search.IconCache
 import io.github.davydgky.launcher.search.SearchRepository
 import io.github.davydgky.launcher.search.Suggestions
 import io.github.davydgky.launcher.search.Torch
+import io.github.davydgky.launcher.store.PlayStore
 import io.github.davydgky.launcher.update.AppUpdater
 import io.github.davydgky.launcher.usage.UsageHistory
 import io.github.davydgky.launcher.widgets.WidgetHost
@@ -47,6 +48,7 @@ class LauncherApplication : Application() {
     val notifications: Notifications by lazy { Notifications(this) }
     val nano: NanoAnswers by lazy { NanoAnswers(appScope) }
     val appKnowledge: AppKnowledge by lazy { AppKnowledge(this, nano, apps, appScope) }
+    val playStore: PlayStore by lazy { PlayStore(this, nano) }
     val perf = PerfStats()
 
     override fun onCreate() {

@@ -171,6 +171,25 @@ class ResultActions(private val activity: Activity) {
         }
     }
 
+    /**
+     * Installs an app from the Play Store: the store's install sheet over the launcher where the store
+     * offers it to the caller, its app page otherwise. Installing always needs the user's tap in the store.
+     */
+    fun installFromStore(packageName: String) {
+        val sheet = Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=$packageName&overlay=true&callerId=${activity.packageName}"))
+            .setPackage(PLAY_STORE)
+            .putExtra("overlay", true)
+            .putExtra("callerId", activity.packageName)
+        if (!start(sheet, null, null, quiet = true)) openStorePage(packageName)
+    }
+
+    fun openStorePage(packageName: String) {
+        val store = Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=$packageName")).setPackage(PLAY_STORE)
+        if (!start(store, null, null, quiet = true)) {
+            start(Intent(Intent.ACTION_VIEW, Uri.parse("https://play.google.com/store/apps/details?id=$packageName")), null, null)
+        }
+    }
+
     /** Google Photos is installed: its own search covers the pictures that are only in the cloud. */
     val hasGooglePhotos: Boolean by lazy { activity.packageManager.getLaunchIntentForPackage(GOOGLE_PHOTOS) != null }
 
