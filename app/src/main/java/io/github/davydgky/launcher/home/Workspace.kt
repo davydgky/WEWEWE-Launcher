@@ -130,6 +130,15 @@ data class Workspace(
     }
 
     /**
+     * Where every element would stand after [move], keeping page numbers: what the home screen shows
+     * while [id] hovers over [target], so the others make room before the finger lifts.
+     */
+    fun previewMove(id: Long, target: Cell): Map<Long, Cell> {
+        val item = item(id) ?: return cells()
+        return grid.place(cells(), id, target.copy(w = item.cell.w, h = item.cell.h))
+    }
+
+    /**
      * Puts an app on the home screen at [target], or on the first free cell. An app is only ever in one
      * place, so it leaves the dock, a folder or its previous cell.
      */

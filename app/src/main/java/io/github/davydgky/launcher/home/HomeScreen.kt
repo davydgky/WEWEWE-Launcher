@@ -8,12 +8,16 @@ import android.graphics.Rect
 import android.os.Bundle
 import android.util.SizeF
 import android.widget.Toast
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.VectorConverter
+import androidx.compose.animation.core.VisibilityThreshold
 import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.animateIntOffsetAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -73,6 +77,7 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.graphicsLayer
@@ -111,6 +116,7 @@ import io.github.davydgky.launcher.ui.ScreenBounds
 import io.github.davydgky.launcher.ui.wallpaperTextColor
 import io.github.davydgky.launcher.widgets.WidgetHost
 import kotlin.math.floor
+import kotlin.math.roundToInt
 import kotlin.random.Random
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -196,6 +202,7 @@ fun HomeScreen(
 }
 
 private val CELL_PADDING = 4.dp
+private val CELL_SPRING = spring(stiffness = Spring.StiffnessMediumLow, visibilityThreshold = IntOffset.VisibilityThreshold)
 private val SEARCH_BUTTON_SPACE = 30.dp
 
 /** Apps shown in an App Library box; with more, the last slot shows the rest in miniature. */
@@ -310,12 +317,27 @@ private fun WorkspacePage(
             }
             else -> Unit
         }
-        CompositionLocalProvider(LocalIconSize provides iconSize) { workspace.itemsOn(page).forEach { item ->
+        // While an element is dragged the others stand where they make room for it, maybe on another
+        // page; the dragged one keeps its place (unseen), so its gesture is never moved around.
+        val dragged = (drag?.source as? DragSource.Item)?.item?.id
+        fun cellOf(item: HomeItem) = if (drag == null || item.id == dragged) item.cell else drag.cellOf(item)
+        val drop = controller.drop
+        CompositionLocalProvider(LocalIconSize provides iconSize) { workspace.items.filter { cellOf(it).page == page }.forEach { item ->
             key(item.id) {
+                val cell = cellOf(item)
                 val target = with(density) {
-                    IntOffset((cellW * item.cell.x).roundToPx(), (cellH * item.cell.y).roundToPx())
+                    IntOffset((cellW * cell.x).roundToPx(), (cellH * cell.y).roundToPx())
                 }
-                val offset by animateIntOffsetAsState(target, label = "cell")
+                val offset = remember { Animatable(target, IntOffset.VectorConverter) }
+                LaunchedEffect(target, drop) {
+                    if (drop != null && drop.id == item.id) {
+                        // Let go: glide from under the finger into the cell instead of from the old one.
+                        val origin = controller.pageBounds[page]?.topLeft ?: Offset.Zero
+                        offset.snapTo(IntOffset((drop.topLeft.x - origin.x).roundToInt(), (drop.topLeft.y - origin.y).roundToInt()))
+                        controller.drop = null
+                    }
+                    offset.animateTo(target, CELL_SPRING)
+                }
                 val highlighted = when (val t = drag?.target) {
                     is DropTarget.MakeFolder -> t.targetId == item.id
                     is DropTarget.IntoFolder -> t.folderId == item.id
@@ -323,10 +345,11 @@ private fun WorkspacePage(
                 }
                 Box(
                     Modifier
-                        .offset { offset }
-                        .size(cellW * item.cell.w, cellH * item.cell.h)
+                        .offset { offset.value }
+                        .size(cellW * cell.w, cellH * cell.h)
                         .graphicsLayer {
-                            alpha = if ((drag?.source as? DragSource.Item)?.item?.id == item.id) 0.25f else 1f
+                            // The dragged element shows under the finger; the dropped one until it glides.
+                            alpha = if (item.id == dragged || drop?.id == item.id) 0f else 1f
                             val scale = if (highlighted) 1.12f else 1f
                             scaleX = scale
                             scaleY = scale
@@ -375,6 +398,7 @@ private fun HomeAppIcon(app: AppTarget, source: DragSource, controller: HomeCont
     var menu by remember(controller.menuEpoch) { mutableStateOf(false) }
     var size by remember { mutableStateOf(IntSize.Zero) }
     val haptics = LocalHapticFeedback.current
+    val iconSize = LocalIconSize.current
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
         Column(
             Modifier
@@ -389,12 +413,10 @@ private fun HomeAppIcon(app: AppTarget, source: DragSource, controller: HomeCont
                             controller.itemHeld()
                             menu = true
                         },
-                        onDragStart = { pointer, grab ->
+                        onDragStart = { pointer, grab, pointerId ->
                             menu = false
-                            controller.startDrag(source, pointer, grab, size)
+                            controller.startDrag(source, pointer, grab, size, pointerId, iconSize)
                         },
-                        onDrag = controller::moveDrag,
-                        onDragEnd = controller::endDrag,
                         onDown = controller::itemDown,
                         onRelease = controller::itemReleased,
                         editing = { controller.editMode },
@@ -404,7 +426,7 @@ private fun HomeAppIcon(app: AppTarget, source: DragSource, controller: HomeCont
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Box {
-                AppIconImage(app, LocalIconSize.current, Modifier.onGloballyPositioned(bounds::update))
+                AppIconImage(app, iconSize, Modifier.onGloballyPositioned(bounds::update))
                 if (notificationCount(app) > 0) NotificationDot(10.dp, Modifier.align(Alignment.TopEnd))
             }
             if (showLabel) {
@@ -445,6 +467,7 @@ private fun FolderCell(folder: FolderItem, apps: Map<String, AppTarget>, control
     var menu by remember(controller.menuEpoch) { mutableStateOf(false) }
     var size by remember { mutableStateOf(IntSize.Zero) }
     val haptics = LocalHapticFeedback.current
+    val iconSize = LocalIconSize.current
     val members = folder.apps.mapNotNull(apps::get)
     val open = { controller.openFolderId = folder.id }
     Column(
@@ -461,12 +484,10 @@ private fun FolderCell(folder: FolderItem, apps: Map<String, AppTarget>, control
                         controller.itemHeld()
                         menu = true
                     },
-                    onDragStart = { pointer, grab ->
+                    onDragStart = { pointer, grab, pointerId ->
                         menu = false
-                        controller.startDrag(DragSource.Item(folder), pointer, grab, size)
+                        controller.startDrag(DragSource.Item(folder), pointer, grab, size, pointerId, iconSize)
                     },
-                    onDrag = controller::moveDrag,
-                    onDragEnd = controller::endDrag,
                     onDown = controller::itemDown,
                     onRelease = controller::itemReleased,
                     editing = { controller.editMode },
@@ -490,7 +511,7 @@ private fun FolderCell(folder: FolderItem, apps: Map<String, AppTarget>, control
                 FolderGrid(members, folder.style, folder.playful, folder.id) { app, bounds -> controller.actions.launchApp(app, bounds) }
             }
         } else {
-            ClassicFolderIcon(members, LocalIconSize.current)
+            ClassicFolderIcon(members, iconSize)
         }
         if (folder.showsName) {
             Spacer(Modifier.height(if (folder.style.isTile) 4.dp else 6.dp))
@@ -666,6 +687,7 @@ private fun WidgetCell(item: WidgetItem, workspace: Workspace, cellW: Dp, cellH:
     var menu by remember(controller.menuEpoch) { mutableStateOf(false) }
     var size by remember { mutableStateOf(IntSize.Zero) }
     val haptics = LocalHapticFeedback.current
+    val iconSize = LocalIconSize.current
     val widthDp = (cellW * item.cell.w - CELL_PADDING * 2).value
     val heightDp = (cellH * item.cell.h - CELL_PADDING * 2).value
     Box(
@@ -681,12 +703,10 @@ private fun WidgetCell(item: WidgetItem, workspace: Workspace, cellW: Dp, cellH:
                         controller.itemHeld()
                         menu = true
                     },
-                    onDragStart = { pointer, grab ->
+                    onDragStart = { pointer, grab, pointerId ->
                         menu = false
-                        controller.startDrag(DragSource.Item(item), pointer, grab, size)
+                        controller.startDrag(DragSource.Item(item), pointer, grab, size, pointerId, iconSize)
                     },
-                    onDrag = controller::moveDrag,
-                    onDragEnd = controller::endDrag,
                     onDown = controller::itemDown,
                     onRelease = controller::itemReleased,
                     editing = { controller.editMode },
@@ -936,9 +956,7 @@ private fun DockSuggestion(app: AppTarget, workspace: Workspace, controller: Hom
                         controller.itemHeld()
                         menu = true
                     },
-                    onDragStart = { _, _ -> },
-                    onDrag = {},
-                    onDragEnd = {},
+                    onDragStart = { _, _, _ -> },
                     onDown = controller::itemDown,
                     onRelease = controller::itemReleased,
                 ),
@@ -1171,6 +1189,7 @@ private fun ShortcutCell(item: ShortcutItem, target: ShortcutTarget?, controller
     var menu by remember(controller.menuEpoch) { mutableStateOf(false) }
     var size by remember { mutableStateOf(IntSize.Zero) }
     val haptics = LocalHapticFeedback.current
+    val iconSize = LocalIconSize.current
     val app = remember(item.shortcutKey, target) { launcher.apps.appOf(item.userSerial, item.packageName) }
     val label = target?.info?.shortLabel?.toString()?.ifBlank { null } ?: item.label
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
@@ -1190,12 +1209,10 @@ private fun ShortcutCell(item: ShortcutItem, target: ShortcutTarget?, controller
                             controller.itemHeld()
                             menu = true
                         },
-                        onDragStart = { pointer, grab ->
+                        onDragStart = { pointer, grab, pointerId ->
                             menu = false
-                            controller.startDrag(DragSource.Item(item), pointer, grab, size)
+                            controller.startDrag(DragSource.Item(item), pointer, grab, size, pointerId, iconSize)
                         },
-                        onDrag = controller::moveDrag,
-                        onDragEnd = controller::endDrag,
                         onDown = controller::itemDown,
                         onRelease = controller::itemReleased,
                         editing = { controller.editMode },
@@ -1204,7 +1221,7 @@ private fun ShortcutCell(item: ShortcutItem, target: ShortcutTarget?, controller
                 .padding(top = 6.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            ShortcutIcon(item, target, app, LocalIconSize.current, Modifier.onGloballyPositioned(bounds::update))
+            ShortcutIcon(item, target, app, iconSize, Modifier.onGloballyPositioned(bounds::update))
             Spacer(Modifier.height(6.dp))
             IconLabel(label)
         }

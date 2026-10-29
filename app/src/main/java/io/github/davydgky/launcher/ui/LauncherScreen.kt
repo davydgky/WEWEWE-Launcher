@@ -41,6 +41,7 @@ import io.github.davydgky.launcher.home.LibraryGroup
 import io.github.davydgky.launcher.home.PagesOverlay
 import io.github.davydgky.launcher.home.WidgetPicker
 import io.github.davydgky.launcher.home.Workspace
+import io.github.davydgky.launcher.home.homeDragTracker
 import io.github.davydgky.launcher.launcherApp
 import io.github.davydgky.launcher.search.ResultActions
 import io.github.davydgky.launcher.search.SearchViewModel
@@ -147,7 +148,8 @@ fun LauncherScreen(
         Box(
             Modifier
                 .fillMaxSize()
-                .searchGesture(state, distancePx, topInset) { !controller.isEditing && !controller.onLibrary },
+                .searchGesture(state, distancePx, topInset) { !controller.isEditing && !controller.onLibrary }
+                .homeDragTracker(controller),
         ) {
             // Everything the glass refracts: the home screen without its overlays. Only recorded while
             // something made of glass is showing.

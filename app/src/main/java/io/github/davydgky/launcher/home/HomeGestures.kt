@@ -8,6 +8,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerId
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -17,10 +18,11 @@ class HomeItemGestureCallbacks(
     /** Null for elements that handle taps themselves (widgets, the icons inside a folder). */
     val onTap: (() -> Unit)?,
     val onLongPress: () -> Unit,
-    /** [grab] is where inside the element the finger holds it. */
-    val onDragStart: (pointer: Offset, grab: Offset) -> Unit,
-    val onDrag: (pointer: Offset) -> Unit,
-    val onDragEnd: () -> Unit,
+    /**
+     * [grab] is where inside the element the finger holds it. From here on [homeDragTracker] follows the
+     * finger, so the drag goes on even if this element is recomposed elsewhere or removed meanwhile.
+     */
+    val onDragStart: (pointer: Offset, grab: Offset, pointerId: PointerId) -> Unit,
     /** A finger went down on the element (before anyone else decides what the gesture is). */
     val onDown: () -> Unit = {},
     /** The gesture on the element is over, whatever it was. */
@@ -62,24 +64,19 @@ fun Modifier.homeItemGestures(key: Any, callbacks: HomeItemGestureCallbacks): Mo
                         try {
                             down.consume()
                             var dragging = false
-                            try {
-                                while (true) {
-                                    val event = awaitPointerEvent(PointerEventPass.Initial)
-                                    val change = event.changes.firstOrNull { it.id == down.id } ?: break
-                                    change.consume()
-                                    if (!change.pressed) {
-                                        if (!dragging) current.onEditTap?.invoke()
-                                        break
-                                    }
-                                    val coordinates = holder.coordinates ?: continue
-                                    if (!dragging && (change.position - down.position).getDistance() > slop) {
-                                        dragging = true
-                                        current.onDragStart(coordinates.localToRoot(change.position), down.position)
-                                    }
-                                    if (dragging) current.onDrag(coordinates.localToRoot(change.position))
+                            while (true) {
+                                val event = awaitPointerEvent(PointerEventPass.Initial)
+                                val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                                change.consume()
+                                if (!change.pressed) {
+                                    if (!dragging) current.onEditTap?.invoke()
+                                    break
                                 }
-                            } finally {
-                                if (dragging) current.onDragEnd()
+                                val coordinates = holder.coordinates ?: continue
+                                if (!dragging && (change.position - down.position).getDistance() > slop) {
+                                    dragging = true
+                                    current.onDragStart(coordinates.localToRoot(change.position), down.position, down.id)
+                                }
                             }
                         } finally {
                             current.onRelease()
@@ -113,29 +110,49 @@ fun Modifier.homeItemGestures(key: Any, callbacks: HomeItemGestureCallbacks): Mo
                             else -> {
                                 current.onLongPress()
                                 var dragging = false
-                                try {
-                                    while (true) {
-                                        val event = awaitPointerEvent(PointerEventPass.Initial)
-                                        val change = event.changes.firstOrNull { it.id == down.id } ?: break
-                                        // From here on the gesture is ours: children and the pager get nothing.
-                                        change.consume()
-                                        if (!change.pressed) break
-                                        val coordinates = holder.coordinates ?: continue
-                                        if (!dragging && (change.position - down.position).getDistance() > slop) {
-                                            dragging = true
-                                            current.onDragStart(coordinates.localToRoot(change.position), down.position)
-                                        }
-                                        if (dragging) current.onDrag(coordinates.localToRoot(change.position))
+                                while (true) {
+                                    val event = awaitPointerEvent(PointerEventPass.Initial)
+                                    val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                                    // From here on the gesture is ours: children and the pager get nothing.
+                                    change.consume()
+                                    if (!change.pressed) break
+                                    val coordinates = holder.coordinates ?: continue
+                                    if (!dragging && (change.position - down.position).getDistance() > slop) {
+                                        dragging = true
+                                        current.onDragStart(coordinates.localToRoot(change.position), down.position, down.id)
                                     }
-                                } finally {
-                                    // Also when the gesture is cancelled: never leave an element hanging under the finger.
-                                    if (dragging) current.onDragEnd()
                                 }
                             }
                         }
                     } finally {
                         current.onRelease()
                     }
+                }
+            }
+        }
+}
+
+/**
+ * Follows the finger that drags a home screen element, from the root of the screen: the drag goes on
+ * when the element it started on is recomposed, moves to another page or makes room for others, and
+ * ends when the finger lifts or the system cancels the touch.
+ */
+fun Modifier.homeDragTracker(controller: HomeController): Modifier = composed {
+    val holder = remember { CoordinatesHolder() }
+    this
+        .onGloballyPositioned { holder.coordinates = it }
+        .pointerInput(controller) {
+            awaitPointerEventScope {
+                while (true) {
+                    val event = awaitPointerEvent(PointerEventPass.Initial)
+                    val drag = controller.drag ?: continue
+                    val change = event.changes.firstOrNull { it.id == drag.pointerId }
+                    if (change == null || !change.pressed) {
+                        controller.endDrag()
+                        continue
+                    }
+                    val coordinates = holder.coordinates ?: continue
+                    if (change.position != change.previousPosition) controller.moveDrag(coordinates.localToRoot(change.position))
                 }
             }
         }

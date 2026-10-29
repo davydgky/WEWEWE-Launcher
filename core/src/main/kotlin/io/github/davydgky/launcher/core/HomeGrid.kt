@@ -49,20 +49,51 @@ class HomeGrid(val columns: Int, val rows: Int) {
     }
 
     /**
-     * Puts element [id] at [target]. Elements it would cover move to the next free spots, on the same
-     * page first, then on the following pages; nothing is ever dropped.
+     * Puts element [id] at [target]. Elements it would cover take the place [id] came from (two apps
+     * swap) or else the nearest free spot on the same page; only a full page sends them to the following
+     * pages. Nothing is ever dropped.
      */
     fun place(cells: Map<Long, Cell>, id: Long, target: Cell): Map<Long, Cell> {
         val spot = clamp(target)
+        val vacated = cells[id]
         val result = LinkedHashMap(cells)
         result.remove(id)
         val displaced = result.filter { it.value.overlaps(spot) }.entries.sortedWith(compareBy({ it.value.y }, { it.value.x }))
         displaced.forEach { result.remove(it.key) }
         result[id] = spot
         for ((displacedId, cell) in displaced) {
-            result[displacedId] = firstFree(result, cell.w, cell.h, fromPage = spot.page)
+            result[displacedId] = nearestFree(result, cell, vacated) ?: firstFree(result, cell.w, cell.h, fromPage = spot.page)
         }
         return result
+    }
+
+    /**
+     * The free spot on [cell]'s page closest to it for an element of its size, a spot on [preferred]
+     * before any other; on a tie the first in reading order. Null when the page is full.
+     */
+    fun nearestFree(cells: Map<Long, Cell>, cell: Cell, preferred: Cell? = null): Cell? {
+        val sized = clamp(cell)
+        var best: Cell? = null
+        var bestScore = Int.MAX_VALUE
+        for (y in 0..rows - sized.h) {
+            for (x in 0..columns - sized.w) {
+                val candidate = sized.copy(x = x, y = y)
+                if (!isFree(cells, candidate)) continue
+                val dx = x - sized.x
+                val dy = y - sized.y
+                val score = dx * dx + dy * dy + if (preferred != null && candidate.overlaps(preferred)) 0 else ELSEWHERE
+                if (score < bestScore) {
+                    best = candidate
+                    bestScore = score
+                }
+            }
+        }
+        return best
+    }
+
+    private companion object {
+        /** Larger than any distance² on a page: a spot elsewhere only wins when [nearestFree]'s preferred place is taken. */
+        const val ELSEWHERE = 10_000
     }
 
     /** Renumbers pages so that no page is empty. */

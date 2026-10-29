@@ -112,10 +112,10 @@ fun DragOverlay(controller: HomeController, apps: Map<String, AppTarget>, shortc
         contentAlignment = Alignment.TopCenter,
     ) {
         when (val source = drag.source) {
-            is DragSource.Dock -> apps[source.appKey]?.let { AppIconImage(it, 58.dp, Modifier.padding(top = 6.dp)) }
+            is DragSource.Dock -> apps[source.appKey]?.let { AppIconImage(it, drag.iconSize, Modifier.padding(top = 6.dp)) }
             is DragSource.Item -> when (val item = source.item) {
-                is AppItem -> apps[item.appKey]?.let { AppIconImage(it, 58.dp, Modifier.padding(top = 6.dp)) }
-                is ShortcutItem -> Box(Modifier.padding(top = 6.dp)) { ShortcutIcon(item, shortcuts[item.shortcutKey], null, 58.dp) }
+                is AppItem -> apps[item.appKey]?.let { AppIconImage(it, drag.iconSize, Modifier.padding(top = 6.dp)) }
+                is ShortcutItem -> Box(Modifier.padding(top = 6.dp)) { ShortcutIcon(item, shortcuts[item.shortcutKey], null, drag.iconSize) }
                 is FolderItem, is WidgetItem -> Box(
                     Modifier
                         .fillMaxSize()

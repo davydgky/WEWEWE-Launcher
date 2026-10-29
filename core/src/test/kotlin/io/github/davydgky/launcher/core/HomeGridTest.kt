@@ -34,6 +34,36 @@ class HomeGridTest {
     }
 
     @Test
+    fun twoAppsSwapPlaces() {
+        // A full first row: moving the first app onto the third swaps the two.
+        val cells = (0L until 4L).associateWith { Cell(0, it.toInt(), 0) }
+        val result = grid.place(cells, 0L, Cell(0, 2, 0))
+        assertEquals(Cell(0, 2, 0), result[0])
+        assertEquals(Cell(0, 0, 0), result[2])
+        assertEquals(Cell(0, 1, 0), result[1])
+        assertEquals(Cell(0, 3, 0), result[3])
+    }
+
+    @Test
+    fun aCoveredAppMovesToTheNearestFreeCellNotTheFirst() {
+        // Free cells at the top left and right next to the target: the app moves next door.
+        val cells = mapOf(1L to Cell(0, 2, 3), 2L to Cell(1, 0, 0))
+        val result = grid.place(cells, 2L, Cell(0, 2, 3))
+        assertEquals(Cell(0, 2, 3), result[2])
+        val moved = result.getValue(1)
+        assertEquals(0, moved.page)
+        assertEquals(1, kotlin.math.abs(moved.x - 2) + kotlin.math.abs(moved.y - 3))
+    }
+
+    @Test
+    fun aFullPageSendsTheCoveredAppToTheNextPage() {
+        val cells = (0L until 24L).associateWith { Cell(0, (it % 4).toInt(), (it / 4).toInt()) } + (99L to Cell(1, 0, 0))
+        val result = grid.place(cells, 99L, Cell(0, 0, 0))
+        assertEquals(Cell(0, 0, 0), result[99])
+        assertEquals(1, result.getValue(0).page)
+    }
+
+    @Test
     fun aFolderPushesEverythingItCoversAside() {
         val cells = (0L until 8L).associateWith { Cell(0, (it % 4).toInt(), (it / 4).toInt()) }
         val result = grid.place(cells, 100L, Cell(0, 0, 0, 2, 2))

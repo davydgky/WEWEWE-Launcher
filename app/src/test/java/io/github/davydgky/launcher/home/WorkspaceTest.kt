@@ -32,6 +32,19 @@ class WorkspaceTest {
     }
 
     @Test
+    fun thePreviewOfAMoveIsWhatTheMoveDoes() {
+        val ws = initial()
+        val id = ws.appItem("app3").id
+        val target = ws.appItem("app5").cell
+        val preview = ws.previewMove(id, target)
+        val moved = ws.move(id, target)
+        moved.items.forEach { assertEquals(it.cell, preview[it.id]) }
+        // The two apps swapped places.
+        assertEquals(Cell(0, 0, 0), moved.appItem("app5").cell)
+        assertEquals(target, moved.appItem("app3").cell)
+    }
+
+    @Test
     fun droppingAnAppOnAnotherMakesANothingStyleFolder() {
         val ws = initial()
         val folderWs = ws.makeFolder(ws.appItem("app4").id, ws.appItem("app3").id, "Ordner")

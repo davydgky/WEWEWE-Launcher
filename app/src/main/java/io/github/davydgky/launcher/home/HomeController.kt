@@ -10,6 +10,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.input.pointer.PointerId
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntSize
 import io.github.davydgky.launcher.core.Cell
 import io.github.davydgky.launcher.search.AppTarget
@@ -43,10 +45,28 @@ sealed interface DropTarget {
     data class Dock(val index: Int) : DropTarget
 }
 
+/** Where the elements stand while the dragged one hovers over [cell]: they have made room for it. */
+class DragPreview(val cell: Cell, val cells: Map<Long, Cell>)
+
+/** An element just let go; it glides from [topLeft] (root coordinates) into its new place. */
+class DroppedItem(val id: Long, val topLeft: Offset)
+
 @Stable
-class DragState(val source: DragSource, start: Offset, val grab: Offset, val size: IntSize) {
+class DragState(
+    val source: DragSource,
+    start: Offset,
+    val grab: Offset,
+    val size: IntSize,
+    /** The finger that drags; followed at the root of the screen ([homeDragTracker]). */
+    val pointerId: PointerId,
+    val iconSize: Dp,
+) {
     var pointer by mutableStateOf(start)
     var target by mutableStateOf<DropTarget?>(null)
+    var preview by mutableStateOf<DragPreview?>(null)
+
+    /** Where [preview] (or else the arrangement) puts [item]. */
+    fun cellOf(item: HomeItem): Cell = preview?.cells?.get(item.id) ?: item.cell
 }
 
 /** Everything the home screen needs from outside, plus its interaction state. */
@@ -63,6 +83,9 @@ class HomeController(
 
     var drag by mutableStateOf<DragState?>(null)
         private set
+
+    /** The element dropped last, until it has started gliding into its place. */
+    var drop by mutableStateOf<DroppedItem?>(null)
     var openFolderId by mutableStateOf<Long?>(null)
 
     /**
@@ -86,6 +109,13 @@ class HomeController(
 
     fun stopEditing() {
         editMode = false
+        // The home button or leaving the launcher while a finger still drags: the element stays where it was.
+        if (drag != null) {
+            drag = null
+            edgeJob?.cancel()
+            previewJob?.cancel()
+            pendingPreview = null
+        }
     }
     var openCategory by mutableStateOf<LibraryGroup?>(null)
     var widgetPickerOpen by mutableStateOf(false)
@@ -165,10 +195,14 @@ class HomeController(
             pagesOverviewOpen
 
     private var edgeJob: Job? = null
+    private var previewJob: Job? = null
+    private var pendingPreview: Cell? = null
+    private var restingAt = Offset.Zero
 
-    fun startDrag(source: DragSource, pointer: Offset, grab: Offset, size: IntSize) {
+    fun startDrag(source: DragSource, pointer: Offset, grab: Offset, size: IntSize, pointerId: PointerId, iconSize: Dp) {
         Log.i(TAG, "Drag $source")
-        drag = DragState(source, pointer, grab, size)
+        drop = null
+        drag = DragState(source, pointer, grab, size, pointerId, iconSize)
         editMode = true
     }
 
@@ -176,32 +210,81 @@ class HomeController(
         val state = drag ?: return
         val workspace = workspace ?: return
         state.pointer = pointer
-        state.target = targetFor(workspace, state)
-        flipPageAtEdges(pointer)
+        val target = targetFor(workspace, state)
+        state.target = target
+        updatePreview(state, target)
+        flipPageAtEdges()
+    }
+
+    /**
+     * The others make room once the finger rests over a cell for a moment, as on Pixel phones; passing
+     * over cells on the way (say, towards an app to make a folder with) moves nothing.
+     */
+    private fun updatePreview(state: DragState, target: DropTarget?) {
+        val item = (state.source as? DragSource.Item)?.item ?: return
+        when (target) {
+            is DropTarget.Move -> {
+                val resting = (state.pointer - restingAt).getDistance() <= REST_SLOP_DP * density
+                if (target.cell == pendingPreview && resting) return
+                previewJob?.cancel()
+                pendingPreview = null
+                if (target.cell == state.preview?.cell) return
+                restingAt = state.pointer
+                pendingPreview = target.cell
+                previewJob = scope.launch {
+                    delay(REORDER_DELAY_MS)
+                    val workspace = workspace ?: return@launch
+                    state.preview = DragPreview(target.cell, workspace.previewMove(item.id, target.cell))
+                    pendingPreview = null
+                }
+            }
+            // Over an app or a folder: what made room stays, so the app under the finger stays there.
+            is DropTarget.MakeFolder, is DropTarget.IntoFolder -> {
+                previewJob?.cancel()
+                pendingPreview = null
+            }
+            // Over the dock or off the grid: everything goes back.
+            is DropTarget.Dock, null -> {
+                previewJob?.cancel()
+                pendingPreview = null
+                state.preview = null
+            }
+        }
     }
 
     fun endDrag() {
         val state = drag ?: return
         drag = null
         edgeJob?.cancel()
+        previewJob?.cancel()
+        pendingPreview = null
         val workspace = workspace ?: return
         val source = state.source
         val target = targetFor(workspace, state)
         Log.i(TAG, "Drop at ${state.pointer} on $target")
+        // Room made while hovering stays made when the app joins a folder.
+        val madeRoom: (Workspace) -> Workspace = { ws ->
+            val item = (source as? DragSource.Item)?.item
+            val cell = state.preview?.cell
+            if (item != null && cell != null) ws.move(item.id, cell) else ws
+        }
         when (target) {
             is DropTarget.Move -> when (source) {
-                is DragSource.Item -> repository.move(source.item.id, target.cell)
+                is DragSource.Item -> {
+                    drop = DroppedItem(source.item.id, state.pointer - state.grab)
+                    repository.move(source.item.id, target.cell)
+                }
                 is DragSource.Dock -> repository.fromDock(source.appKey, target.cell)
             }
             is DropTarget.MakeFolder -> {
                 val targetApp = (workspace.item(target.targetId) as? AppItem)?.appKey ?: return
                 val name = folderName(listOfNotNull(targetApp, source.draggedApp))
                 when (source) {
-                    is DragSource.Item -> repository.makeFolder(source.item.id, target.targetId, name)
+                    is DragSource.Item -> repository.update { madeRoom(it).makeFolder(source.item.id, target.targetId, name) }
                     is DragSource.Dock -> repository.makeFolderFromDock(source.appKey, target.targetId, name)
                 }
             }
-            is DropTarget.IntoFolder -> source.draggedApp?.let { repository.addToFolder(it, target.folderId) }
+            is DropTarget.IntoFolder -> source.draggedApp?.let { app -> repository.update { madeRoom(it).addToFolder(app, target.folderId) } }
             is DropTarget.Dock -> source.draggedApp?.let { repository.toDock(it, target.index) }
             null -> Unit
         }
@@ -223,7 +306,8 @@ class HomeController(
         if (page >= homePages) return null
         val col = floor((p.x - gridBounds.left) / cellWidth).toInt().coerceIn(0, columns - 1)
         val row = floor((p.y - gridBounds.top) / cellHeight).toInt().coerceIn(0, rows - 1)
-        val under = workspace.itemAt(page, col, row)
+        // What is under the finger as the screen shows it: elements that made room count where they are now.
+        val under = workspace.items.firstOrNull { state.cellOf(it).contains(page, col, row) }
         val dragged = (state.source as? DragSource.Item)?.item
         if (appKey != null && under != null && under.id != dragged?.id) {
             // Close to the middle of an app or anywhere on a folder: group them.
@@ -231,9 +315,10 @@ class HomeController(
                 // A full folder takes no more apps; the app lands beside it instead.
                 is FolderItem -> if (!under.isFull) return DropTarget.IntoFolder(under.id)
                 is AppItem -> {
-                    val centerX = gridBounds.left + (col + 0.5f) * cellWidth
-                    val centerY = gridBounds.top + (row + 0.5f) * cellHeight
-                    if (abs(p.x - centerX) < cellWidth * 0.3f && abs(p.y - centerY) < cellHeight * 0.3f) {
+                    val cell = state.cellOf(under)
+                    val centerX = gridBounds.left + (cell.x + 0.5f) * cellWidth
+                    val centerY = gridBounds.top + (cell.y + 0.5f) * cellHeight
+                    if (abs(p.x - centerX) < cellWidth * 0.35f && abs(p.y - centerY) < cellHeight * 0.35f) {
                         return DropTarget.MakeFolder(under.id)
                     }
                 }
@@ -248,30 +333,43 @@ class HomeController(
         return DropTarget.Move(workspace.grid.clamp(Cell(page, col - grabCol, row - grabRow, w, h)))
     }
 
-    /** Holding an element at the left or right edge turns the page, as on iOS. */
-    private fun flipPageAtEdges(pointer: Offset) {
-        val edge = screenWidth * 0.06f
-        val direction = when {
-            pointer.x < edge -> -1
-            pointer.x > screenWidth - edge -> 1
-            else -> 0
-        }
-        if (direction == 0) {
+    /** Holding an element at the left or right edge turns the page, as on iOS, page after page while it stays there. */
+    private fun flipPageAtEdges() {
+        val state = drag ?: return
+        if (edgeDirection(state.pointer) == 0) {
             edgeJob?.cancel()
             edgeJob = null
             return
         }
         if (edgeJob?.isActive == true) return
         edgeJob = scope.launch {
-            delay(EDGE_DELAY_MS)
-            val next = (pager.currentPage + direction).coerceIn(0, homePages - 1)
-            if (next != pager.currentPage) pager.animateScrollToPage(next)
-            edgeJob = null
+            while (true) {
+                delay(EDGE_DELAY_MS)
+                val current = drag ?: break
+                val direction = edgeDirection(current.pointer)
+                if (direction == 0) break
+                val next = (pager.currentPage + direction).coerceIn(0, homePages - 1)
+                if (next == pager.currentPage) break
+                pager.animateScrollToPage(next)
+                // The finger did not move, but the cell under it is a new one.
+                moveDrag(current.pointer)
+            }
+        }
+    }
+
+    private fun edgeDirection(pointer: Offset): Int {
+        val edge = screenWidth * 0.06f
+        return when {
+            pointer.x < edge -> -1
+            pointer.x > screenWidth - edge -> 1
+            else -> 0
         }
     }
 
     private companion object {
         const val TAG = "HomeController"
         const val EDGE_DELAY_MS = 650L
+        const val REORDER_DELAY_MS = 250L
+        const val REST_SLOP_DP = 10f
     }
 }
