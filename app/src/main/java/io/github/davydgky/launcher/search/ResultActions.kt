@@ -22,6 +22,7 @@ import io.github.davydgky.launcher.core.QuickAction
 import io.github.davydgky.launcher.core.SearchItem
 import io.github.davydgky.launcher.core.SmartAction
 import io.github.davydgky.launcher.launcherApp
+import io.github.davydgky.launcher.messages.MessageTarget
 import io.github.davydgky.launcher.settings.SettingsActivity
 import io.github.davydgky.launcher.sources.Velo
 import java.time.ZoneId
@@ -55,6 +56,7 @@ class ResultActions(private val activity: Activity) {
             )
             is SettingTarget -> openSetting(target, bounds, item.key)
             is AnswerTarget -> copy(target.copyText)
+            is MessageTarget -> openMessage(target, bounds, item.key)
             else -> Log.w(TAG, "Nothing to open for $item")
         }
     }
@@ -188,6 +190,18 @@ class ResultActions(private val activity: Activity) {
         if (!start(store, null, null, quiet = true)) {
             start(Intent(Intent.ACTION_VIEW, Uri.parse("https://play.google.com/store/apps/details?id=$packageName")), null, null)
         }
+    }
+
+    /** An SMS opens in its conversation; a message from another app opens that app. */
+    fun openMessage(target: MessageTarget, bounds: Rect?, logKey: String?) {
+        val thread = target.smsThread
+        if (thread != null) {
+            val conversation = Intent(Intent.ACTION_VIEW, Uri.parse("content://mms-sms/conversations/$thread"))
+            if (start(conversation, bounds, logKey, quiet = true)) return
+            if (target.address != null && start(Intent(Intent.ACTION_SENDTO, Uri.fromParts("smsto", target.address, null)), bounds, logKey, quiet = true)) return
+        }
+        val launch = activity.packageManager.getLaunchIntentForPackage(target.packageName)
+        if (launch == null) toast(R.string.cannot_open) else start(launch, bounds, logKey)
     }
 
     /** Google Photos is installed: its own search covers the pictures that are only in the cloud. */

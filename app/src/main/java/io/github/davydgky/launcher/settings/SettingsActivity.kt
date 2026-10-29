@@ -41,6 +41,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -55,6 +56,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -63,10 +65,11 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.davydgky.launcher.R
+import io.github.davydgky.launcher.ai.NanoAnswers
 import io.github.davydgky.launcher.data.LauncherPrefs
 import io.github.davydgky.launcher.index.MediaCatalog
-import io.github.davydgky.launcher.ai.NanoAnswers
 import io.github.davydgky.launcher.launcherApp
+import io.github.davydgky.launcher.messages.Messages
 import io.github.davydgky.launcher.perf.Metric
 import io.github.davydgky.launcher.perf.MetricSummary
 import io.github.davydgky.launcher.search.SourceStatus
@@ -75,10 +78,12 @@ import io.github.davydgky.launcher.sources.CalendarSource
 import io.github.davydgky.launcher.sources.ContactsSource
 import io.github.davydgky.launcher.sources.DocumentsSource
 import io.github.davydgky.launcher.sources.ImagesSource
+import io.github.davydgky.launcher.sources.MessagesSource
 import io.github.davydgky.launcher.sources.NotesSource
 import io.github.davydgky.launcher.sources.Requirement
 import io.github.davydgky.launcher.sources.SettingsSource
 import io.github.davydgky.launcher.sources.ShortcutsSource
+import io.github.davydgky.launcher.sources.SmsSource
 import io.github.davydgky.launcher.sources.Velo
 import io.github.davydgky.launcher.sources.VeloSource
 import io.github.davydgky.launcher.ui.LauncherTheme
@@ -114,6 +119,8 @@ private val SourceInfos = listOf(
     SourceInfo(SettingsSource.ID, R.string.source_settings, R.string.source_settings_description),
     SourceInfo(ShortcutsSource.ID, R.string.source_shortcuts, R.string.source_shortcuts_description),
     SourceInfo(ContactsSource.ID, R.string.source_contacts, R.string.source_contacts_description),
+    SourceInfo(MessagesSource.ID, R.string.source_messages, R.string.source_messages_description),
+    SourceInfo(SmsSource.ID, R.string.source_sms, R.string.source_sms_description),
     SourceInfo(CalendarSource.ID, R.string.source_calendar, R.string.source_calendar_description),
     SourceInfo(VeloSource.ID, R.string.source_velo, R.string.source_velo_description),
     SourceInfo(NotesSource.ID, R.string.source_notes, R.string.source_notes_description),
@@ -176,6 +183,9 @@ private fun SettingsScreen(activity: ComponentActivity) {
             )
             Requirement.NoteFolder -> folderPicker.launch(null)
             Requirement.VeloInstall -> Unit
+            Requirement.NotificationAccess -> context.startActivity(app.notifications.accessIntent())
+            // A sideloaded app may first need "Allow restricted settings" in its app info; a refusal leads there.
+            Requirement.Sms -> permission.launch(arrayOf(Manifest.permission.READ_SMS))
         }
     }
 
@@ -308,6 +318,8 @@ private fun SettingsScreen(activity: ComponentActivity) {
                     scope.launch { app.settings.setAiAnswers(enabled) }
                     if (enabled) app.nano.prepare()
                 }
+                HorizontalDivider()
+                SavedMessagesRow(prefs.saveMessages, onToggle = { enabled -> scope.launch { app.settings.setSaveMessages(enabled) } })
                 HorizontalDivider()
                 Row(
                     Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
@@ -479,6 +491,40 @@ private fun SourceRow(info: SourceInfo, status: SourceStatus?, onToggle: (Boolea
     }
 }
 
+/** Keeping messages from notifications for 90 days, with how many there are and a way to delete them. */
+@Composable
+private fun SavedMessagesRow(enabled: Boolean, onToggle: (Boolean) -> Unit) {
+    val messages = LocalContext.current.launcherApp.messages
+    val scope = rememberCoroutineScope()
+    val version by messages.version.collectAsStateWithLifecycle()
+    val count by produceState(0, version) { value = messages.savedCount() }
+    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(stringResource(R.string.setting_save_messages), style = MaterialTheme.typography.titleMedium)
+                Text(
+                    stringResource(R.string.setting_save_messages_description, Messages.KEEP_DAYS),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Spacer(Modifier.width(12.dp))
+            Switch(checked = enabled, onCheckedChange = onToggle)
+        }
+        if (count > 0) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    pluralStringResource(R.plurals.saved_messages, count, count),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f),
+                )
+                TextButton(onClick = { scope.launch { messages.clear() } }) { Text(stringResource(R.string.saved_messages_delete)) }
+            }
+        }
+    }
+}
+
 /** Gemini Nano on or off, with whether the device has it. */
 @Composable
 private fun AiAnswersRow(enabled: Boolean, onToggle: (Boolean) -> Unit) {
@@ -561,7 +607,8 @@ private fun Card(content: @Composable () -> Unit) {
 
 private fun requirementLabel(requirement: Requirement): Int = when (requirement) {
     Requirement.DefaultLauncher -> R.string.grant_default_launcher
-    Requirement.Contacts, Requirement.Calendar, Requirement.Images, Requirement.VeloPermission -> R.string.grant_permission
+    Requirement.Contacts, Requirement.Calendar, Requirement.Images, Requirement.VeloPermission, Requirement.Sms -> R.string.grant_permission
+    Requirement.NotificationAccess -> R.string.grant_notification_access
     Requirement.AllFiles -> R.string.grant_all_files
     Requirement.NoteFolder -> R.string.note_folders_add
     Requirement.VeloInstall -> R.string.status_velo_missing

@@ -13,11 +13,13 @@ import io.github.davydgky.launcher.sources.CalendarSource
 import io.github.davydgky.launcher.sources.ContactsSource
 import io.github.davydgky.launcher.sources.DocumentsSource
 import io.github.davydgky.launcher.sources.ImagesSource
+import io.github.davydgky.launcher.sources.MessagesSource
 import io.github.davydgky.launcher.sources.NotesSource
 import io.github.davydgky.launcher.sources.Requirement
 import io.github.davydgky.launcher.sources.SearchSource
 import io.github.davydgky.launcher.sources.SettingsSource
 import io.github.davydgky.launcher.sources.ShortcutsSource
+import io.github.davydgky.launcher.sources.SmsSource
 import io.github.davydgky.launcher.sources.Velo
 import io.github.davydgky.launcher.sources.VeloSource
 import kotlinx.coroutines.CancellationException
@@ -57,6 +59,8 @@ class SearchRepository(private val app: LauncherApplication, private val scope: 
         SettingsSource(app),
         ShortcutsSource(app.apps, scope),
         ContactsSource(app),
+        MessagesSource(app, app.messages, app.notifications, scope),
+        SmsSource(app, app.messages),
         CalendarSource(app),
         VeloSource(app),
         NotesSource(app, app.indexStore) { prefs.noteFolders },

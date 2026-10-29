@@ -10,6 +10,7 @@ enum class SourceKind(val weight: Float, val groupLimit: Int, val fuzzy: Boolean
     Setting(1.2f, 4, fuzzy = true),
     Shortcut(1.15f, 4, fuzzy = true),
     Contact(1.25f, 4, fuzzy = true),
+    Message(1.1f, 4),
     Event(1.1f, 4),
     VeloBookmark(1.15f, 4),
     Note(1.1f, 4),

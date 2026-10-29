@@ -212,6 +212,21 @@
     <string name="menu_app_timer">App-Timer</string>
     <string name="menu_bubble">Bubble</string>
     <string name="ai_title">Gemini Nano</string>
+    <string name="source_messages">Nachrichten</string>
+    <string name="source_messages_description">WhatsApp, Instagram, Mails und alle anderen Apps, aus ihren Benachrichtigungen; bleibt auf diesem Gerät</string>
+    <string name="source_sms">SMS</string>
+    <string name="source_sms_description">Alle SMS der letzten 90 Tage, auch ältere</string>
+    <string name="grant_notification_access">Benachrichtigungszugriff erlauben</string>
+    <string name="setting_save_messages">Nachrichten aufbewahren</string>
+    <string name="setting_save_messages_description">Nachrichten aus Benachrichtigungen bleiben %1$d Tage durchsuchbar, für die Suche und die Antworten von Gemini Nano. Nur auf diesem Gerät.</string>
+    <plurals name="saved_messages">
+        <item quantity="one">%1$d Nachricht aufbewahrt</item>
+        <item quantity="other">%1$d Nachrichten aufbewahrt</item>
+    </plurals>
+    <string name="saved_messages_delete">Alle löschen</string>
+    <string name="message_me">Ich</string>
+    <string name="section_messages">Nachrichten</string>
+    <string name="ai_from_messages">Aus deinen Nachrichten</string>
     <string name="section_store">Aus dem Play Store</string>
     <string name="store_install">Installieren</string>
     <string name="store_suggested">Vorschlag von Gemini Nano</string>

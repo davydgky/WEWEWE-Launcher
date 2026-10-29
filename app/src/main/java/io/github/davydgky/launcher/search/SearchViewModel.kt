@@ -15,6 +15,7 @@ import io.github.davydgky.launcher.core.SmartAction
 import io.github.davydgky.launcher.core.SourceKind
 import io.github.davydgky.launcher.core.StoreApp
 import io.github.davydgky.launcher.launcherApp
+import io.github.davydgky.launcher.messages.Message
 import java.text.DecimalFormatSymbols
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -53,7 +54,14 @@ class ResultsState(
  * Gemini Nano's reply to [query]: an answer [text] so far ([done] once complete), or a request to the
  * phone ([action], "ruf Mama an") to confirm with a tap.
  */
-class AiAnswer(val query: String, val text: String, val done: Boolean, val action: SmartAction? = null)
+class AiAnswer(
+    val query: String,
+    val text: String,
+    val done: Boolean,
+    val action: SmartAction? = null,
+    /** Messages from the phone the answer may come from, newest first. */
+    val sources: List<Message> = emptyList(),
+)
 
 /** Apps from the Play Store for [query]; shown when few installed apps match. */
 class StoreResults(val query: String, val apps: List<StoreApp>)
@@ -84,11 +92,25 @@ class SearchViewModel(application: Application) : AndroidViewModel(application) 
         /** Gemini Nano starts once typing pauses this long; every keystroke would only cancel it. */
         const val AI_PAUSE_MS = 280L
         const val MIN_AI_CHARS = 3
+        const val MAX_SOURCES = 6
+        const val SHOWN_SOURCES = 2
+
+        private val QUESTION_WORDS = setOf(
+            "wann", "wo", "wohin", "wer", "was", "wie", "welche", "welcher", "welches", "hat", "habe", "ist", "muss", "soll",
+            "when", "where", "who", "what", "how", "which", "did", "does", "is", "do",
+        )
+
+        /** "Wann muss ich zum Bahnhof?", "wo treffen wir uns", "was hat Anna geschrieben". */
+        fun looksLikeQuestion(text: String): Boolean {
+            val words = text.trim().lowercase().split(Regex("\\s+"))
+            return text.contains('?') || words.firstOrNull() in QUESTION_WORDS || words.size >= 4
+        }
         /** The store is asked once typing pauses this long, not for every letter. */
         const val STORE_PAUSE_MS = 600L
         const val MIN_STORE_CHARS = 3
     }
 
+    private val launcher = application.launcherApp
     private val nano = application.launcherApp.nano
     private val settings = application.launcherApp.settings
 
@@ -111,14 +133,19 @@ class SearchViewModel(application: Application) : AndroidViewModel(application) 
             delay(AI_PAUSE_MS)
             if (nano.availability.value != NanoAnswers.Availability.Ready) return@transformLatest
             emit(AiAnswer(query, "", done = false))
+            // Questions may be answered from the messages on the phone ("Wann muss ich zum Bahnhof?").
+            val sources = if (looksLikeQuestion(query)) {
+                runCatching { launcher.messages.relevant(query, MAX_SOURCES) }.getOrDefault(emptyList())
+            } else emptyList()
+            val shownSources = sources.sortedByDescending { it.text.time }.take(SHOWN_SOURCES)
             var last = ""
             var action: SmartAction? = null
             try {
-                nano.reply(query).collect { reply ->
+                nano.reply(query, sources.map { it.text }).collect { reply ->
                     when (reply) {
                         is NanoReply.Text -> {
                             last = reply.text
-                            emit(AiAnswer(query, reply.text, done = false))
+                            emit(AiAnswer(query, reply.text, done = false, sources = shownSources))
                         }
                         is NanoReply.Command -> action = reply.action
                     }
@@ -132,13 +159,12 @@ class SearchViewModel(application: Application) : AndroidViewModel(application) 
                 when {
                     action != null -> AiAnswer(query, "", done = true, action = action)
                     last.isEmpty() -> null
-                    else -> AiAnswer(query, last, done = true)
+                    else -> AiAnswer(query, last, done = true, sources = shownSources)
                 },
             )
         }
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
-    private val launcher = application.launcherApp
 
     /**
      * Play Store apps for the current input, once typing pauses, when at most one installed app matches

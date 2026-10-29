@@ -10,6 +10,7 @@ import io.github.davydgky.launcher.data.LaunchLog
 import io.github.davydgky.launcher.data.LauncherSettings
 import io.github.davydgky.launcher.home.WorkspaceRepository
 import io.github.davydgky.launcher.index.IndexStore
+import io.github.davydgky.launcher.messages.Messages
 import io.github.davydgky.launcher.notifications.Notifications
 import io.github.davydgky.launcher.perf.PerfStats
 import io.github.davydgky.launcher.search.IconCache
@@ -49,6 +50,7 @@ class LauncherApplication : Application() {
     val nano: NanoAnswers by lazy { NanoAnswers(appScope) }
     val appKnowledge: AppKnowledge by lazy { AppKnowledge(this, nano, apps, appScope) }
     val playStore: PlayStore by lazy { PlayStore(this, nano) }
+    val messages: Messages by lazy { Messages(this, settings, appScope) }
     val perf = PerfStats()
 
     override fun onCreate() {

@@ -6,6 +6,7 @@ import android.content.Intent
 import android.graphics.Rect
 import android.net.Uri
 import android.provider.Settings
+import android.text.format.DateUtils
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -103,6 +104,7 @@ import io.github.davydgky.launcher.core.SourceKind
 import io.github.davydgky.launcher.core.StoreApp
 import io.github.davydgky.launcher.data.LauncherPrefs
 import io.github.davydgky.launcher.launcherApp
+import io.github.davydgky.launcher.messages.Message
 import io.github.davydgky.launcher.perf.Metric
 import io.github.davydgky.launcher.search.AiAnswer
 import io.github.davydgky.launcher.search.AppTarget
@@ -346,7 +348,11 @@ private fun LazyListScope.resultItems(
             item("ai") {
                 Section(null, backdrop) {
                     val action = ai.action
-                    if (action != null) SmartActionRow(action) { actions.runSmart(action) } else AiAnswerRow(ai) { actions.copy(ai.text) }
+                    if (action != null) {
+                        SmartActionRow(action) { actions.runSmart(action) }
+                    } else {
+                        AiAnswerRow(ai, onCopy = { actions.copy(ai.text) }, onOpenSource = { actions.openMessage(it.target, null, null) })
+                    }
                 }
             }
         }
@@ -483,7 +489,7 @@ private fun AnswerRow(answer: Answer, onCopy: () -> Unit) {
  * copies it.
  */
 @Composable
-private fun AiAnswerRow(answer: AiAnswer, onCopy: () -> Unit) {
+private fun AiAnswerRow(answer: AiAnswer, onCopy: () -> Unit, onOpenSource: (Message) -> Unit) {
     val colors = LocalGlassColors.current
     var expanded by remember(answer.query) { mutableStateOf(false) }
     Column(
@@ -529,6 +535,32 @@ private fun AiAnswerRow(answer: AiAnswer, onCopy: () -> Unit) {
                     Text(stringResource(R.string.ai_footnote), color = colors.secondaryContent, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
                     if (!expanded && answer.text.length > AI_SHORT_CHARS) {
                         TextButton(onClick = { expanded = true }) { Text(stringResource(R.string.show_more)) }
+                    }
+                }
+                // The messages the answer may come from; a tap opens the conversation.
+                if (answer.sources.isNotEmpty()) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(stringResource(R.string.ai_from_messages), color = colors.secondaryContent, style = MaterialTheme.typography.labelMedium)
+                    answer.sources.forEach { source ->
+                        val m = source.text
+                        val time = DateUtils.getRelativeTimeSpanString(m.time, System.currentTimeMillis(), DateUtils.MINUTE_IN_MILLIS, DateUtils.FORMAT_ABBREV_RELATIVE)
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(top = 6.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(colors.fill)
+                                .clickable { onOpenSource(source) }
+                                .padding(horizontal = 10.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(painterResource(R.drawable.ic_message), null, Modifier.size(16.dp), tint = colors.secondaryContent)
+                            Spacer(Modifier.width(8.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text("${m.sender} · ${m.app} · $time", color = colors.secondaryContent, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text(m.text, color = colors.content, style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                            }
+                        }
                     }
                 }
             }
@@ -686,6 +718,7 @@ private fun sectionTitle(kind: SourceKind): Int = when (kind) {
     SourceKind.Setting -> R.string.section_settings
     SourceKind.Shortcut -> R.string.section_shortcuts
     SourceKind.Contact -> R.string.section_contacts
+    SourceKind.Message -> R.string.section_messages
     SourceKind.Event -> R.string.section_events
     SourceKind.VeloBookmark -> R.string.section_bookmarks
     SourceKind.VeloHistory -> R.string.section_history

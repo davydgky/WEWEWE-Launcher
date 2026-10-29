@@ -37,6 +37,8 @@ data class LauncherPrefs(
     val aiAnswers: Boolean = true,
     /** Apps from the Play Store when few installed apps match; sends the search words to Google Play. */
     val storeResults: Boolean = true,
+    /** Messages from notifications are kept on the device for the search and Gemini Nano. */
+    val saveMessages: Boolean = true,
     /** Last searches that led somewhere, newest first; only on this device. */
     val recentSearches: List<String> = emptyList(),
     /** Home screen grid; null means the default for the device (5×6 on phones). */
@@ -61,6 +63,7 @@ class LauncherSettings(private val dataStore: DataStore<Preferences>) {
                 resultsAtBottom = prefs[ResultsAtBottomKey] ?: true,
                 aiAnswers = prefs[AiAnswersKey] ?: true,
                 storeResults = prefs[StoreResultsKey] ?: true,
+                saveMessages = prefs[SaveMessagesKey] ?: true,
                 recentSearches = prefs[RecentSearchesKey]?.split('\n')?.filter { it.isNotBlank() }.orEmpty(),
                 gridColumns = prefs[GridColumnsKey],
                 gridRows = prefs[GridRowsKey],
@@ -92,6 +95,10 @@ class LauncherSettings(private val dataStore: DataStore<Preferences>) {
             it[GridColumnsKey] = columns
             it[GridRowsKey] = rows
         }
+    }
+
+    suspend fun setSaveMessages(enabled: Boolean) {
+        dataStore.edit { it[SaveMessagesKey] = enabled }
     }
 
     suspend fun setStoreResults(enabled: Boolean) {
@@ -150,6 +157,7 @@ class LauncherSettings(private val dataStore: DataStore<Preferences>) {
         val ResultsAtBottomKey = booleanPreferencesKey("results_at_bottom")
         val AiAnswersKey = booleanPreferencesKey("ai_answers")
         val StoreResultsKey = booleanPreferencesKey("store_results")
+        val SaveMessagesKey = booleanPreferencesKey("save_messages")
         val RecentSearchesKey = stringPreferencesKey("recent_searches")
         val GridColumnsKey = intPreferencesKey("grid_columns")
         val GridRowsKey = intPreferencesKey("grid_rows")

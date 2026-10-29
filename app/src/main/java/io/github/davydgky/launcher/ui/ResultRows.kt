@@ -46,6 +46,7 @@ import io.github.davydgky.launcher.R
 import io.github.davydgky.launcher.core.SearchItem
 import io.github.davydgky.launcher.core.Snippets
 import io.github.davydgky.launcher.launcherApp
+import io.github.davydgky.launcher.messages.MessageTarget
 import io.github.davydgky.launcher.search.AppTarget
 import io.github.davydgky.launcher.search.ContactTarget
 import io.github.davydgky.launcher.search.EventTarget
@@ -168,6 +169,12 @@ fun ResultIcon(item: SearchItem, size: Dp) {
             val icons = LocalContext.current.launcherApp.icons
             val thumb by rememberIcon(icons, "thumb:${target.uri}") { icons.thumbnail(target.uri) }
             BitmapIcon(thumb, size, RoundedCornerShape(8.dp), ContentScale.Crop)
+        }
+        is MessageTarget -> {
+            // The icon of the app the message came from (personal profile), else a message symbol.
+            val apps = LocalContext.current.launcherApp.apps
+            val app = remember(target.packageName) { apps.appOf(0, target.packageName) }
+            if (app != null) AppIconImage(app, size) else SymbolTile(R.drawable.ic_message, size)
         }
         is SettingTarget -> SymbolTile(
             if (target.special == SettingTarget.Special.Torch) R.drawable.ic_flashlight else R.drawable.ic_settings,

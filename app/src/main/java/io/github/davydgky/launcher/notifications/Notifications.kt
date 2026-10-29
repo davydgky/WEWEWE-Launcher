@@ -28,7 +28,8 @@ class AppNotification(
 
 /**
  * Notifications of all apps while notification access is granted, like the dots and the long-press
- * list of the Pixel Launcher. They are kept in memory only and never written anywhere.
+ * list of the Pixel Launcher. Held in memory here; their message texts are also kept on the device by
+ * [io.github.davydgky.launcher.messages.Messages] when saving messages is on.
  */
 class Notifications(private val context: Context) {
 
@@ -110,11 +111,20 @@ class NotificationListener : NotificationListenerService() {
 
     private val notifications get() = (application as io.github.davydgky.launcher.LauncherApplication).notifications
 
-    override fun onListenerConnected() = notifications.attach(this)
+    private val app get() = application as io.github.davydgky.launcher.LauncherApplication
+
+    override fun onListenerConnected() {
+        notifications.attach(this)
+        // What is in the shade right now is kept as well (duplicates are ignored).
+        runCatching { activeNotifications }.getOrNull()?.forEach { app.messages.capture(it, app.appScope) }
+    }
 
     override fun onListenerDisconnected() = notifications.detach(this)
 
-    override fun onNotificationPosted(sbn: StatusBarNotification) = notifications.refresh()
+    override fun onNotificationPosted(sbn: StatusBarNotification) {
+        notifications.refresh()
+        app.messages.capture(sbn, app.appScope)
+    }
 
     override fun onNotificationRemoved(sbn: StatusBarNotification) = notifications.refresh()
 }

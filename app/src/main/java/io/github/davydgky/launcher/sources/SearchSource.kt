@@ -18,6 +18,8 @@ enum class Requirement {
     NoteFolder,
     VeloInstall,
     VeloPermission,
+    NotificationAccess,
+    Sms,
 }
 
 /**

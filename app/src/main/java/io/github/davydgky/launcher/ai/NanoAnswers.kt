@@ -1,6 +1,14 @@
 package io.github.davydgky.launcher.ai
 
 import android.util.Log
+import io.github.davydgky.launcher.core.MessageText
+import io.github.davydgky.launcher.core.SmartAction
+import io.github.davydgky.launcher.core.SmartActions
+import java.time.Instant
+import java.time.LocalDateTime
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 import com.google.mlkit.genai.common.DownloadStatus
 import com.google.mlkit.genai.common.FeatureStatus
 import com.google.mlkit.genai.prompt.Generation
@@ -8,11 +16,6 @@ import com.google.mlkit.genai.prompt.GenerativeModel
 import com.google.mlkit.genai.prompt.SystemInstruction
 import com.google.mlkit.genai.prompt.TextPart
 import com.google.mlkit.genai.prompt.generateContentRequest
-import io.github.davydgky.launcher.core.SmartAction
-import io.github.davydgky.launcher.core.SmartActions
-import java.time.LocalDateTime
-import java.time.format.DateTimeFormatter
-import java.util.Locale
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -92,11 +95,11 @@ class NanoAnswers(private val scope: CoroutineScope) {
      * The reply to what was typed into the search: an answer chunk by chunk, or once complete a request
      * to the phone ("ruf Mama an"). Nothing for plain searches (an app, a name, a single word).
      */
-    fun reply(query: String): Flow<NanoReply> = flow {
+    fun reply(query: String, messages: List<MessageText> = emptyList()): Flow<NanoReply> = flow {
         val client = model ?: return@flow
         if (!isReady) return@flow
         busy.withLock {
-            val request = generateContentRequest(SystemInstruction(searchInstruction()), TextPart(query.trim())) {
+            val request = generateContentRequest(SystemInstruction(searchInstruction() + messageContext(messages)), TextPart(query.trim())) {
                 temperature = 0.2f
                 topK = 16
                 maxOutputTokens = MAX_ANSWER_TOKENS
@@ -177,6 +180,26 @@ class NanoAnswers(private val scope: CoroutineScope) {
         model = null
     }
 
+    /**
+     * Messages from the phone that may answer the question, oldest first, for questions like "Wann muss
+     * ich zum Bahnhof?". Only these few are given, never the whole history.
+     */
+    private fun messageContext(messages: List<MessageText>): String {
+        if (messages.isEmpty()) return ""
+        val format = DateTimeFormatter.ofPattern("EEE dd.MM. HH:mm", Locale.GERMAN)
+        val zone = ZoneId.systemDefault()
+        val lines = messages.joinToString("\n") { m ->
+            val time = Instant.ofEpochMilli(m.time).atZone(zone).format(format)
+            "- $time · ${m.app} · ${m.sender}: ${m.text.take(MAX_MESSAGE_CHARS).replace('\n', ' ')}"
+        }
+        return buildString {
+            append("\n\nNachrichten auf diesem Handy, die zur Eingabe passen könnten (Zeit · App · Absender: Text):\n")
+            append(lines)
+            append("\n")
+            append(MESSAGE_INSTRUCTION)
+        }
+    }
+
     /** The search instruction with today's date, so "tomorrow at 3" becomes a date. */
     private fun searchInstruction(): String {
         val now = LocalDateTime.now()
@@ -203,6 +226,13 @@ class NanoAnswers(private val scope: CoroutineScope) {
         const val MAX_ANSWER_TOKENS = 220
         const val NOTHING = "-"
         const val MAX_FOLDER_NAME = 24
+        const val MAX_MESSAGE_CHARS = 300
+
+        val MESSAGE_INSTRUCTION = """
+            Beantworte Fragen zu Treffen, Terminen, Uhrzeiten, Orten, Paketen, Codes oder Absprachen anhand dieser
+            Nachrichten: zuerst die Antwort, dann kurz woher (wer, wann). Erfinde nichts; steht es nicht darin,
+            antworte wie sonst.
+        """.trimIndent()
 
         val FOLDER_INSTRUCTION = """
             Gib einen kurzen Ordnernamen für einen Startbildschirm-Ordner mit diesen Apps: ein bis zwei Wörter auf

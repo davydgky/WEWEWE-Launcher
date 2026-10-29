@@ -48,6 +48,12 @@ Welche Quelle Android unter welcher Bedingung erlaubt und warum die Architektur 
   - Neue Ordner bekommen von Nano einen passenden Namen.
   Android erlaubt Gemini Nano nur Apps im Vordergrund und mit einem Akku-Kontingent pro App; Aufgaben, die
   warten können, lassen der Suche immer den Vortritt.
+- **Nachrichten durchsuchen und fragen**: Was als Benachrichtigung ankommt (WhatsApp, Instagram, Mails,
+  Signal, SMS, jede App), bleibt 90 Tage auf dem Gerät und ist durchsuchbar, dazu auf Wunsch alle SMS der
+  letzten 90 Tage. Fragen wie „Wann muss ich zum Bahnhof?“ beantwortet Gemini Nano aus den passenden
+  Nachrichten („Um 14:20 am Bahnhof, laut Anna heute 11:02“) und zeigt, aus welcher sie stammt. Andere
+  Apps lassen niemanden an ihre Chatverläufe; ältere Chats und Nachrichten ohne Benachrichtigung fehlen
+  daher. Aufbewahren lässt sich abschalten, gespeicherte Nachrichten mit einem Tipp löschen.
 - **Apps aus dem Play Store**: Passt kaum eine installierte App („bahn tickets“), zeigt die Suche passende
   Apps aus dem Play Store mit Icon, Bewertung und Download-Knopf (öffnet das Installationsfenster des
   Stores). Ohne Netz schlägt Gemini Nano bekannte Apps vor.
@@ -133,6 +139,9 @@ einem eigenen Thread, und eine neue Eingabe bricht die vorige Suche ab.
   Den Meldekanal, über den ML Kit Nutzungsstatistiken senden würde, entfernt der Build aus dem Manifest; auch
   das prüft die CI am fertigen APK. Index, Texterkennung und Gemini Nano bleiben auf dem Gerät, Suchanfragen
   auch, außer bei den Play-Store-Treffern (siehe oben).
+- Nachrichten aus Benachrichtigungen liegen nur in der Datenbank des Launchers (`messages.db`, App-Speicher,
+  von Android verschlüsselt), werden nach 90 Tagen gelöscht und gehen nie ins Netz; Gemini Nano bekommt
+  für eine Frage nur die wenigen passenden.
 - Kein Backup (`allowBackup=false`). Der Index liegt im App-Speicher: OCR-Text, Dokument- und
   Notizinhalte in SQLite, alles andere nur im Arbeitsspeicher.
 - Eine Websuche (letzte Zeile der Treffer) übergibt die Eingabe erst auf Antippen an Velo, die

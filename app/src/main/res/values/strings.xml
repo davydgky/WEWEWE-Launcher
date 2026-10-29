@@ -213,6 +213,21 @@
     <string name="menu_app_timer">App timer</string>
     <string name="menu_bubble">Bubble</string>
     <string name="ai_title">Gemini Nano</string>
+    <string name="source_messages">Messages</string>
+    <string name="source_messages_description">WhatsApp, Instagram, mail and every other app, from their notifications; kept on this device</string>
+    <string name="source_sms">SMS</string>
+    <string name="source_sms_description">All SMS of the last 90 days, also older ones</string>
+    <string name="grant_notification_access">Allow notification access</string>
+    <string name="setting_save_messages">Keep messages</string>
+    <string name="setting_save_messages_description">Messages from notifications stay searchable for %1$d days, for the search and Gemini Nano\'s answers. Only on this device.</string>
+    <plurals name="saved_messages">
+        <item quantity="one">%1$d message kept</item>
+        <item quantity="other">%1$d messages kept</item>
+    </plurals>
+    <string name="saved_messages_delete">Delete all</string>
+    <string name="message_me">Me</string>
+    <string name="section_messages">Messages</string>
+    <string name="ai_from_messages">From your messages</string>
     <string name="section_store">From the Play Store</string>
     <string name="store_install">Install</string>
     <string name="store_suggested">Suggested by Gemini Nano</string>
