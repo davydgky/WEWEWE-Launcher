@@ -210,4 +210,11 @@
     <string name="notification_dots_description">Dots on app icons and the notifications in an app\'s long-press menu, like on Pixel phones. Notifications stay in memory and are never stored.</string>
     <string name="notification_dots_allow">Allow</string>
     <string name="notification_dots_on">On</string>
+    <string name="folder_style_classic">Folder</string>
+    <string name="folder_style_small">Tile · 1 cell</string>
+    <string name="folder_style_wide">Tile · 3 cells</string>
+    <string name="folder_style_large">Tile · 4 cells</string>
+    <string name="folder_playful">Playful arrangement</string>
+    <string name="setting_grid">Grid</string>
+    <string name="setting_grid_description">Columns × rows of the home screen pages. Everything keeps its place where it fits.</string>
 </resources>

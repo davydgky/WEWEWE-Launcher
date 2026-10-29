@@ -18,18 +18,42 @@ data class AppItem(override val id: Long, override val cell: Cell, val appKey: S
 }
 
 /**
- * A folder in the style of Nothing OS: it covers 2×2 cells and shows all its apps as a 3×3 grid of small
- * icons that open directly, without opening the folder first.
+ * How a folder looks: a [Classic] folder as on Pixel phones (one cell, opens on tap), or a tile in the
+ * style of Nothing OS whose app icons open directly: [w]×[h] cells showing [appRows]×[appColumns] apps.
  */
-data class FolderItem(override val id: Long, override val cell: Cell, val name: String, val apps: List<String>) : HomeItem {
-    override fun moved(cell: Cell) = copy(cell = cell.copy(w = SIZE, h = SIZE))
+enum class FolderStyle(val w: Int, val h: Int, val appRows: Int, val appColumns: Int) {
+    Classic(1, 1, 2, 2),
+    Small(1, 1, 1, 2),
+    Wide(3, 1, 2, 3),
+    Large(2, 2, 3, 3);
 
-    val isFull: Boolean get() = apps.size >= MAX_APPS
+    val isTile: Boolean get() = this != Classic
+
+    /** Apps shown on the home screen: the preview of a classic folder, every app of a tile. */
+    val slots: Int get() = appRows * appColumns
+}
+
+/**
+ * A folder of apps. [name] "" shows the default name, a name of only spaces shows no name at all.
+ * [playful] tiles scatter their icons a little instead of lining them up.
+ */
+data class FolderItem(
+    override val id: Long,
+    override val cell: Cell,
+    val name: String,
+    val apps: List<String>,
+    val style: FolderStyle = FolderStyle.Large,
+    val playful: Boolean = false,
+) : HomeItem {
+    override fun moved(cell: Cell) = copy(cell = cell.copy(w = style.w, h = style.h))
+
+    /** Tiles keep every app reachable on the home screen, so they take no more than the largest tile shows. */
+    val isFull: Boolean get() = style.isTile && apps.size >= MAX_APPS
+
+    val showsName: Boolean get() = name.isEmpty() || name.isNotBlank()
 
     companion object {
-        const val SIZE = 2
-
-        /** As many apps as fit in the 3×3 grid, so every app stays reachable without opening the folder. */
+        /** As many apps as the largest tile (3×3) shows. */
         const val MAX_APPS = 9
     }
 }
@@ -146,7 +170,8 @@ data class Workspace(
     fun makeFolder(draggedId: Long, targetId: Long, name: String): Workspace {
         val dragged = item(draggedId) as? AppItem ?: return this
         val target = item(targetId) as? AppItem ?: return this
-        val folder = FolderItem(nextId, target.cell.copy(w = FolderItem.SIZE, h = FolderItem.SIZE), name, listOf(target.appKey, dragged.appKey))
+        val style = FolderStyle.Large
+        val folder = FolderItem(nextId, target.cell.copy(w = style.w, h = style.h), name, listOf(target.appKey, dragged.appKey), style)
         val ws = copy(items = items.filter { it.id != draggedId && it.id != targetId } + folder, nextId = nextId + 1)
         return ws.withCells(grid.place(ws.cells(), folder.id, folder.cell))
     }
@@ -182,6 +207,44 @@ data class Workspace(
             ws = ws.addApp(app, preferred)
         }
         return ws
+    }
+
+    /** Changes how a folder looks; a bigger folder pushes aside what is in its way. */
+    fun setFolderStyle(folderId: Long, style: FolderStyle): Workspace {
+        val folder = item(folderId) as? FolderItem ?: return this
+        if (style.w > columns || style.h > rows) return this
+        val target = grid.clamp(folder.cell.copy(w = style.w, h = style.h))
+        val ws = with(folder.copy(style = style, cell = target))
+        return ws.withCells(ws.grid.place(ws.cells(), folderId, target))
+    }
+
+    fun setFolderPlayful(folderId: Long, playful: Boolean): Workspace {
+        val folder = item(folderId) as? FolderItem ?: return this
+        return with(folder.copy(playful = playful))
+    }
+
+    /**
+     * The same arrangement on a grid of [newColumns]×[newRows]: everything that still fits keeps its
+     * place, the rest moves to the next free place from its page on.
+     */
+    fun withGrid(newColumns: Int, newRows: Int): Workspace {
+        if (newColumns == columns && newRows == rows) return this
+        val newGrid = HomeGrid(newColumns, newRows)
+        val placed = HashMap<Long, Cell>()
+        val kept = items.sortedWith(compareBy({ it.cell.page }, { it.cell.y }, { it.cell.x })).map { original ->
+            // A folder tile wider than the new grid becomes a classic folder; a widget shrinks to fit.
+            val item = if (original is FolderItem && (original.style.w > newColumns || original.style.h > newRows)) {
+                original.copy(style = FolderStyle.Classic)
+            } else original
+            val w = if (item is FolderItem) item.style.w else minOf(item.cell.w, newColumns)
+            val h = if (item is FolderItem) item.style.h else minOf(item.cell.h, newRows)
+            val wanted = item.cell.copy(w = w, h = h)
+            val fits = wanted.x + w <= newColumns && wanted.y + h <= newRows && newGrid.isFree(placed, wanted)
+            val cell = if (fits) wanted else newGrid.firstFree(placed, w, h, fromPage = item.cell.page)
+            placed[item.id] = cell
+            if (item is WidgetItem) item.copy(cell = cell) else item.moved(cell)
+        }
+        return copy(columns = newColumns, rows = newRows, items = kept).let { it.withCells(it.cells()) }
     }
 
     fun renameFolder(folderId: Long, name: String): Workspace {
@@ -247,8 +310,8 @@ data class Workspace(
             dock = dock.filter { it in present },
         )
         ws = ws.withCells(ws.cells())
-        // Folders from before the limit keep their first apps; the others get their own cells.
-        ws.items.filterIsInstance<FolderItem>().filter { it.apps.size > FolderItem.MAX_APPS }.forEach { folder ->
+        // Tiles from before the limit keep their first apps; the others get their own cells.
+        ws.items.filterIsInstance<FolderItem>().filter { it.style.isTile && it.apps.size > FolderItem.MAX_APPS }.forEach { folder ->
             val extra = folder.apps.drop(FolderItem.MAX_APPS)
             ws = ws.with(folder.copy(apps = folder.apps.take(FolderItem.MAX_APPS)))
             extra.forEach { ws = ws.addApp(it, ws.grid.firstFree(ws.cells(), 1, 1, fromPage = folder.cell.page)) }
@@ -309,6 +372,8 @@ object WorkspaceCodec {
                             put("type", "folder")
                             put("name", item.name)
                             put("apps", JSONArray(item.apps))
+                            put("style", item.style.name)
+                            put("playful", item.playful)
                         }
                         is WidgetItem -> {
                             put("type", "widget")
@@ -334,7 +399,11 @@ object WorkspaceCodec {
             val id = item.getLong("id")
             when (item.optString("type")) {
                 "app" -> AppItem(id, cell, item.getString("app"))
-                "folder" -> FolderItem(id, cell, item.optString("name"), item.getJSONArray("apps").strings())
+                "folder" -> FolderItem(
+                    id, cell, item.optString("name"), item.getJSONArray("apps").strings(),
+                    style = FolderStyle.entries.firstOrNull { it.name == item.optString("style") } ?: FolderStyle.Large,
+                    playful = item.optBoolean("playful", false),
+                )
                 "widget" -> WidgetItem(id, cell, item.getInt("widgetId"), item.getString("provider"))
                 "shortcut" -> ShortcutItem(id, cell, item.getString("shortcut"), item.optString("label"))
                 else -> null

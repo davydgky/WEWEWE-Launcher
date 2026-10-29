@@ -61,9 +61,14 @@ Welche Quelle Android unter welcher Bedingung erlaubt und warum die Architektur 
 - **Homescreen frei anordnen**: Was im Weg steht, rückt zur Seite. Am
   Bildschirmrand blättert die Seite um, und hinter der letzten Seite entsteht eine neue. Die erste Anordnung
   stellt die meistgenutzten Apps nach vorn. Über die Seitenpunkte wischen springt zwischen den Seiten.
-- **Ordner wie bei Nothing OS**: Eine App auf eine andere ziehen erzeugt einen Ordner über 2×2 Felder. Er fasst
-  bis zu neun Apps und zeigt sie verkleinert im 3×3-Raster; jede lässt sich direkt antippen, ohne den Ordner
-  zu öffnen. Der Rand öffnet den Ordner, in dem man ihn umbenennen und Apps herausnehmen kann.
+- **Ordner in vier Formen** (Menü beim langen Drücken auf den Ordner): als klassischer Ordner wie auf
+  Pixel-Handys (ein Feld, Antippen öffnet ihn) oder als Fläche im Stil von Nothing OS, deren Apps sich direkt
+  antippen lassen: 1 Feld mit 1×2 Apps, 3 Felder mit 2×3 Apps oder 4 Felder mit 3×3 Apps. Flächen fassen bis
+  zu neun Apps, klassische Ordner beliebig viele. „Verspielt anordnen“ verschiebt und kippt die Symbole einer
+  Fläche leicht, immer gleich für denselben Ordner. Ein Name aus nur einem Leerzeichen blendet den Namen aus.
+  Eine App auf eine andere ziehen erzeugt einen Ordner; der Rand einer Fläche öffnet ihn zum Umbenennen.
+- **Raster** wählbar (4×5 bis 6×7), Standard 5×6 auf Handys. Beim Wechsel bleibt alles an seinem Platz,
+  soweit es passt; Symbole werden bei vielen Spalten kleiner.
 - **App-Mediathek** rechts neben der letzten Seite, wie bei iOS: Vorschläge, zuletzt installiert und Kategorien,
   die die Apps selbst angeben, jeweils nach Nutzung sortiert. Neue Apps landen wahlweise nur hier.
 - **Widgets**: im Bearbeitungsmodus über „Widget hinzufügen“. Die Auswahl zeigt Vorschauen, danach folgt
@@ -218,7 +223,9 @@ Signiert wird mit `scripts/sign_release.sh`:
 - Die App-Vorschläge des Pixel Launchers kommen von „Android System Intelligence“ über eine System-API
   (`AppPredictionManager`), die nur vorinstallierte Launcher nutzen dürfen. Der Dock-Vorschlag nutzt
   deshalb die eigene Vorhersage.
-- Aus dem Pixel-Menü fehlen „App pausieren“ (pausieren dürfen nur System-Apps; „App-Timer“ öffnet stattdessen
+- „Als Bubble öffnen“ aus dem Pixel-Menü startet die Systemoberfläche über eine interne Schnittstelle, die
+  nur der vorinstallierte Launcher nutzen darf; Apps selbst können Unterhaltungen weiter als Bubble anbieten.
+- Aus dem Pixel-Menü fehlen außerdem „App pausieren“ (pausieren dürfen nur System-Apps; „App-Timer“ öffnet stattdessen
   Digital Wellbeing für die App) und „Geteilter Bildschirm“ (startet nur die Systemoberfläche). Widgets, die
   andere Apps auf den Home-Bildschirm legen wollen, nimmt der Launcher noch nicht an, nur Verknüpfungen.
 - Texterkennung nur für lateinische Schrift. Office-Dateien werden nur über den Namen gefunden.

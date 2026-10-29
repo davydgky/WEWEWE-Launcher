@@ -175,6 +175,51 @@ class WorkspaceTest {
     }
 
     @Test
+    fun foldersChangeStyleAndPushAsideWhatIsInTheWay() {
+        val base = initial()
+        var ws = base.makeFolder(base.appItem("app4").id, base.appItem("app3").id, "Spiele")
+        val id = ws.items.filterIsInstance<FolderItem>().single().id
+        ws = ws.setFolderStyle(id, FolderStyle.Classic)
+        assertEquals(Cell(0, 0, 0, 1, 1), ws.item(id)!!.cell)
+        ws.assertNoOverlaps()
+        ws = ws.setFolderStyle(id, FolderStyle.Wide)
+        assertEquals(Cell(0, 0, 0, 3, 1), ws.item(id)!!.cell)
+        ws.assertNoOverlaps()
+        assertEquals(apps.toSet(), ws.appsOnHome())
+        // A classic folder takes any number of apps, a tile at most nine.
+        ws = ws.setFolderStyle(id, FolderStyle.Classic)
+        (5..10).forEach { ws = ws.addToFolder("app$it", id) }
+        assertEquals(8, (ws.item(id) as FolderItem).apps.size)
+        ws = ws.setFolderPlayful(id, true)
+        assertEquals(ws, WorkspaceCodec.decode(WorkspaceCodec.encode(ws)))
+    }
+
+    @Test
+    fun aNameOfSpacesHidesTheFolderName() {
+        val folder = FolderItem(1, Cell(0, 0, 0, 2, 2), "Spiele", listOf("a", "b"))
+        assertTrue(folder.showsName)
+        assertTrue(folder.copy(name = "").showsName)
+        assertFalse(folder.copy(name = " ").showsName)
+    }
+
+    @Test
+    fun aWiderGridKeepsPlacesAndANarrowerOneMovesWhatNoLongerFits() {
+        val base = initial()
+        var ws = base.makeFolder(base.appItem("app4").id, base.appItem("app3").id, "Ordner")
+        val id = ws.items.filterIsInstance<FolderItem>().single().id
+        ws = ws.setFolderStyle(id, FolderStyle.Wide)
+        val wide = ws.withGrid(5, 6)
+        assertEquals(5, wide.columns)
+        assertEquals(ws.items.map { it.cell }.toSet(), wide.items.map { it.cell }.toSet())
+        val narrow = wide.withGrid(2, 6)
+        narrow.assertNoOverlaps()
+        assertTrue(narrow.items.all { it.cell.x + it.cell.w <= 2 })
+        // The wide tile no longer fits: it becomes a classic folder and keeps its apps.
+        assertEquals(FolderStyle.Classic, (narrow.item(id) as FolderItem).style)
+        assertEquals(apps.toSet(), narrow.appsOnHome())
+    }
+
+    @Test
     fun codecRoundTrip() {
         val base = initial()
         val ws = base.makeFolder(base.appItem("app4").id, base.appItem("app3").id, "Spiele")

@@ -209,4 +209,11 @@
     <string name="notification_dots_description">Punkte an App-Symbolen und die Benachrichtigungen im Menü beim langen Drücken, wie auf Pixel-Handys. Benachrichtigungen bleiben im Arbeitsspeicher und werden nie gespeichert.</string>
     <string name="notification_dots_allow">Erlauben</string>
     <string name="notification_dots_on">An</string>
+    <string name="folder_style_classic">Ordner</string>
+    <string name="folder_style_small">Fläche · 1 Feld</string>
+    <string name="folder_style_wide">Fläche · 3 Felder</string>
+    <string name="folder_style_large">Fläche · 4 Felder</string>
+    <string name="folder_playful">Verspielt anordnen</string>
+    <string name="setting_grid">Raster</string>
+    <string name="setting_grid_description">Spalten × Zeilen der Home-Bildschirm-Seiten. Alles behält seinen Platz, soweit es passt.</string>
 </resources>

@@ -13,6 +13,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -27,9 +28,11 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -49,6 +52,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -98,6 +102,9 @@ class SettingsActivity : ComponentActivity() {
         }
     }
 }
+
+/** Columns × rows the home screen offers. */
+private val GridOptions = listOf(4 to 5, 4 to 6, 5 to 5, 5 to 6, 5 to 7, 6 to 5, 6 to 7)
 
 private class SourceInfo(val id: String, val title: Int, val description: Int)
 
@@ -194,6 +201,29 @@ private fun SettingsScreen(activity: ComponentActivity) {
         }
         item {
             Group(stringResource(R.string.settings_home)) {
+                Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
+                    Text(stringResource(R.string.setting_grid), style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        stringResource(R.string.setting_grid_description),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    val tablet = LocalConfiguration.current.smallestScreenWidthDp >= 600
+                    val current = (prefs.gridColumns ?: if (tablet) 6 else 5) to (prefs.gridRows ?: if (tablet) 5 else 6)
+                    Row(
+                        Modifier.padding(top = 8.dp).horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        GridOptions.forEach { option ->
+                            FilterChip(
+                                selected = option == current,
+                                onClick = { scope.launch { app.settings.setGrid(option.first, option.second) } },
+                                label = { Text("${option.first} × ${option.second}") },
+                            )
+                        }
+                    }
+                }
+                HorizontalDivider()
                 Row(
                     Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
                     verticalAlignment = Alignment.CenterVertically,

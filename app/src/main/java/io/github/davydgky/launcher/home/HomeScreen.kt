@@ -57,6 +57,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
@@ -68,6 +69,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -109,6 +111,7 @@ import io.github.davydgky.launcher.ui.ScreenBounds
 import io.github.davydgky.launcher.ui.wallpaperTextColor
 import io.github.davydgky.launcher.widgets.WidgetHost
 import kotlin.math.floor
+import kotlin.random.Random
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -291,6 +294,8 @@ private fun WorkspacePage(
         val cellH = maxHeight / workspace.rows
         val drag = controller.drag
         val wiggle = wiggleAngle(controller.wiggling)
+        // With many columns or rows the icons shrink so labels keep their room.
+        val iconSize = minOf(ICON_SIZE, cellW * 0.76f, cellH - 34.dp)
         // Where the dragged element would land.
         when (val target = drag?.target) {
             is DropTarget.Move -> if (target.cell.page == page) {
@@ -305,7 +310,7 @@ private fun WorkspacePage(
             }
             else -> Unit
         }
-        workspace.itemsOn(page).forEach { item ->
+        CompositionLocalProvider(LocalIconSize provides iconSize) { workspace.itemsOn(page).forEach { item ->
             key(item.id) {
                 val target = with(density) {
                     IntOffset((cellW * item.cell.x).roundToPx(), (cellH * item.cell.y).roundToPx())
@@ -340,13 +345,18 @@ private fun WorkspacePage(
                         when (item) {
                             is AppItem -> RemoveBadge(
                                 onClick = { controller.repository.removeApp(item.appKey) },
-                                modifier = Modifier.align(Alignment.TopCenter).offset(x = -ICON_SIZE / 2 + 2.dp, y = 0.dp),
+                                modifier = Modifier.align(Alignment.TopCenter).offset(x = -iconSize / 2 + 2.dp, y = 0.dp),
                             )
                             is ShortcutItem -> RemoveBadge(
                                 onClick = { controller.repository.removeItem(item.id) },
-                                modifier = Modifier.align(Alignment.TopCenter).offset(x = -ICON_SIZE / 2 + 2.dp, y = 0.dp),
+                                modifier = Modifier.align(Alignment.TopCenter).offset(x = -iconSize / 2 + 2.dp, y = 0.dp),
                             )
-                            is FolderItem, is WidgetItem -> RemoveBadge(
+                            is FolderItem -> RemoveBadge(
+                                onClick = { controller.repository.removeItem(item.id) },
+                                modifier = if (item.style.isTile) Modifier.align(Alignment.TopStart)
+                                else Modifier.align(Alignment.TopCenter).offset(x = -iconSize / 2 + 2.dp, y = 0.dp),
+                            )
+                            is WidgetItem -> RemoveBadge(
                                 onClick = { controller.repository.removeItem(item.id) },
                                 modifier = Modifier.align(Alignment.TopStart),
                             )
@@ -354,7 +364,7 @@ private fun WorkspacePage(
                     }
                 }
             }
-        }
+        } }
     }
 }
 
@@ -394,7 +404,7 @@ private fun HomeAppIcon(app: AppTarget, source: DragSource, controller: HomeCont
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Box {
-                AppIconImage(app, ICON_SIZE, Modifier.onGloballyPositioned(bounds::update))
+                AppIconImage(app, LocalIconSize.current, Modifier.onGloballyPositioned(bounds::update))
                 if (notificationCount(app) > 0) NotificationDot(10.dp, Modifier.align(Alignment.TopEnd))
             }
             if (showLabel) {
@@ -426,8 +436,9 @@ private fun IconLabel(text: String, modifier: Modifier = Modifier) {
 }
 
 /**
- * A folder like on Nothing OS: 2×2 cells showing up to nine apps as a 3×3 grid whose icons open
- * directly. The space around them opens the folder.
+ * A folder, as a classic Pixel folder (one cell, a tap opens it) or as a tile in the style of Nothing
+ * OS whose app icons open directly while the space around them opens the folder. A name of only
+ * spaces hides the name, and the tile takes its room.
  */
 @Composable
 private fun FolderCell(folder: FolderItem, apps: Map<String, AppTarget>, controller: HomeController) {
@@ -435,6 +446,7 @@ private fun FolderCell(folder: FolderItem, apps: Map<String, AppTarget>, control
     var size by remember { mutableStateOf(IntSize.Zero) }
     val haptics = LocalHapticFeedback.current
     val members = folder.apps.mapNotNull(apps::get)
+    val open = { controller.openFolderId = folder.id }
     Column(
         Modifier
             .fillMaxSize()
@@ -442,7 +454,8 @@ private fun FolderCell(folder: FolderItem, apps: Map<String, AppTarget>, control
             .homeItemGestures(
                 key = folder.id,
                 callbacks = HomeItemGestureCallbacks(
-                    onTap = null,
+                    // Tiles: the icons inside take taps themselves; classic folders open on a tap.
+                    onTap = if (folder.style.isTile) null else open,
                     onLongPress = {
                         haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                         controller.itemHeld()
@@ -457,44 +470,88 @@ private fun FolderCell(folder: FolderItem, apps: Map<String, AppTarget>, control
                     onDown = controller::itemDown,
                     onRelease = controller::itemReleased,
                     editing = { controller.editMode },
-                    onEditTap = { controller.openFolderId = folder.id },
+                    onEditTap = open,
                 ),
             )
-            .padding(CELL_PADDING),
+            .padding(if (folder.style.isTile) CELL_PADDING else 0.dp)
+            .padding(top = if (folder.style.isTile) 0.dp else 6.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Box(
-            Modifier
-                .weight(1f)
-                .aspectRatio(1f, matchHeightConstraintsFirst = true)
-                .clip(RoundedCornerShape(30.dp))
-                .background(folderFill())
-                .clickable { controller.openFolderId = folder.id }
-                .padding(6.dp),
-        ) {
-            FolderGrid(members) { app, bounds -> controller.actions.launchApp(app, bounds) }
+        if (folder.style.isTile) {
+            Box(
+                Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(if (folder.style == FolderStyle.Small) 20.dp else 28.dp))
+                    .background(folderFill())
+                    .clickable(onClick = open)
+                    .padding(if (folder.style == FolderStyle.Small) 3.dp else 6.dp),
+            ) {
+                FolderGrid(members, folder.style, folder.playful, folder.id) { app, bounds -> controller.actions.launchApp(app, bounds) }
+            }
+        } else {
+            ClassicFolderIcon(members, LocalIconSize.current)
         }
-        Spacer(Modifier.height(4.dp))
-        IconLabel(folder.name.ifBlank { stringResource(R.string.folder_default_name) })
+        if (folder.showsName) {
+            Spacer(Modifier.height(if (folder.style.isTile) 4.dp else 6.dp))
+            IconLabel(folder.name.ifEmpty { stringResource(R.string.folder_default_name) })
+        }
         FolderMenu(folder, menu, onDismiss = { menu = false }, controller)
     }
 }
 
-/** Up to nine apps in three rows of three; each icon opens its app. */
+/** A folder as on Pixel phones: a round plate with the first four apps in miniature. */
 @Composable
-private fun FolderGrid(apps: List<AppTarget>, onOpenApp: (AppTarget, Rect?) -> Unit) {
+private fun ClassicFolderIcon(apps: List<AppTarget>, size: Dp) {
+    Box(
+        Modifier.size(size).clip(CircleShape).background(folderFill()),
+        contentAlignment = Alignment.Center,
+    ) {
+        val mini = size * 0.34f
+        Column(verticalArrangement = Arrangement.spacedBy(size * 0.05f)) {
+            apps.take(4).chunked(2).forEach { row ->
+                Row(horizontalArrangement = Arrangement.spacedBy(size * 0.05f)) {
+                    row.forEach { app -> key(app.key) { AppIconImage(app, mini) } }
+                    if (row.size == 1) Spacer(Modifier.size(mini))
+                }
+            }
+        }
+    }
+}
+
+/**
+ * The apps of a tile in [style]'s rows and columns; each icon opens its app. [playful] scatters them a
+ * little: shifted rows, a nudge and a tilt per icon, the same every time for the same folder.
+ */
+@Composable
+private fun FolderGrid(
+    apps: List<AppTarget>,
+    style: FolderStyle,
+    playful: Boolean,
+    seed: Long,
+    onOpenApp: (AppTarget, Rect?) -> Unit,
+) {
     BoxWithConstraints(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        val slot = minOf(maxWidth, maxHeight) / 3
-        val icon = minOf(slot - 6.dp, ICON_SIZE)
+        val slot = minOf(maxWidth / style.appColumns, maxHeight / style.appRows)
+        val icon = minOf(slot - if (style == FolderStyle.Small) 4.dp else 6.dp, LocalIconSize.current)
         Column {
-            for (row in 0 until 3) {
+            for (row in 0 until style.appRows) {
                 Row {
-                    for (col in 0 until 3) {
+                    for (col in 0 until style.appColumns) {
                         Box(Modifier.size(slot), contentAlignment = Alignment.Center) {
-                            apps.getOrNull(row * 3 + col)?.let { app ->
+                            apps.getOrNull(row * style.appColumns + col)?.let { app ->
                                 key(app.key) {
                                     val bounds = remember { ScreenBounds() }
-                                    Box {
+                                    val scatter = remember(playful, seed, app.key, row) { if (playful) Scatter.of(seed, app.key, row) else Scatter.None }
+                                    Box(
+                                        Modifier.graphicsLayer {
+                                            translationX = scatter.dx * slot.toPx()
+                                            translationY = scatter.dy * slot.toPx()
+                                            rotationZ = scatter.rotation
+                                            scaleX = scatter.scale
+                                            scaleY = scatter.scale
+                                        },
+                                    ) {
                                         AppIconImage(
                                             app, icon,
                                             Modifier
@@ -513,6 +570,28 @@ private fun FolderGrid(apps: List<AppTarget>, onOpenApp: (AppTarget, Rect?) -> U
         }
     }
 }
+
+/** How far one icon of a playful tile leaves its place, in slots, degrees and size. */
+private class Scatter(val dx: Float, val dy: Float, val rotation: Float, val scale: Float) {
+    companion object {
+        val None = Scatter(0f, 0f, 0f, 1f)
+
+        fun of(seed: Long, appKey: String, row: Int): Scatter {
+            val random = Random(seed * 31 + appKey.hashCode())
+            // Every other row sits a little to the right, like stones in a wall.
+            val stagger = if (row % 2 == 1) 0.14f else -0.06f
+            return Scatter(
+                dx = stagger + (random.nextFloat() - 0.5f) * 0.22f,
+                dy = (random.nextFloat() - 0.5f) * 0.24f,
+                rotation = (random.nextFloat() - 0.5f) * 22f,
+                scale = 0.86f + random.nextFloat() * 0.2f,
+            )
+        }
+    }
+}
+
+/** Icon size on the pages: as on the dock, smaller when the grid has many columns. */
+private val LocalIconSize = staticCompositionLocalOf { ICON_SIZE }
 
 @Composable
 private fun folderFill(): Color =
@@ -933,6 +1012,35 @@ private fun AppMenu(
 @Composable
 private fun FolderMenu(folder: FolderItem, expanded: Boolean, onDismiss: () -> Unit, controller: HomeController) {
     DropdownMenu(expanded = expanded, onDismissRequest = onDismiss, shape = RoundedCornerShape(18.dp)) {
+        // How the folder looks: a Pixel folder or a tile of one, three or four cells.
+        listOf(
+            FolderStyle.Classic to R.string.folder_style_classic,
+            FolderStyle.Small to R.string.folder_style_small,
+            FolderStyle.Wide to R.string.folder_style_wide,
+            FolderStyle.Large to R.string.folder_style_large,
+        ).forEach { (style, label) ->
+            DropdownMenuItem(
+                text = { Text(stringResource(label)) },
+                leadingIcon = { Icon(painterResource(if (style.isTile) R.drawable.ic_widget else R.drawable.ic_folder), null) },
+                trailingIcon = if (folder.style == style) ({ Icon(painterResource(R.drawable.ic_check), null) }) else null,
+                onClick = {
+                    onDismiss()
+                    controller.repository.setFolderStyle(folder.id, style)
+                },
+            )
+        }
+        if (folder.style.isTile) {
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.folder_playful)) },
+                leadingIcon = { Icon(painterResource(R.drawable.ic_star), null) },
+                trailingIcon = if (folder.playful) ({ Icon(painterResource(R.drawable.ic_check), null) }) else null,
+                onClick = {
+                    onDismiss()
+                    controller.repository.setFolderPlayful(folder.id, !folder.playful)
+                },
+            )
+        }
+        HorizontalDivider()
         MenuItem(R.string.menu_rename_folder, R.drawable.ic_edit) {
             onDismiss()
             controller.openFolderId = folder.id
@@ -1096,7 +1204,7 @@ private fun ShortcutCell(item: ShortcutItem, target: ShortcutTarget?, controller
                 .padding(top = 6.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            ShortcutIcon(item, target, app, ICON_SIZE, Modifier.onGloballyPositioned(bounds::update))
+            ShortcutIcon(item, target, app, LocalIconSize.current, Modifier.onGloballyPositioned(bounds::update))
             Spacer(Modifier.height(6.dp))
             IconLabel(label)
         }

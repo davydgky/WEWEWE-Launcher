@@ -5,6 +5,7 @@ import android.util.Log
 import io.github.davydgky.launcher.apps.AppsRepository
 import io.github.davydgky.launcher.apps.DefaultApps
 import io.github.davydgky.launcher.core.Cell
+import io.github.davydgky.launcher.data.LauncherPrefs
 import io.github.davydgky.launcher.data.LauncherSettings
 import io.github.davydgky.launcher.search.AppTarget
 import io.github.davydgky.launcher.usage.UsageHistory
@@ -53,11 +54,12 @@ class WorkspaceRepository(
                 val keys = list.map { it.key }
                 val packages = list.mapTo(HashSet()) { it.packageName }
                 val current = state.value
+                val (columns, rows) = gridOf(prefs)
                 if (current == null) {
-                    state.value = createInitial(keys, prefs.dock)
+                    state.value = createInitial(keys, prefs.dock, columns, rows)
                     scheduleSave()
                 } else {
-                    update { it.sync(keys, prefs.addNewAppsToHome, packages).withoutMissingWidgets() }
+                    update { it.withGrid(columns, rows).sync(keys, prefs.addNewAppsToHome, packages).withoutMissingWidgets() }
                 }
                 // Edits that came in before the arrangement was loaded (a shortcut added from another app).
                 if (pending.isNotEmpty()) {
@@ -69,10 +71,13 @@ class WorkspaceRepository(
         }
     }
 
-    private suspend fun createInitial(keys: List<String>, legacyDock: List<String>?): Workspace {
-        val config = context.resources.configuration
-        val columns = if (config.smallestScreenWidthDp >= 600) 6 else 4
-        val rows = if (config.smallestScreenWidthDp >= 600) 5 else 6
+    /** The grid the user chose, or 5×6 on phones and 6×5 on tablets. */
+    private fun gridOf(prefs: LauncherPrefs): Pair<Int, Int> {
+        val tablet = context.resources.configuration.smallestScreenWidthDp >= 600
+        return (prefs.gridColumns ?: if (tablet) 6 else 5) to (prefs.gridRows ?: if (tablet) 5 else 6)
+    }
+
+    private suspend fun createInitial(keys: List<String>, legacyDock: List<String>?, columns: Int, rows: Int): Workspace {
         val all = apps.apps.value
         // Four default apps: the fifth place is left to the suggested app.
         val dock = legacyDock?.filter { it in keys } ?: DefaultApps.resolve(context, all).take(Workspace.DOCK_SIZE - 1).map { it.key }
@@ -143,6 +148,8 @@ class WorkspaceRepository(
     fun removeFromFolder(folderId: Long, appKey: String) = update { it.removeFromFolder(folderId, appKey) }
     fun dissolveFolder(folderId: Long) = update { it.dissolveFolder(folderId) }
     fun renameFolder(folderId: Long, name: String) = update { it.renameFolder(folderId, name) }
+    fun setFolderStyle(folderId: Long, style: FolderStyle) = update { it.setFolderStyle(folderId, style) }
+    fun setFolderPlayful(folderId: Long, playful: Boolean) = update { it.setFolderPlayful(folderId, playful) }
     fun toDock(appKey: String, index: Int) = update { it.toDock(appKey, index) }
     fun fromDock(appKey: String, target: Cell?) = update { it.fromDock(appKey, target) }
     fun resizeWidget(id: Long, w: Int, h: Int) = update { it.resize(id, w, h) }
