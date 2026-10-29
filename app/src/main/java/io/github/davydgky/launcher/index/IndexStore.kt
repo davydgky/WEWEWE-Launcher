@@ -9,8 +9,9 @@ import android.database.sqlite.SQLiteOpenHelper
 class StoredText(val version: Long, val text: String)
 
 /**
- * Persistent part of the index: text recognised in pictures, text extracted from documents and the
- * contents of note files. Everything else is cheap to read again at start-up.
+ * Persistent part of the index: text recognised in pictures, what pictures show (labels such as
+ * "Dog", "Beach"), text extracted from documents and the contents of note files. Everything else is
+ * cheap to read again at start-up.
  */
 class IndexStore(context: Context) : SQLiteOpenHelper(context, NAME, null, VERSION) {
 
@@ -22,16 +23,33 @@ class IndexStore(context: Context) : SQLiteOpenHelper(context, NAME, null, VERSI
         db.execSQL("CREATE TABLE image_text (id INTEGER PRIMARY KEY, version INTEGER NOT NULL, text TEXT NOT NULL)")
         db.execSQL("CREATE TABLE doc_text (id INTEGER PRIMARY KEY, version INTEGER NOT NULL, text TEXT NOT NULL)")
         db.execSQL("CREATE TABLE note_text (uri TEXT PRIMARY KEY, version INTEGER NOT NULL, text TEXT NOT NULL)")
+        createLabels(db)
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        listOf("image_text", "doc_text", "note_text").forEach { db.execSQL("DROP TABLE IF EXISTS $it") }
+        // Version 2 only added the labels; the text recognised so far stays.
+        if (oldVersion == 1) {
+            createLabels(db)
+            return
+        }
+        listOf("image_text", "image_label", "doc_text", "note_text").forEach { db.execSQL("DROP TABLE IF EXISTS $it") }
         onCreate(db)
+    }
+
+    private fun createLabels(db: SQLiteDatabase) {
+        db.execSQL("CREATE TABLE image_label (id INTEGER PRIMARY KEY, version INTEGER NOT NULL, text TEXT NOT NULL)")
     }
 
     fun imageTexts(): Map<Long, StoredText> = readById("image_text")
     fun putImageText(id: Long, version: Long, text: String) = put("image_text", "id", id, version, text)
-    fun retainImages(ids: Set<Long>) = retainIds("image_text", ids)
+    fun retainImages(ids: Set<Long>) {
+        retainIds("image_text", ids)
+        retainIds("image_label", ids)
+    }
+
+    /** Labels of each picture, comma-separated, in English as the model names them. */
+    fun imageLabels(): Map<Long, StoredText> = readById("image_label")
+    fun putImageLabels(id: Long, version: Long, labels: List<String>) = put("image_label", "id", id, version, labels.joinToString(","))
 
     fun docTexts(): Map<Long, StoredText> = readById("doc_text")
     fun putDocText(id: Long, version: Long, text: String) = put("doc_text", "id", id, version, text)
@@ -54,7 +72,7 @@ class IndexStore(context: Context) : SQLiteOpenHelper(context, NAME, null, VERSI
     }
 
     fun clear() {
-        writableDatabase.transaction { listOf("image_text", "doc_text", "note_text").forEach { delete(it, null, null) } }
+        writableDatabase.transaction { listOf("image_text", "image_label", "doc_text", "note_text").forEach { delete(it, null, null) } }
     }
 
     private fun readById(table: String): Map<Long, StoredText> {
@@ -98,6 +116,6 @@ class IndexStore(context: Context) : SQLiteOpenHelper(context, NAME, null, VERSI
 
     private companion object {
         const val NAME = "content_index.db"
-        const val VERSION = 1
+        const val VERSION = 2
     }
 }

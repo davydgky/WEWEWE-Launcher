@@ -11,15 +11,21 @@ import io.github.davydgky.launcher.core.SearchItem
 import io.github.davydgky.launcher.core.SourceKind
 import io.github.davydgky.launcher.index.ContentIndexJob
 import io.github.davydgky.launcher.index.DocumentEntry
+import io.github.davydgky.launcher.index.ImageLabelNames
 import io.github.davydgky.launcher.index.IndexStore
 import io.github.davydgky.launcher.index.MediaCatalog
 import io.github.davydgky.launcher.search.FileTarget
 import io.github.davydgky.launcher.search.ImageTarget
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.TextStyle
+import java.util.Locale
 
 /**
- * Pictures with text in them. The text is recognised by [ContentIndexJob] while the device charges;
- * this source only lists pictures whose text is already known. Needs READ_MEDIA_IMAGES (or the
- * user's partial selection).
+ * Pictures on the device, findable by what they show ("Hund", "Strand", "Kuchen"), the text in them,
+ * their album ("Screenshots", "WhatsApp Images") and when they were taken ("Oktober 2025"). Album and
+ * date work at once; text and content are recognised on the device by [ContentIndexJob] while it
+ * charges. Needs READ_MEDIA_IMAGES (or the user's partial selection).
  */
 class ImagesSource(private val context: Context, private val store: IndexStore) : SearchSource(ID) {
 
@@ -28,29 +34,42 @@ class ImagesSource(private val context: Context, private val store: IndexStore) 
     override suspend fun load(): List<SearchItem> {
         val images = MediaCatalog.images(context)
         val texts = store.imageTexts()
+        val labels = store.imageLabels()
         store.retainImages(images.mapTo(HashSet()) { it.id })
+        val german = Locale.getDefault().language == "de"
+        val zone = ZoneId.systemDefault()
         var pending = 0
-        val items = ArrayList<SearchItem>()
+        val items = ArrayList<SearchItem>(images.size)
         for (image in images) {
-            val stored = texts[image.id]
-            if (stored == null || stored.version != image.version) {
-                if (image.worthRecognising) pending++
-                continue
-            }
-            val text = stored.text.trim()
-            if (text.isEmpty()) continue
+            val text = texts[image.id]?.takeIf { it.version == image.version }?.text?.trim()
+            val found = labels[image.id]?.takeIf { it.version == image.version }?.text?.split(',')?.filter { it.isNotBlank() }
+            if (image.worthRecognising && (text == null || found == null)) pending++
+            val shown = found.orEmpty().map { label -> (if (german) ImageLabelNames.german(label) else null) ?: label }
             val date = DateUtils.formatDateTime(context, image.dateTaken, DateUtils.FORMAT_SHOW_DATE or DateUtils.FORMAT_ABBREV_MONTH)
+            val taken = Instant.ofEpochMilli(image.dateTaken).atZone(zone)
             items += SearchItem(
                 key = "image:${image.id}",
                 kind = SourceKind.Image,
-                title = text.lineSequence().first().take(TITLE_LENGTH),
+                title = text?.lineSequence()?.firstOrNull()?.take(TITLE_LENGTH)?.takeIf { it.isNotBlank() }
+                    ?: shown.take(3).joinToString(", ").ifEmpty { image.album.ifEmpty { image.name } },
                 subtitle = listOf(date, image.album).filter { it.isNotBlank() }.joinToString(" · "),
-                body = text,
+                keywords = buildList {
+                    if (image.album.isNotBlank()) add(image.album)
+                    found.orEmpty().forEach { label ->
+                        add(label)
+                        ImageLabelNames.german(label)?.let(::add)
+                    }
+                    // "Oktober 2025", "october 2025": month in both languages, and the year.
+                    add(taken.month.getDisplayName(TextStyle.FULL, Locale.GERMAN))
+                    add(taken.month.getDisplayName(TextStyle.FULL, Locale.ENGLISH))
+                    add(taken.year.toString())
+                },
+                body = text.orEmpty(),
                 payload = ImageTarget(image.uri, image.dateTaken),
             )
         }
         if (pending > 0) {
-            Log.i(ID, "$pending pictures wait for text recognition while charging")
+            Log.i(ID, "$pending pictures wait for recognition while charging")
             ContentIndexJob.schedule(context)
         }
         return items

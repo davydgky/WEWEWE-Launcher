@@ -41,10 +41,13 @@ Welche Quelle Android unter welcher Bedingung erlaubt und warum die Architektur 
 - **Aktionen in Treffern**: Kontakte direkt anrufen, schreiben oder mailen; „Im Play Store suchen“ neben der
   Websuche; „Zuletzt gesucht“ in der leeren Suche (nur auf dem Gerät, löschbar).
 - **Quellen**: Apps (auch Arbeitsprofil), Systemeinstellungen, App-Verknüpfungen, Kontakte, Kalender, Velo-Verlauf und -Favoriten, Notizen aus freigegebenen Ordnern (Obsidian öffnet
-  direkt die Notiz), Dokumente (Name, bei Text/Markdown/PDF auch Inhalt) und Fotos nach dem Text darin.
-- **Texterkennung nur beim Laden**: ML Kit mit gebündeltem Modell erkennt Text in Fotos auf dem Gerät.
-  Das passiert in einem `JobScheduler`-Job, der nur bei angeschlossenem Ladegerät läuft und beim Abstecken
-  pausiert.
+  direkt die Notiz), Dokumente (Name, bei Text/Markdown/PDF auch Inhalt) und Fotos auf dem Gerät nach
+  Album und Aufnahmemonat („Screenshots“, „Oktober 2025“), nach Inhalt („Hund“, „Strand“, „Kuchen“) und
+  nach dem Text darin. „In Google Fotos suchen“ öffnet Google Fotos mit dem Suchbegriff, für Fotos, die
+  nur in der Cloud liegen (Google lässt andere Apps die Fotomediathek nicht mehr durchsuchen).
+- **Erkennung nur beim Laden**: ML Kit mit gebündelten Modellen erkennt Text in Fotos und was sie zeigen,
+  auf dem Gerät. Das passiert in einem `JobScheduler`-Job, der nur bei angeschlossenem Ladegerät läuft und
+  beim Abstecken pausiert. Album und Datum sind sofort durchsuchbar.
 - **Index aktualisiert sich selbst**: `LauncherApps.Callback`, `ContentObserver` für Kontakte, Kalender,
   Medien und Velo, MediaStore-Generationen für inkrementelle Bild- und Dokumentänderungen, regelmäßiger
   Abgleich der Notiz-Ordner.

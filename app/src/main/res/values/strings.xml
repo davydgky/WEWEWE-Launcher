@@ -191,6 +191,7 @@
     <string name="torch_unavailable">The flashlight is not available right now</string>
     <string name="action_mail">E-mail</string>
     <string name="search_play_store">Search Play Store for “%1$s”</string>
+    <string name="search_google_photos">Search Google Photos for “%1$s”</string>
     <string name="answer_copy">Copy result</string>
     <string name="section_recent">Recent searches</string>
     <string name="clear_recent">Clear</string>

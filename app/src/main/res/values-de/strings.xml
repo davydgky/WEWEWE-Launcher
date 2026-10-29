@@ -190,6 +190,7 @@
     <string name="torch_unavailable">Die Taschenlampe ist gerade nicht verfügbar</string>
     <string name="action_mail">E-Mail</string>
     <string name="search_play_store">Im Play Store nach „%1$s“ suchen</string>
+    <string name="search_google_photos">In Google Fotos nach „%1$s“ suchen</string>
     <string name="answer_copy">Ergebnis kopieren</string>
     <string name="section_recent">Zuletzt gesucht</string>
     <string name="clear_recent">Löschen</string>

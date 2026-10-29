@@ -345,6 +345,13 @@ private fun LazyListScope.resultItems(
             ExternalRow(stringResource(R.string.search_play_store, query), onClick = { external(query, actions::playStoreSearch) }) {
                 SymbolTile(R.drawable.ic_store, 40.dp)
             }
+            // Pictures that are only in the cloud are found by Google Photos itself.
+            if (actions.hasGooglePhotos) {
+                RowDivider()
+                ExternalRow(stringResource(R.string.search_google_photos, query), onClick = { external(query, actions::googlePhotosSearch) }) {
+                    SymbolTile(R.drawable.ic_image, 40.dp)
+                }
+            }
         }
     }
     if (results.isEmpty && state.answer == null) {

@@ -107,6 +107,17 @@ class ResultActions(private val activity: Activity) {
         }
     }
 
+    /** Google Photos is installed: its own search covers the pictures that are only in the cloud. */
+    val hasGooglePhotos: Boolean by lazy { activity.packageManager.getLaunchIntentForPackage(GOOGLE_PHOTOS) != null }
+
+    fun googlePhotosSearch(query: String) {
+        val search = Intent(Intent.ACTION_VIEW, Uri.parse("https://photos.google.com/search/${Uri.encode(query)}")).setPackage(GOOGLE_PHOTOS)
+        if (start(search, null, null, quiet = true)) return
+        // Without the search link: open Photos with the words ready to paste.
+        copy(query)
+        activity.packageManager.getLaunchIntentForPackage(GOOGLE_PHOTOS)?.let { start(it, null, null) }
+    }
+
     private fun openSetting(target: SettingTarget, bounds: Rect?, key: String) {
         when (target.special) {
             SettingTarget.Special.Torch -> {
@@ -214,5 +225,6 @@ class ResultActions(private val activity: Activity) {
         const val TAG = "ResultActions"
         const val OBSIDIAN = "md.obsidian"
         const val PLAY_STORE = "com.android.vending"
+        const val GOOGLE_PHOTOS = "com.google.android.apps.photos"
     }
 }

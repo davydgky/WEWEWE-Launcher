@@ -9,6 +9,8 @@ import android.os.Build
 import android.os.ext.SdkExtensions
 import android.util.Log
 import com.google.mlkit.vision.common.InputImage
+import com.google.mlkit.vision.label.ImageLabeling
+import com.google.mlkit.vision.label.defaults.ImageLabelerOptions
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 import kotlin.coroutines.resume
@@ -63,36 +65,52 @@ class TextRecognizer : AutoCloseable {
 
     private val client = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
 
-    suspend fun recognize(context: Context, uri: Uri): String {
-        val bitmap = decode(context, uri)
-        try {
-            val text = suspendCancellableCoroutine { cont ->
-                client.process(InputImage.fromBitmap(bitmap, 0))
-                    .addOnSuccessListener { cont.resume(it.text) }
-                    .addOnFailureListener { cont.resumeWithException(it) }
-            }
-            return TextExtraction.clean(text)
-        } finally {
-            bitmap.recycle()
+    suspend fun recognize(bitmap: Bitmap): String {
+        val text = suspendCancellableCoroutine { cont ->
+            client.process(InputImage.fromBitmap(bitmap, 0))
+                .addOnSuccessListener { cont.resume(it.text) }
+                .addOnFailureListener { cont.resumeWithException(it) }
         }
+        return TextExtraction.clean(text)
     }
 
-    /** Large photos are scaled down: text stays readable at this size and memory stays low. */
-    private fun decode(context: Context, uri: Uri): Bitmap {
-        val source = ImageDecoder.createSource(context.contentResolver, uri)
-        return ImageDecoder.decodeBitmap(source) { decoder, info, _ ->
-            val longSide = maxOf(info.size.width, info.size.height)
-            if (longSide > MAX_SIDE) {
-                val scale = MAX_SIDE.toFloat() / longSide
-                decoder.setTargetSize((info.size.width * scale).toInt().coerceAtLeast(1), (info.size.height * scale).toInt().coerceAtLeast(1))
-            }
-            decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
-        }
+    override fun close() = client.close()
+}
+
+/**
+ * What a picture shows, with ML Kit's bundled on-device model: labels such as "Dog", "Beach", "Cake"
+ * (in English, as the model names them; [ImageLabelNames] has them in German).
+ */
+class PictureLabeler : AutoCloseable {
+
+    private val client = ImageLabeling.getClient(ImageLabelerOptions.Builder().setConfidenceThreshold(MIN_CONFIDENCE).build())
+
+    suspend fun label(bitmap: Bitmap): List<String> = suspendCancellableCoroutine { cont ->
+        client.process(InputImage.fromBitmap(bitmap, 0))
+            .addOnSuccessListener { labels -> cont.resume(labels.sortedByDescending { it.confidence }.map { it.text }.take(MAX_LABELS)) }
+            .addOnFailureListener { cont.resumeWithException(it) }
     }
 
     override fun close() = client.close()
 
     private companion object {
-        const val MAX_SIDE = 2048
+        /** Below this the labels are guesses that would make searches noisy. */
+        const val MIN_CONFIDENCE = 0.72f
+        const val MAX_LABELS = 6
     }
 }
+
+/** A picture for recognition: large photos are scaled down, text stays readable and memory stays low. */
+fun decodeForRecognition(context: Context, uri: Uri): Bitmap {
+    val source = ImageDecoder.createSource(context.contentResolver, uri)
+    return ImageDecoder.decodeBitmap(source) { decoder, info, _ ->
+        val longSide = maxOf(info.size.width, info.size.height)
+        if (longSide > MAX_DECODE_SIDE) {
+            val scale = MAX_DECODE_SIDE.toFloat() / longSide
+            decoder.setTargetSize((info.size.width * scale).toInt().coerceAtLeast(1), (info.size.height * scale).toInt().coerceAtLeast(1))
+        }
+        decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
+    }
+}
+
+private const val MAX_DECODE_SIDE = 2048

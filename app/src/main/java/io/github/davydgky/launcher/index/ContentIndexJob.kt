@@ -22,7 +22,8 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 /**
- * Reads text out of pictures (on-device OCR) and documents. Runs only while the device is charging:
+ * Reads text out of pictures (on-device OCR), recognises what they show and reads documents. Runs
+ * only while the device is charging:
  * when it is unplugged, Android stops the job, and the work done so far is kept per file.
  */
 class ContentIndexJob : JobService() {
@@ -97,24 +98,43 @@ class ContentIndexer(private val context: Context) {
         app.search.reload(DocumentsSource.ID)
     }
 
+    /** Text and what each picture shows; a picture is decoded once for both. */
     private suspend fun recogniseImages() {
-        val known = store.imageTexts()
+        val texts = store.imageTexts()
+        val labels = store.imageLabels()
         val pending = MediaCatalog.images(context).filter { image ->
-            image.worthRecognising && known[image.id]?.version != image.version
+            image.worthRecognising && (texts[image.id]?.version != image.version || labels[image.id]?.version != image.version)
         }
         if (pending.isEmpty()) return
-        Log.i(TAG, "Recognising text in ${pending.size} pictures")
+        Log.i(TAG, "Recognising ${pending.size} pictures")
         TextRecognizer().use { recognizer ->
-            var sinceRefresh = 0
-            for (image in pending) {
-                currentCoroutineContext().ensureActive()
-                val text = runCatching { recognizer.recognize(context, image.uri) }
-                    .onFailure { Log.w(TAG, "OCR failed for ${image.uri}", it) }
-                    .getOrDefault("")
-                store.putImageText(image.id, image.version, text)
-                if (++sinceRefresh == REFRESH_EVERY) {
-                    sinceRefresh = 0
-                    app.search.reload(ImagesSource.ID)
+            PictureLabeler().use { labeler ->
+                var sinceRefresh = 0
+                for (image in pending) {
+                    currentCoroutineContext().ensureActive()
+                    val bitmap = runCatching { decodeForRecognition(context, image.uri) }
+                        .onFailure { Log.w(TAG, "Cannot decode ${image.uri}", it) }
+                        .getOrNull()
+                    try {
+                        if (texts[image.id]?.version != image.version) {
+                            val text = bitmap?.let { b ->
+                                runCatching { recognizer.recognize(b) }.onFailure { Log.w(TAG, "OCR failed for ${image.uri}", it) }.getOrNull()
+                            }.orEmpty()
+                            store.putImageText(image.id, image.version, text)
+                        }
+                        if (labels[image.id]?.version != image.version) {
+                            val found = bitmap?.let { b ->
+                                runCatching { labeler.label(b) }.onFailure { Log.w(TAG, "Labelling failed for ${image.uri}", it) }.getOrNull()
+                            }.orEmpty()
+                            store.putImageLabels(image.id, image.version, found)
+                        }
+                    } finally {
+                        bitmap?.recycle()
+                    }
+                    if (++sinceRefresh == REFRESH_EVERY) {
+                        sinceRefresh = 0
+                        app.search.reload(ImagesSource.ID)
+                    }
                 }
             }
         }

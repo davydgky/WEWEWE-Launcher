@@ -90,6 +90,7 @@ dependencies {
 
     // On-device text recognition with the model bundled in the APK (no Play services, no download).
     implementation(libs.mlkit.text.recognition)
+    implementation(libs.mlkit.image.labeling)
 
     testImplementation(libs.junit)
     // Real org.json for JVM unit tests (android.jar only contains stubs).

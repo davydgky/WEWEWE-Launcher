@@ -55,6 +55,8 @@
         </intent>
         <package android:name="io.github.davydgky.browser" />
         <package android:name="md.obsidian" />
+        <!-- "Search in Google Photos" for pictures that are only in the cloud. -->
+        <package android:name="com.google.android.apps.photos" />
     </queries>
 
     <application
