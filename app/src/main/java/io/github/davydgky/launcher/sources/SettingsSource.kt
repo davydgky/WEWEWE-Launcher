@@ -59,7 +59,7 @@ class SettingsSource(private val context: Context) : SearchSource(ID) {
             entry("cast", R.string.setting_cast, Settings.ACTION_CAST_SETTINGS, "streamen", "cast", "chromecast", "bildschirm übertragen"),
             entry("display", R.string.setting_display, Settings.ACTION_DISPLAY_SETTINGS,
                 "display", "bildschirm", "helligkeit", "brightness", "schriftgröße", "font size", "drehen", "rotation", "timeout", "bildschirmzeit"),
-            entry("dark", R.string.setting_dark, Settings.ACTION_DARK_THEME_SETTINGS, "dunkel", "dark", "dark mode", "nachtmodus", "theme", "design"),
+            entry("dark", R.string.setting_dark, ACTION_DARK_THEME, "dunkel", "dark", "dark mode", "nachtmodus", "theme", "design"),
             entry("night_light", R.string.setting_night_light, Settings.ACTION_NIGHT_DISPLAY_SETTINGS, "nachtlicht", "night light", "blaulicht", "blue light"),
             entry("wallpaper", R.string.setting_wallpaper, Intent.ACTION_SET_WALLPAPER, "hintergrund", "wallpaper", "hintergrundbild", "farben", "colors", "stil", "style"),
             entry("sound", R.string.setting_sound, Settings.ACTION_SOUND_SETTINGS,
@@ -88,6 +88,7 @@ class SettingsSource(private val context: Context) : SearchSource(ID) {
         )
 
         /** Not public constants, but understood by the settings of every current Android version. */
+        private const val ACTION_DARK_THEME = "android.settings.DARK_THEME_SETTINGS"
         private const val ACTION_ZEN_MODE = "android.settings.ZEN_MODE_SETTINGS"
         private const val ACTION_NOTIFICATIONS = "android.settings.NOTIFICATION_SETTINGS"
         private const val ACTION_SYSTEM_UPDATE = "android.settings.SYSTEM_UPDATE_SETTINGS"
