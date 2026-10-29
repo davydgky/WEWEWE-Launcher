@@ -219,6 +219,7 @@
     <string name="bubble_allow_notifications">Benachrichtigungen für WEWEWE erlauben, dann erneut auf Bubble tippen. Es wird keine Benachrichtigung angezeigt, eine Bubble braucht nur diese Berechtigung.</string>
     <string name="bubble_allow_bubbles">Bubbles für WEWEWE erlauben, dann erneut auf Bubble tippen.</string>
     <string name="bubble_channel">Bubbles</string>
+    <string name="bubble_not_allowed">Android zeigt es nicht als Bubble; die App öffnet sich normal.</string>
     <string name="bubble_channel_description">Apps, die vom Startbildschirm als Bubble geöffnet wurden</string>
     <string name="bubble_message">Als Bubble geöffnet</string>
     <string name="answer_continue">Mit dem Ergebnis weiterrechnen</string>

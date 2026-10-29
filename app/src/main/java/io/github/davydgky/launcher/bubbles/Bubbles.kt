@@ -11,11 +11,14 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.LocusId
+import android.content.pm.LauncherApps
 import android.content.pm.PackageManager
 import android.content.pm.ShortcutInfo
 import android.content.pm.ShortcutManager
 import android.graphics.drawable.Icon
 import android.net.Uri
+import android.os.Handler
+import android.os.Looper
 import android.os.Process
 import android.provider.Settings
 import android.util.Log
@@ -54,10 +57,9 @@ object Bubbles {
             return
         }
         ensureChannel(activity, notifications)
-        val channel = notifications.getNotificationChannel(CHANNEL)
-        if (!notifications.areBubblesEnabled() || notifications.bubblePreference == NotificationManager.BUBBLE_PREFERENCE_NONE ||
-            channel?.canBubble() == false
-        ) {
+        // The channel's own bubble flag stays "unset" until the user changes it there; with bubbles
+        // allowed for the app, unset channels bubble. Only the app-wide choice matters here.
+        if (!notifications.areBubblesEnabled() || notifications.bubblePreference == NotificationManager.BUBBLE_PREFERENCE_NONE) {
             toast(activity, R.string.bubble_allow_bubbles)
             runCatching {
                 activity.startActivity(
@@ -66,12 +68,24 @@ object Bubbles {
             }
             return
         }
-        try {
+        val tag = try {
             post(activity, notifications, target)
         } catch (e: Exception) {
             Log.w(TAG, "Cannot open ${target.component} as a bubble", e)
             toast(activity, R.string.cannot_open)
+            return
         }
+        // If the system shows it as a plain notification after all (e.g. only selected conversations
+        // may bubble), the app opens as usual instead and the notification goes away.
+        Handler(Looper.getMainLooper()).postDelayed({
+            val posted = notifications.activeNotifications.firstOrNull { it.tag == tag && it.id == NOTIFICATION_ID }
+            if (posted != null && posted.notification.flags and Notification.FLAG_BUBBLE == 0) {
+                Log.i(TAG, "Not shown as a bubble: ${target.component}")
+                notifications.cancel(tag, NOTIFICATION_ID)
+                toast(activity, R.string.bubble_not_allowed)
+                activity.getSystemService(LauncherApps::class.java).startMainActivity(target.component, target.user, null, null)
+            }
+        }, BUBBLE_CHECK_MS)
     }
 
     private fun ensureChannel(context: Context, notifications: NotificationManager) {
@@ -86,7 +100,8 @@ object Bubbles {
         notifications.createNotificationChannel(channel)
     }
 
-    private fun post(context: Context, notifications: NotificationManager, target: AppTarget) {
+    /** Posts the bubble; returns the notification's tag. */
+    private fun post(context: Context, notifications: NotificationManager, target: AppTarget): String {
         val id = SHORTCUT_PREFIX + target.component.flattenToShortString()
         val icon = Icon.createWithBitmap(target.info.getIcon(0).toBitmap(ICON_PX, ICON_PX))
         val person = Person.Builder().setName(target.label).setIcon(icon).setKey(id).setImportant(true).build()
@@ -130,6 +145,7 @@ object Bubbles {
             .setBubbleMetadata(bubble)
             .build()
         notifications.notify(id, NOTIFICATION_ID, notification)
+        return id
     }
 
     private fun toast(context: Context, message: Int) = Toast.makeText(context, message, Toast.LENGTH_LONG).show()
@@ -137,6 +153,7 @@ object Bubbles {
     private const val NOTIFICATION_ID = 1
     private const val ICON_PX = 192
     private const val BUBBLE_HEIGHT_DP = 640
+    private const val BUBBLE_CHECK_MS = 700L
 }
 
 /**
