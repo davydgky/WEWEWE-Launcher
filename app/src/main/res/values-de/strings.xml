@@ -150,7 +150,6 @@
     <string name="setting_dock_suggestion">App-Vorschlag im Dock</string>
     <string name="setting_dock_suggestion_description">Ein freier Platz im Dock zeigt die App, die du jetzt am wahrscheinlichsten öffnest – nach Tageszeit und Nutzung. Nur auf diesem Gerät.</string>
     <string name="update_error_not_found">Keine Releases gefunden. Updates brauchen ein öffentliches Repository mit veröffentlichten Releases.</string>
-    <string name="setting_result_subtitle">Einstellungen</string>
     <string name="setting_torch_subtitle">Tippen zum Ein- und Ausschalten</string>
     <string name="setting_torch">Taschenlampe</string>
     <string name="setting_wifi">WLAN</string>

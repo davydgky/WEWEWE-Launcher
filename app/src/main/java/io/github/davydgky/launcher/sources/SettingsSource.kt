@@ -18,13 +18,13 @@ class SettingsSource(private val context: Context) : SearchSource(ID) {
     override fun missing(context: Context): Requirement? = null
 
     override suspend fun load(): List<SearchItem> {
-        val subtitle = context.getString(R.string.setting_result_subtitle)
         return Catalog.map { entry ->
             SearchItem(
                 key = "setting:${entry.id}",
                 kind = SourceKind.Setting,
                 title = context.getString(entry.title),
-                subtitle = if (entry.special == SettingTarget.Special.Torch) context.getString(R.string.setting_torch_subtitle) else subtitle,
+                // No "Settings" subtitle: it would be searched too, and "sett" would list every page.
+                subtitle = if (entry.special == SettingTarget.Special.Torch) context.getString(R.string.setting_torch_subtitle) else "",
                 keywords = entry.keywords,
                 payload = SettingTarget(entry.action, entry.special),
             )

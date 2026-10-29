@@ -151,7 +151,6 @@
     <string name="setting_dock_suggestion">Suggested app in the dock</string>
     <string name="setting_dock_suggestion_description">A free place in the dock shows the app you are most likely to open now, based on time of day and usage. Only on this device.</string>
     <string name="update_error_not_found">No releases found. Updates need a public repository with published releases.</string>
-    <string name="setting_result_subtitle">Settings</string>
     <string name="setting_torch_subtitle">Tap to switch on or off</string>
     <string name="setting_torch">Flashlight</string>
     <string name="setting_wifi">Wi-Fi</string>
