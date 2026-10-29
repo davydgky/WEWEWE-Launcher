@@ -34,6 +34,10 @@ Welche Quelle Android unter welcher Bedingung erlaubt und warum die Architektur 
   „5!“, „2π“, „5 km in mi“, „100 f in c“, „3,5 kg in pfund“, „1 gb in mb“. Das Ergebnis steht direkt im
   Suchfeld („= 84“, antippen rechnet damit weiter) und darüber als Treffer (antippen kopiert). Alles auf dem
   Gerät, deshalb ohne Währungen.
+- **Antworten von Gemini Nano** über den Treffern, wie die KI-Antwort bei Google: auf dem Gerät erzeugt
+  (ML Kit Prompt API über AICore), live geschrieben, ohne Internet; nichts verlässt das Handy. Läuft auf
+  Geräten mit Gemini Nano für Apps, vor allem Pixel 10; sonst erscheint einfach keine Antwort. Abschaltbar
+  in den Einstellungen.
 - **Timer und Wecker aus der Suche**: „timer 5 min“, „10 minuten timer“, „wecker 7:30“, „wake me at 7 am“;
   Enter oder Antippen startet den Timer bzw. stellt den Wecker in der Uhr-App.
 - **Systemeinstellungen** als Quelle: WLAN, Bluetooth, Akku, Display, Ton, Bitte nicht stören, Standort …

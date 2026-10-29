@@ -3,6 +3,7 @@ package io.github.davydgky.launcher
 import android.app.Application
 import android.content.Context
 import androidx.datastore.preferences.preferencesDataStore
+import io.github.davydgky.launcher.ai.NanoAnswers
 import io.github.davydgky.launcher.apps.AppsRepository
 import io.github.davydgky.launcher.data.LaunchLog
 import io.github.davydgky.launcher.data.LauncherSettings
@@ -43,6 +44,7 @@ class LauncherApplication : Application() {
     val updater: AppUpdater by lazy { AppUpdater(this, settings, appScope) }
     val torch: Torch by lazy { Torch(this) }
     val notifications: Notifications by lazy { Notifications(this) }
+    val nano: NanoAnswers by lazy { NanoAnswers(appScope) }
     val perf = PerfStats()
 
     override fun onCreate() {

@@ -207,6 +207,13 @@
     <string name="menu_widgets">Widgets</string>
     <string name="menu_app_timer">App timer</string>
     <string name="menu_bubble">Bubble</string>
+    <string name="ai_title">Gemini Nano</string>
+    <string name="ai_footnote">Written on this phone · may contain mistakes</string>
+    <string name="setting_ai_answers">Answers from Gemini Nano</string>
+    <string name="setting_ai_answers_description">A short answer above the results, written on the phone itself; nothing leaves the device.</string>
+    <string name="ai_status_ready">Ready</string>
+    <string name="ai_status_downloading">Gemini Nano is being downloaded…</string>
+    <string name="ai_status_unsupported">Not available on this device</string>
     <string name="timer_started">Timer started</string>
     <string name="action_timer">Start a timer for %1$s</string>
     <string name="action_alarm">Set an alarm for %1$s</string>

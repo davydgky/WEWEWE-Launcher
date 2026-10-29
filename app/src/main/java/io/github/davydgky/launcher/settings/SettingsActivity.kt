@@ -65,6 +65,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.davydgky.launcher.R
 import io.github.davydgky.launcher.data.LauncherPrefs
 import io.github.davydgky.launcher.index.MediaCatalog
+import io.github.davydgky.launcher.ai.NanoAnswers
 import io.github.davydgky.launcher.launcherApp
 import io.github.davydgky.launcher.perf.Metric
 import io.github.davydgky.launcher.perf.MetricSummary
@@ -303,6 +304,11 @@ private fun SettingsScreen(activity: ComponentActivity) {
                     )
                 }
                 HorizontalDivider()
+                AiAnswersRow(prefs.aiAnswers) { enabled ->
+                    scope.launch { app.settings.setAiAnswers(enabled) }
+                    if (enabled) app.nano.prepare()
+                }
+                HorizontalDivider()
                 SourceInfos.forEachIndexed { index, info ->
                     if (index > 0) HorizontalDivider()
                     SourceRow(info, status[info.id], onToggle = { enabled ->
@@ -454,6 +460,35 @@ private fun SourceRow(info: SourceInfo, status: SourceStatus?, onToggle: (Boolea
                 else -> StatusText(stringResource(R.string.status_items, status?.itemCount ?: 0))
             }
         }
+    }
+}
+
+/** Gemini Nano on or off, with whether the device has it. */
+@Composable
+private fun AiAnswersRow(enabled: Boolean, onToggle: (Boolean) -> Unit) {
+    val nano = LocalContext.current.launcherApp.nano
+    LaunchedEffect(Unit) { nano.prepare() }
+    val availability by nano.availability.collectAsStateWithLifecycle()
+    val status = when (availability) {
+        NanoAnswers.Availability.Ready -> stringResource(R.string.ai_status_ready)
+        NanoAnswers.Availability.Downloading -> stringResource(R.string.ai_status_downloading)
+        NanoAnswers.Availability.Unsupported -> stringResource(R.string.ai_status_unsupported)
+        NanoAnswers.Availability.Unknown -> null
+    }
+    Row(
+        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(stringResource(R.string.setting_ai_answers), style = MaterialTheme.typography.titleMedium)
+            Text(
+                listOfNotNull(stringResource(R.string.setting_ai_answers_description), status).joinToString("\n"),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Spacer(Modifier.width(12.dp))
+        Switch(checked = enabled, onCheckedChange = onToggle)
     }
 }
 

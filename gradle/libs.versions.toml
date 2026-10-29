@@ -11,6 +11,7 @@ androidx-lifecycle = "2.11.0"
 
 mlkit-text-recognition = "16.0.1"
 mlkit-image-labeling = "17.0.9"
+mlkit-genai-prompt = "1.0.0-beta5"
 
 junit = "4.13.2"
 org-json = "20240303"
@@ -33,6 +34,7 @@ androidx-lifecycle-viewmodel-compose = { module = "androidx.lifecycle:lifecycle-
 kotlinx-coroutines-android = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-android", version.ref = "coroutines" }
 mlkit-text-recognition = { module = "com.google.mlkit:text-recognition", version.ref = "mlkit-text-recognition" }
 mlkit-image-labeling = { module = "com.google.mlkit:image-labeling", version.ref = "mlkit-image-labeling" }
+mlkit-genai-prompt = { module = "com.google.mlkit:genai-prompt", version.ref = "mlkit-genai-prompt" }
 junit = { module = "junit:junit", version.ref = "junit" }
 org-json = { module = "org.json:json", version.ref = "org-json" }
 kyant-backdrop = { module = "io.github.kyant0:backdrop", version.ref = "kyant-backdrop" }

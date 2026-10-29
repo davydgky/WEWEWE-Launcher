@@ -6,6 +6,12 @@ import android.content.Intent
 import android.graphics.Rect
 import android.net.Uri
 import android.provider.Settings
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -82,9 +88,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.kyant.backdrop.Backdrop
-import com.kyant.shapes.Capsule
-import com.kyant.shapes.RoundedRectangle
 import io.github.davydgky.launcher.R
 import io.github.davydgky.launcher.core.Answer
 import io.github.davydgky.launcher.core.QuickAction
@@ -94,6 +97,7 @@ import io.github.davydgky.launcher.core.SourceKind
 import io.github.davydgky.launcher.data.LauncherPrefs
 import io.github.davydgky.launcher.launcherApp
 import io.github.davydgky.launcher.perf.Metric
+import io.github.davydgky.launcher.search.AiAnswer
 import io.github.davydgky.launcher.search.AppTarget
 import io.github.davydgky.launcher.search.ContactTarget
 import io.github.davydgky.launcher.search.ResultActions
@@ -104,6 +108,9 @@ import io.github.davydgky.launcher.search.SuggestionState
 import io.github.davydgky.launcher.ui.glass.LocalGlassColors
 import io.github.davydgky.launcher.ui.glass.glassWhen
 import java.text.DecimalFormatSymbols
+import com.kyant.backdrop.Backdrop
+import com.kyant.shapes.Capsule
+import com.kyant.shapes.RoundedRectangle
 import kotlin.math.abs
 import kotlinx.coroutines.launch
 
@@ -125,6 +132,7 @@ fun SearchPanel(
     val context = LocalContext.current
     val app = context.launcherApp
     val results by viewModel.results.collectAsStateWithLifecycle()
+    val aiAnswer by viewModel.aiAnswer.collectAsStateWithLifecycle()
     val suggestions by app.suggestions.current.collectAsStateWithLifecycle()
     val usageAccess by app.usage.hasAccess.collectAsStateWithLifecycle()
     val prefs by app.settings.prefs.collectAsStateWithLifecycle(initialValue = LauncherPrefs())
@@ -223,7 +231,7 @@ fun SearchPanel(
                     }
                     suggestionItems(suggestions, actions, state, backdrop)
                 } else {
-                    resultItems(results, open, external, actions, backdrop)
+                    resultItems(results, aiAnswer?.takeIf { it.query == results.query.trim() }, open, external, actions, backdrop)
                 }
             }
             // The result of a sum shows in the field itself, as on a calculator.
@@ -290,6 +298,7 @@ private fun LazyListScope.suggestionItems(
 
 private fun LazyListScope.resultItems(
     state: ResultsState,
+    ai: AiAnswer?,
     open: (SearchItem, Rect?) -> Unit,
     external: (String, (String) -> Unit) -> Unit,
     actions: ResultActions,
@@ -307,12 +316,22 @@ private fun LazyListScope.resultItems(
             Section(null, backdrop) { AnswerRow(answer) { actions.copy(answer.copyText) } }
         }
     }
+    // Gemini Nano's answer: first for questions, right after the top hit when there is one.
+    val aiItem = {
+        if (ai != null) {
+            item("ai") {
+                Section(null, backdrop) { AiAnswerRow(ai) { actions.copy(ai.text) } }
+            }
+        }
+    }
+    if (results.top == null) aiItem()
     results.top?.let { top ->
         item("top") {
             Section(stringResource(R.string.section_top_hit), backdrop) {
                 ResultRow(top.item, query, open, large = true, trailing = contactTrailing(top.item, actions))
             }
         }
+        aiItem()
     }
     for (group in results.groups) {
         item("group-${group.kind}") {
@@ -420,6 +439,67 @@ private fun AnswerRow(answer: Answer, onCopy: () -> Unit) {
         }
     }
 }
+
+/**
+ * Gemini Nano's answer as it is written, with a sparkle and a note that it comes from the device; a tap
+ * copies it.
+ */
+@Composable
+private fun AiAnswerRow(answer: AiAnswer, onCopy: () -> Unit) {
+    val colors = LocalGlassColors.current
+    var expanded by remember(answer.query) { mutableStateOf(false) }
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clickable(onClickLabel = stringResource(R.string.answer_copy), enabled = answer.done, onClick = onCopy)
+            .animateContentSize()
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(painterResource(R.drawable.ic_sparkle), null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
+            Spacer(Modifier.width(8.dp))
+            Text(stringResource(R.string.ai_title), color = colors.secondaryContent, style = MaterialTheme.typography.labelLarge)
+        }
+        Spacer(Modifier.height(6.dp))
+        if (answer.text.isEmpty()) {
+            // Waiting for the first words: three lines that pulse, as Google shows it.
+            val pulse by rememberInfiniteTransition(label = "ai").animateFloat(
+                initialValue = 0.25f, targetValue = 0.6f,
+                animationSpec = infiniteRepeatable(tween(650), RepeatMode.Reverse), label = "ai",
+            )
+            listOf(1f, 0.92f, 0.6f).forEach { width ->
+                Box(
+                    Modifier
+                        .padding(vertical = 4.dp)
+                        .fillMaxWidth(width)
+                        .height(12.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(colors.content.copy(alpha = pulse * 0.35f)),
+                )
+            }
+        } else {
+            Text(
+                answer.text,
+                color = colors.content,
+                style = MaterialTheme.typography.bodyLarge,
+                maxLines = if (expanded) Int.MAX_VALUE else AI_LINES,
+                overflow = TextOverflow.Ellipsis,
+            )
+            if (answer.done) {
+                Spacer(Modifier.height(6.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(stringResource(R.string.ai_footnote), color = colors.secondaryContent, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+                    if (!expanded && answer.text.length > AI_SHORT_CHARS) {
+                        TextButton(onClick = { expanded = true }) { Text(stringResource(R.string.show_more)) }
+                    }
+                }
+            }
+        }
+    }
+}
+
+private const val AI_LINES = 5
+private const val AI_SHORT_CHARS = 220
 
 /** "Start a timer for 5 min" / "Set an alarm for 7:30", from what was typed. */
 @Composable

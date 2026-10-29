@@ -1,8 +1,10 @@
 package io.github.davydgky.launcher.search
 
 import android.app.Application
+import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import io.github.davydgky.launcher.ai.NanoAnswers
 import io.github.davydgky.launcher.core.Answer
 import io.github.davydgky.launcher.core.Answers
 import io.github.davydgky.launcher.core.QuickAction
@@ -10,13 +12,20 @@ import io.github.davydgky.launcher.core.QuickActions
 import io.github.davydgky.launcher.core.SearchResults
 import io.github.davydgky.launcher.launcherApp
 import java.text.DecimalFormatSymbols
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.transformLatest
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
@@ -34,6 +43,9 @@ class ResultsState(
         val Empty = ResultsState("", SearchResults.Empty, 0L)
     }
 }
+
+/** Gemini Nano's answer to [query] so far; [done] once it is complete. */
+class AiAnswer(val query: String, val text: String, val done: Boolean)
 
 /**
  * Runs searches on a single background thread. A new input cancels the search for the previous one,
@@ -55,6 +67,50 @@ class SearchViewModel(application: Application) : AndroidViewModel(application) 
             }
         }
         .stateIn(viewModelScope, SharingStarted.Eagerly, ResultsState.Empty)
+
+    private companion object {
+        const val TAG = "SearchViewModel"
+        /** Gemini Nano starts once typing pauses this long; every keystroke would only cancel it. */
+        const val AI_PAUSE_MS = 280L
+        const val MIN_AI_CHARS = 3
+    }
+
+    private val nano = application.launcherApp.nano
+    private val settings = application.launcherApp.settings
+
+    init {
+        viewModelScope.launch { if (settings.prefs.first().aiAnswers) nano.prepare() }
+    }
+
+    /**
+     * Gemini Nano's answer for the current input, after a short pause in typing; a new input drops the
+     * answer being written. Empty ("-" from the model) for inputs that are plain searches.
+     */
+    val aiAnswer: StateFlow<AiAnswer?> = input
+        .map { it.first.trim() }
+        .distinctUntilChanged()
+        .transformLatest { query ->
+            emit(null)
+            if (query.length < MIN_AI_CHARS || query.none { it.isLetter() }) return@transformLatest
+            if (!settings.prefs.first().aiAnswers) return@transformLatest
+            nano.prepare()
+            delay(AI_PAUSE_MS)
+            if (nano.availability.value != NanoAnswers.Availability.Ready) return@transformLatest
+            emit(AiAnswer(query, "", done = false))
+            var last = ""
+            try {
+                nano.answer(query).collect { text ->
+                    last = text
+                    emit(AiAnswer(query, text, done = false))
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.w(TAG, "Gemini Nano failed", e)
+            }
+            emit(if (last.isEmpty()) null else AiAnswer(query, last, done = true))
+        }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
     fun setQuery(query: String) {
         if (query == input.value.first) return
