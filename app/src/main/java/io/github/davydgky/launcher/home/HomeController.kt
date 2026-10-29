@@ -299,7 +299,8 @@ class HomeController(
     private fun targetFor(workspace: Workspace, state: DragState): DropTarget? {
         val p = state.pointer
         val appKey = state.source.draggedApp
-        if (dockBounds.contains(p)) {
+        // The dock is hidden on the App Library.
+        if (!onLibrary && dockBounds.contains(p)) {
             if (appKey == null) return null
             val inDock = state.source is DragSource.Dock
             if (!inDock && dockSize >= Workspace.DOCK_SIZE) return null

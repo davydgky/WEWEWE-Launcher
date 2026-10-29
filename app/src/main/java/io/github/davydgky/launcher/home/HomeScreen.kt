@@ -67,6 +67,7 @@ import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -85,6 +86,7 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -175,6 +177,15 @@ fun HomeScreen(
             .statusBarsPadding()
             .navigationBarsPadding(),
     ) {
+        val density = LocalDensity.current
+        // Search button and dock; the App Library has the screen down to the page dots without them.
+        var barsHeight by remember { mutableIntStateOf(0) }
+        val barsHeightDp = with(density) { barsHeight.toDp() }
+        // 0 on the last home page, 1 halfway to the App Library: the dock is gone before it arrives.
+        val libraryProgress = {
+            ((pagerState.currentPage + pagerState.currentPageOffsetFraction - (homePages - 1)) * 2f).coerceIn(0f, 1f)
+        }
+        val onLibrary = pagerState.currentPage >= homePages
         Box(Modifier.weight(1f).fillMaxWidth()) {
             HorizontalPager(
                 state = pagerState,
@@ -184,20 +195,40 @@ fun HomeScreen(
                 beyondViewportPageCount = homePages,
             ) { page ->
                 if (page < homePages) {
-                    WorkspacePage(page, workspace, apps, shortcuts, controller)
+                    Box(Modifier.padding(bottom = INDICATOR_HEIGHT + barsHeightDp)) {
+                        WorkspacePage(page, workspace, apps, shortcuts, controller)
+                    }
                 } else {
-                    AppLibraryPage(library, workspace, controller)
+                    Box(Modifier.padding(bottom = INDICATOR_HEIGHT)) {
+                        AppLibraryPage(library, workspace, controller)
+                    }
+                }
+            }
+            Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth()) {
+                // The dots move down into the dock's place as it fades out.
+                Box(Modifier.graphicsLayer { translationY = libraryProgress() * barsHeight }) {
+                    PageIndicator(homePages, pagerState, onEditTap = { controller.pagesOverviewOpen = true }.takeIf { controller.editMode })
+                }
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .onSizeChanged { if (!onLibrary) barsHeight = it.height }
+                        .graphicsLayer {
+                            val p = libraryProgress()
+                            alpha = 1f - p
+                            translationY = p * size.height * 0.4f
+                        },
+                ) {
+                    if (onLibrary && barsHeight > 0) {
+                        // Hidden on the App Library: same room, but nothing there catches a touch.
+                        Spacer(Modifier.height(barsHeightDp))
+                    } else {
+                        if (controller.editMode) EditBar(controller) else SearchButton(controller.openSearch)
+                        Dock(workspace, apps, controller, dockSuggestion)
+                    }
                 }
             }
         }
-        val onLibrary = pagerState.currentPage >= homePages
-        PageIndicator(homePages, pagerState, onEditTap = { controller.pagesOverviewOpen = true }.takeIf { controller.editMode })
-        when {
-            controller.editMode -> EditBar(controller)
-            !onLibrary -> SearchButton(controller.openSearch)
-            else -> Spacer(Modifier.height(SEARCH_BUTTON_SPACE))
-        }
-        Dock(workspace, apps, controller, dockSuggestion)
     }
 }
 
