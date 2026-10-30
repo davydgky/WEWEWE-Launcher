@@ -143,7 +143,8 @@ jobs:
         continue-on-error: true
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 37
+          # Android 17 (API 37) has no emulator image on the runners yet; move up once it has.
+          api-level: 36
           target: google_apis
           arch: x86_64
           profile: pixel_7
