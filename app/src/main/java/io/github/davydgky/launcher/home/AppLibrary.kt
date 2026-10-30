@@ -33,10 +33,17 @@ object AppLibrary {
             .sortedByDescending { it.info.firstInstallTime }
             .take(RECENT_COUNT)
         if (recent.isNotEmpty()) groups += LibraryGroup(R.string.library_recent, recent)
-        apps.groupBy { categoryOf(it, learned) }
+        // Work and private space apps have their own boxes, so they are never mistaken for personal ones.
+        val (own, other) = apps.partition { !it.isWorkProfile }
+        own.groupBy { categoryOf(it, learned) }
             .toList()
             .sortedByDescending { (_, list) -> list.sumOf { (usage[it.key] ?: 0f).toDouble() } }
             .forEach { (title, list) -> groups += LibraryGroup(title, list.sortedWith(byUse)) }
+        val (private, work) = other.partition { it.isPrivate }
+        if (work.isNotEmpty()) groups += LibraryGroup(R.string.work_profile, work.sortedWith(byUse))
+        if (private.isNotEmpty()) groups += LibraryGroup(R.string.private_space, private.sortedWith(byUse))
+        // Everything from A to Z, for finding an app by its name.
+        if (apps.isNotEmpty()) groups += LibraryGroup(R.string.library_all, apps.sortedBy { it.label.lowercase() })
         return groups
     }
 

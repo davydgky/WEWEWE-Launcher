@@ -38,7 +38,7 @@ class LauncherApplication : Application() {
 
     val settings: LauncherSettings by lazy { LauncherSettings(launcherDataStore) }
     val launchLog: LaunchLog by lazy { LaunchLog(File(filesDir, "launches.tsv"), appScope) }
-    val apps: AppsRepository by lazy { AppsRepository(this, appScope) }
+    val apps: AppsRepository by lazy { AppsRepository(this, settings, appScope) }
     val usage: UsageHistory by lazy { UsageHistory(this, apps, launchLog, appScope) }
     val indexStore: IndexStore by lazy { IndexStore(this) }
     val icons: IconCache by lazy { IconCache(this) }
@@ -61,6 +61,7 @@ class LauncherApplication : Application() {
         crashGuard.install()
         // An updated app may come with a new icon.
         appScope.launch { apps.packageChanges.collect(icons::evictPackage) }
+        appScope.launch { settings.prefs.collect { icons.setThemed(it.themedIcons) } }
         // Start indexing right away, before the first frame needs it.
         appKnowledge.start()
         search.start()

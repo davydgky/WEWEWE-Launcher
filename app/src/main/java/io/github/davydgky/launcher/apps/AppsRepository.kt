@@ -13,6 +13,7 @@ import android.os.UserHandle
 import android.os.UserManager
 import android.util.Log
 import io.github.davydgky.launcher.bubbles.Bubbles
+import io.github.davydgky.launcher.data.LauncherSettings
 import io.github.davydgky.launcher.search.AppTarget
 import io.github.davydgky.launcher.search.ShortcutTarget
 import java.text.Collator
@@ -26,6 +27,9 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -33,12 +37,15 @@ import kotlinx.coroutines.withContext
  * Installed apps and their shortcuts for all visible profiles, kept current through
  * [LauncherApps.Callback]. Shortcuts are only readable while this app is the default launcher.
  */
-class AppsRepository(private val context: Context, private val scope: CoroutineScope) {
+class AppsRepository(private val context: Context, private val settings: LauncherSettings, private val scope: CoroutineScope) {
 
     private val launcherApps = context.getSystemService(LauncherApps::class.java)
     private val userManager = context.getSystemService(UserManager::class.java)
 
+    /** As the system lists them. */
+    private val installedState = MutableStateFlow<List<AppTarget>>(emptyList())
     private val appState = MutableStateFlow<List<AppTarget>>(emptyList())
+    /** With the names the user gave them and whether they are hidden. */
     val apps: StateFlow<List<AppTarget>> = appState.asStateFlow()
 
     private val shortcutState = MutableStateFlow<List<ShortcutTarget>>(emptyList())
@@ -74,6 +81,18 @@ class AppsRepository(private val context: Context, private val scope: CoroutineS
             addAction(Intent.ACTION_MANAGED_PROFILE_UNLOCKED)
         }
         context.registerReceiver(profileReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+        val choices = settings.prefs.map { it.hiddenApps to it.appLabels }.distinctUntilChanged()
+        scope.launch {
+            combine(installedState, choices) { list, (hidden, labels) ->
+                if (hidden.isEmpty() && labels.isEmpty()) return@combine list
+                val collator = Collator.getInstance()
+                list.map { app -> app.with(labels[app.key] ?: app.label, app.key in hidden) }
+                    .sortedWith { a, b -> collator.compare(a.label, b.label) }
+            }.collect {
+                appState.value = it
+                reloadShortcuts(0)
+            }
+        }
         reloadApps(0)
     }
 
@@ -112,8 +131,7 @@ class AppsRepository(private val context: Context, private val scope: CoroutineS
             val (list, unavailable) = withContext(Dispatchers.IO) { queryApps() }
             // Both before the list: whoever reacts to the list must already know what is only paused.
             unavailableState.value = unavailable
-            appState.value = list
-            reloadShortcuts(0)
+            installedState.value = list
         }
     }
 

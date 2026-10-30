@@ -120,7 +120,20 @@ class HomeController(
     val wiggling: Boolean
         get() = editMode && drag == null && resizing == null && openFolderId == null && openCategory == null && !widgetPickerOpen && !pagesOverviewOpen
 
+    /** The user locked the arrangement: no edit mode, no dragging, nothing removed by accident. */
+    var layoutLocked by mutableStateOf(false)
+
+    /** Icons show how many notifications there are instead of a dot. */
+    var badgeNumbers by mutableStateOf(false)
+
+    /** A double tap on the background turns the screen off. */
+    var doubleTapToLock by mutableStateOf(false)
+
+    /** Set by the screen: the lock service is off, so the user is sent to switch it on. */
+    var lockUnavailable: () -> Unit = {}
+
     fun startEditing() {
+        if (layoutLocked) return
         editMode = true
         dismissMenus()
     }
@@ -227,6 +240,7 @@ class HomeController(
     private var restingAt = Offset.Zero
 
     fun startDrag(source: DragSource, pointer: Offset, grab: Offset, size: IntSize, pointerId: PointerId, iconSize: Dp) {
+        if (layoutLocked) return
         Log.i(TAG, "Drag $source")
         drop = null
         drag = DragState(source, pointer, grab, size, pointerId, iconSize)

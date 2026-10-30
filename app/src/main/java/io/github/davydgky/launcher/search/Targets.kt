@@ -20,8 +20,14 @@ class AppTarget(
     val paused: Boolean = false,
     /** Belongs to the private space: never placed on the home screen by itself. */
     val isPrivate: Boolean = false,
+    /** Hidden by the user: not in the App Library, the search or suggestions. */
+    val hidden: Boolean = false,
+    /** The app's own name, when the user gave it another one ([label]). */
+    val originalLabel: String = label,
 ) : Target {
     val packageName: String get() = component.packageName
+
+    fun with(label: String, hidden: Boolean) = AppTarget(key, label, component, user, isWorkProfile, info, paused, isPrivate, hidden, originalLabel)
 }
 
 class ShortcutTarget(val key: String, val info: ShortcutInfo, val appLabel: String) : Target

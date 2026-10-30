@@ -44,6 +44,20 @@ data class LauncherPrefs(
     /** Home screen grid; null means the default for the device (5×6 on phones). */
     val gridColumns: Int? = null,
     val gridRows: Int? = null,
+    /** Apps kept out of the App Library, the search and suggestions (still in the settings list). */
+    val hiddenApps: Set<String> = emptySet(),
+    /** Names the user gave apps, by app key. */
+    val appLabels: Map<String, String> = emptyMap(),
+    /** The home screen cannot be rearranged: no edit mode, no dragging, no removing. */
+    val layoutLocked: Boolean = false,
+    /** The dot on an app icon shows how many notifications it has. */
+    val badgeNumbers: Boolean = false,
+    /** Icons that have a monochrome version are drawn in the wallpaper colors, as on Pixel phones. */
+    val themedIcons: Boolean = false,
+    /** A double tap on an empty part of the home screen turns the screen off. */
+    val doubleTapToLock: Boolean = false,
+    /** The first-start introduction was shown. */
+    val onboarded: Boolean = false,
 )
 
 class LauncherSettings(private val dataStore: DataStore<Preferences>) {
@@ -67,6 +81,16 @@ class LauncherSettings(private val dataStore: DataStore<Preferences>) {
                 recentSearches = prefs[RecentSearchesKey]?.split('\n')?.filter { it.isNotBlank() }.orEmpty(),
                 gridColumns = prefs[GridColumnsKey],
                 gridRows = prefs[GridRowsKey],
+                hiddenApps = prefs[HiddenAppsKey].orEmpty(),
+                // "key<TAB>name"; neither contains a tab.
+                appLabels = prefs[AppLabelsKey].orEmpty().mapNotNull { entry ->
+                    entry.split('\t', limit = 2).takeIf { it.size == 2 }?.let { it[0] to it[1] }
+                }.toMap(),
+                layoutLocked = prefs[LayoutLockedKey] ?: false,
+                badgeNumbers = prefs[BadgeNumbersKey] ?: false,
+                themedIcons = prefs[ThemedIconsKey] ?: false,
+                doubleTapToLock = prefs[DoubleTapToLockKey] ?: false,
+                onboarded = prefs[OnboardedKey] ?: false,
             )
         }
         .distinctUntilChanged()
@@ -140,6 +164,89 @@ class LauncherSettings(private val dataStore: DataStore<Preferences>) {
         dataStore.edit { it[AutoUpdateKey] = enabled }
     }
 
+    suspend fun setAppHidden(appKey: String, hidden: Boolean) {
+        dataStore.edit {
+            val current = it[HiddenAppsKey].orEmpty()
+            it[HiddenAppsKey] = if (hidden) current + appKey else current - appKey
+        }
+    }
+
+    /** A blank [label] gives the app its own name back. */
+    suspend fun setAppLabel(appKey: String, label: String) {
+        val clean = label.replace('\t', ' ').replace('\n', ' ').trim()
+        dataStore.edit {
+            val others = it[AppLabelsKey].orEmpty().filterNot { entry -> entry.startsWith("$appKey\t") }.toSet()
+            it[AppLabelsKey] = if (clean.isEmpty()) others else others + "$appKey\t$clean"
+        }
+    }
+
+    suspend fun setLayoutLocked(locked: Boolean) {
+        dataStore.edit { it[LayoutLockedKey] = locked }
+    }
+
+    suspend fun setBadgeNumbers(enabled: Boolean) {
+        dataStore.edit { it[BadgeNumbersKey] = enabled }
+    }
+
+    suspend fun setThemedIcons(enabled: Boolean) {
+        dataStore.edit { it[ThemedIconsKey] = enabled }
+    }
+
+    suspend fun setDoubleTapToLock(enabled: Boolean) {
+        dataStore.edit { it[DoubleTapToLockKey] = enabled }
+    }
+
+    suspend fun setOnboarded() {
+        dataStore.edit { it[OnboardedKey] = true }
+    }
+
+    /** The settings worth keeping in a backup, as plain values. */
+    suspend fun export(): Map<String, Any> {
+        val p = prefs.first()
+        return buildMap {
+            p.gridColumns?.let { put("gridColumns", it) }
+            p.gridRows?.let { put("gridRows", it) }
+            put("addNewAppsToHome", p.addNewAppsToHome)
+            put("dockSuggestion", p.dockSuggestion)
+            put("resultsAtBottom", p.resultsAtBottom)
+            put("aiAnswers", p.aiAnswers)
+            put("storeResults", p.storeResults)
+            put("saveMessages", p.saveMessages)
+            put("autoUpdate", p.autoUpdate)
+            put("layoutLocked", p.layoutLocked)
+            put("badgeNumbers", p.badgeNumbers)
+            put("themedIcons", p.themedIcons)
+            put("doubleTapToLock", p.doubleTapToLock)
+            put("hiddenApps", p.hiddenApps.toList())
+            put("disabledSources", p.disabledSources.toList())
+            put("appLabels", p.appLabels)
+        }
+    }
+
+    /** Restores what [export] wrote; unknown or missing values are left as they are. */
+    suspend fun import(values: Map<String, Any?>) {
+        dataStore.edit { prefs ->
+            (values["gridColumns"] as? Int)?.let { prefs[GridColumnsKey] = it }
+            (values["gridRows"] as? Int)?.let { prefs[GridRowsKey] = it }
+            (values["addNewAppsToHome"] as? Boolean)?.let { prefs[AddNewAppsKey] = it }
+            (values["dockSuggestion"] as? Boolean)?.let { prefs[DockSuggestionKey] = it }
+            (values["resultsAtBottom"] as? Boolean)?.let { prefs[ResultsAtBottomKey] = it }
+            (values["aiAnswers"] as? Boolean)?.let { prefs[AiAnswersKey] = it }
+            (values["storeResults"] as? Boolean)?.let { prefs[StoreResultsKey] = it }
+            (values["saveMessages"] as? Boolean)?.let { prefs[SaveMessagesKey] = it }
+            (values["autoUpdate"] as? Boolean)?.let { prefs[AutoUpdateKey] = it }
+            (values["layoutLocked"] as? Boolean)?.let { prefs[LayoutLockedKey] = it }
+            (values["badgeNumbers"] as? Boolean)?.let { prefs[BadgeNumbersKey] = it }
+            (values["themedIcons"] as? Boolean)?.let { prefs[ThemedIconsKey] = it }
+            (values["doubleTapToLock"] as? Boolean)?.let { prefs[DoubleTapToLockKey] = it }
+            (values["hiddenApps"] as? List<*>)?.let { list -> prefs[HiddenAppsKey] = list.filterIsInstance<String>().toSet() }
+            (values["disabledSources"] as? List<*>)?.let { list -> prefs[DisabledSourcesKey] = list.filterIsInstance<String>().toSet() }
+            (values["appLabels"] as? Map<*, *>)?.let { map ->
+                prefs[AppLabelsKey] = map.mapNotNull { (k, v) -> if (k is String && v is String) "$k\t$v" else null }.toSet()
+            }
+        }
+    }
+
     suspend fun lastUpdateCheck(): Long = dataStore.data.first()[LastUpdateCheckKey] ?: 0L
 
     suspend fun setLastUpdateCheck(timeMillis: Long) {
@@ -161,6 +268,13 @@ class LauncherSettings(private val dataStore: DataStore<Preferences>) {
         val RecentSearchesKey = stringPreferencesKey("recent_searches")
         val GridColumnsKey = intPreferencesKey("grid_columns")
         val GridRowsKey = intPreferencesKey("grid_rows")
+        val HiddenAppsKey = stringSetPreferencesKey("hidden_apps")
+        val AppLabelsKey = stringSetPreferencesKey("app_labels")
+        val LayoutLockedKey = booleanPreferencesKey("layout_locked")
+        val BadgeNumbersKey = booleanPreferencesKey("badge_numbers")
+        val ThemedIconsKey = booleanPreferencesKey("themed_icons")
+        val DoubleTapToLockKey = booleanPreferencesKey("double_tap_to_lock")
+        val OnboardedKey = booleanPreferencesKey("onboarded")
         const val MAX_RECENT = 6
         val LastUpdateCheckKey = longPreferencesKey("last_update_check")
     }

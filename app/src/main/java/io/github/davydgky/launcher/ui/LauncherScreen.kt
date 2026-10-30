@@ -1,6 +1,7 @@
 package io.github.davydgky.launcher.ui
 
 import android.appwidget.AppWidgetProviderInfo
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -28,8 +29,12 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.kyant.backdrop.backdrops.layerBackdrop
+import com.kyant.backdrop.backdrops.rememberLayerBackdrop
+import io.github.davydgky.launcher.R
 import io.github.davydgky.launcher.ai.AppKnowledge
 import io.github.davydgky.launcher.data.LauncherPrefs
+import io.github.davydgky.launcher.gestures.LockService
 import io.github.davydgky.launcher.home.AppLibrary
 import io.github.davydgky.launcher.home.CategoryOverlay
 import io.github.davydgky.launcher.home.DragOverlay
@@ -48,12 +53,12 @@ import io.github.davydgky.launcher.search.SearchViewModel
 import io.github.davydgky.launcher.ui.glass.LocalGlassColors
 import io.github.davydgky.launcher.ui.glass.frostedBackdrop
 import io.github.davydgky.launcher.ui.glass.glassColors
-import com.kyant.backdrop.backdrops.layerBackdrop
-import com.kyant.backdrop.backdrops.rememberLayerBackdrop
 import kotlin.math.max
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
@@ -97,11 +102,25 @@ fun LauncherScreen(
         combine(app.apps.apps, app.suggestions.current, app.usage.appPrior, app.appKnowledge.known) { list, suggestions, prior, learned ->
             LibraryInput(list, suggestions.apps, prior, learned)
         }.collect { input ->
-            value = withContext(Dispatchers.Default) { AppLibrary.groups(input.apps, input.suggested, input.prior, input.learned) }
+            // Hidden apps are only in the settings, where they can be shown again.
+            val visible = input.apps.filter { !it.hidden }
+            value = withContext(Dispatchers.Default) { AppLibrary.groups(visible, input.suggested, input.prior, input.learned) }
         }
     }
     val suggestions by app.suggestions.current.collectAsStateWithLifecycle()
     val prefs by app.settings.prefs.collectAsStateWithLifecycle(LauncherPrefs())
+    LaunchedEffect(prefs.layoutLocked) {
+        controller.layoutLocked = prefs.layoutLocked
+        if (prefs.layoutLocked) controller.stopEditing()
+    }
+    LaunchedEffect(prefs.badgeNumbers) { controller.badgeNumbers = prefs.badgeNumbers }
+    LaunchedEffect(prefs.doubleTapToLock) {
+        controller.doubleTapToLock = prefs.doubleTapToLock
+        controller.lockUnavailable = {
+            Toast.makeText(context, R.string.lock_service_needed, Toast.LENGTH_LONG).show()
+            runCatching { context.startActivity(LockService.settingsIntent()) }
+        }
+    }
     // The dock's free place shows the most likely app that is not in the dock already.
     val dockSuggestion = workspace?.let { ws ->
         if (!prefs.dockSuggestion || ws.dock.size >= Workspace.DOCK_SIZE) null
@@ -196,6 +215,9 @@ fun LauncherScreen(
                 CategoryOverlay(controller, ws, homeBackdrop)
             }
             WidgetPicker(controller, apps, homeBackdrop)
+            // True until the settings are read, so the introduction does not flash up for everyone.
+            val onboarded by remember(app) { app.settings.prefs.map { it.onboarded } }.collectAsStateWithLifecycle(initialValue = true)
+            if (!onboarded) OnboardingDialog(onDone = { scope.launch { app.settings.setOnboarded() } })
             workspace?.let { ws -> PagesOverlay(controller, ws, apps, homeBackdrop) }
             DragOverlay(controller, apps, shortcuts)
         }

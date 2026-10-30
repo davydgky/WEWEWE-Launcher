@@ -2,8 +2,11 @@ package io.github.davydgky.launcher.search
 
 import android.content.Context
 import android.content.pm.LauncherApps
+import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import android.graphics.drawable.AdaptiveIconDrawable
+import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.Drawable
 import android.net.Uri
 import android.util.LruCache
@@ -63,8 +66,34 @@ class IconCache(private val context: Context) {
     }
 
     fun loadApp(app: AppTarget): ImageBitmap? = cache.get(app.key) ?: runCatching {
-        app.info.getBadgedIcon(density).render()
+        (themedIcon(app) ?: app.info.getBadgedIcon(density)).render()
     }.getOrNull()?.also { cache.put(app.key, it) }
+
+    /** Icons in the wallpaper colors, for apps that have a monochrome icon. */
+    @Volatile var themed = false
+        private set
+
+    fun setThemed(enabled: Boolean) {
+        if (enabled == themed) return
+        themed = enabled
+        cache.evictAll()
+        generation++
+    }
+
+    /**
+     * The app's monochrome icon on a tinted background, in the system's dynamic colors as on Pixel
+     * phones (light: light background, dark symbol; dark the other way round); null if it has none.
+     */
+    private fun themedIcon(app: AppTarget): Drawable? {
+        if (!themed) return null
+        val icon = app.info.getIcon(density) as? AdaptiveIconDrawable ?: return null
+        val mono = icon.monochrome ?: return null
+        val dark = context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
+        val background = context.getColor(if (dark) android.R.color.system_neutral1_800 else android.R.color.system_accent1_100)
+        val symbol = context.getColor(if (dark) android.R.color.system_accent1_100 else android.R.color.system_neutral2_700)
+        val drawable = AdaptiveIconDrawable(ColorDrawable(background), mono.mutate().apply { setTint(symbol) })
+        return context.packageManager.getUserBadgedIcon(drawable, app.user)
+    }
 
     fun shortcutIcon(shortcut: ShortcutTarget): ImageBitmap? =
         launcherApps.getShortcutBadgedIconDrawable(shortcut.info, density)?.render()

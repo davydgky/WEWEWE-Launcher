@@ -30,7 +30,7 @@ class AppsSource(
         val paused = context.getString(R.string.work_paused)
         val private = context.getString(R.string.private_space)
         val known = knowledge.known.value
-        return apps.apps.value.map { app ->
+        return apps.apps.value.filter { !it.hidden }.map { app ->
             SearchItem(
                 key = app.key,
                 kind = SourceKind.App,
@@ -41,7 +41,8 @@ class AppsSource(
                     app.isWorkProfile -> work
                     else -> ""
                 },
-                keywords = known[app.packageName]?.keywords.orEmpty(),
+                // A renamed app is still found by its own name.
+                keywords = known[app.packageName]?.keywords.orEmpty() + listOf(app.originalLabel).filter { it != app.label },
                 payload = app,
             )
         }

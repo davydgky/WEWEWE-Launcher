@@ -140,7 +140,19 @@
             </intent-filter>
         </service>
 
-        <!-- "Add to home screen" from other apps, e.g. a page from Chrome. -->
+        <!-- Double tap to turn the screen off; off until the user switches it on in the accessibility settings. -->
+        <service
+            android:name=".gestures.LockService"
+            android:exported="false"
+            android:label="@string/lock_service_label"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data android:name="android.accessibilityservice" android:resource="@xml/lock_service" />
+        </service>
+
+        <!-- "Add to home screen" from other apps, e.g. a page from Chrome or a widget from an app. -->
         <activity
             android:name=".home.AddShortcutActivity"
             android:exported="true"
@@ -149,6 +161,7 @@
             android:theme="@android:style/Theme.Translucent.NoTitleBar">
             <intent-filter>
                 <action android:name="android.content.pm.action.CONFIRM_PIN_SHORTCUT" />
+                <action android:name="android.content.pm.action.CONFIRM_PIN_APPWIDGET" />
             </intent-filter>
         </activity>
 

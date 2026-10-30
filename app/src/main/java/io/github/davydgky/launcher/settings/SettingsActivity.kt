@@ -7,6 +7,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.provider.Settings
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -66,7 +67,9 @@ import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.davydgky.launcher.R
 import io.github.davydgky.launcher.ai.NanoAnswers
+import io.github.davydgky.launcher.data.Backup
 import io.github.davydgky.launcher.data.LauncherPrefs
+import io.github.davydgky.launcher.gestures.LockService
 import io.github.davydgky.launcher.index.MediaCatalog
 import io.github.davydgky.launcher.launcherApp
 import io.github.davydgky.launcher.messages.Messages
@@ -86,8 +89,10 @@ import io.github.davydgky.launcher.sources.ShortcutsSource
 import io.github.davydgky.launcher.sources.SmsSource
 import io.github.davydgky.launcher.sources.Velo
 import io.github.davydgky.launcher.sources.VeloSource
+import io.github.davydgky.launcher.ui.AppIconImage
 import io.github.davydgky.launcher.ui.LauncherTheme
 import io.github.davydgky.launcher.update.UpdateState
+import java.time.LocalDate
 import kotlin.math.roundToInt
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -291,8 +296,28 @@ private fun SettingsScreen(activity: ComponentActivity) {
                         Text(stringResource(if (notificationAccess) R.string.notification_dots_on else R.string.notification_dots_allow))
                     }
                 }
+                HorizontalDivider()
+                SwitchRow(R.string.setting_badge_numbers, R.string.setting_badge_numbers_description, prefs.badgeNumbers) {
+                    scope.launch { app.settings.setBadgeNumbers(it) }
+                }
+                HorizontalDivider()
+                SwitchRow(R.string.setting_themed_icons, R.string.setting_themed_icons_description, prefs.themedIcons) {
+                    scope.launch { app.settings.setThemedIcons(it) }
+                }
+                HorizontalDivider()
+                SwitchRow(R.string.setting_layout_locked, R.string.setting_layout_locked_description, prefs.layoutLocked) {
+                    scope.launch { app.settings.setLayoutLocked(it) }
+                }
+                HorizontalDivider()
+                SwitchRow(R.string.setting_double_tap, R.string.setting_double_tap_description, prefs.doubleTapToLock) { enabled ->
+                    scope.launch { app.settings.setDoubleTapToLock(enabled) }
+                    // Locking needs the accessibility service, which only the user can switch on.
+                    if (enabled && !LockService.isEnabled(context)) runCatching { context.startActivity(LockService.settingsIntent()) }
+                }
             }
         }
+        item { HiddenAppsGroup(prefs.hiddenApps) }
+        item { BackupGroup() }
         item {
             Group(stringResource(R.string.settings_sources)) {
                 Row(
@@ -463,6 +488,77 @@ private fun UpdateGroup(
         }
         HorizontalDivider()
         CrashReportsRow()
+    }
+}
+
+@Composable
+private fun SwitchRow(title: Int, description: Int, checked: Boolean, onChange: (Boolean) -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clickable { onChange(!checked) }.padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(stringResource(title), style = MaterialTheme.typography.titleMedium)
+            Text(stringResource(description), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Spacer(Modifier.width(12.dp))
+        Switch(checked = checked, onCheckedChange = onChange)
+    }
+}
+
+/** Apps hidden from their menu, each with a way to show it again. */
+@Composable
+private fun HiddenAppsGroup(hidden: Set<String>) {
+    val app = LocalContext.current.launcherApp
+    val scope = rememberCoroutineScope()
+    val apps by app.apps.apps.collectAsStateWithLifecycle()
+    val list = apps.filter { it.key in hidden }
+    Group(stringResource(R.string.settings_hidden_apps)) {
+        if (list.isEmpty()) {
+            Text(
+                stringResource(R.string.hidden_apps_none),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(16.dp),
+            )
+        }
+        list.forEachIndexed { index, target ->
+            if (index > 0) HorizontalDivider()
+            Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                AppIconImage(target, 36.dp)
+                Spacer(Modifier.width(12.dp))
+                Text(target.label, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                TextButton(onClick = { scope.launch { app.settings.setAppHidden(target.key, false) } }) {
+                    Text(stringResource(R.string.hidden_apps_show))
+                }
+            }
+        }
+    }
+}
+
+/** Saving the arrangement and settings to a file, and restoring them from one. */
+@Composable
+private fun BackupGroup() {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val toast = { text: Int -> Toast.makeText(context, text, Toast.LENGTH_SHORT).show() }
+    val save = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+        if (uri != null) scope.launch { toast(if (Backup.save(context, uri)) R.string.backup_saved else R.string.backup_failed) }
+    }
+    val open = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) scope.launch { toast(if (Backup.restore(context, uri)) R.string.backup_restored else R.string.backup_failed) }
+    }
+    Group(stringResource(R.string.settings_backup)) {
+        Column(Modifier.padding(16.dp)) {
+            Text(stringResource(R.string.backup_description), style = MaterialTheme.typography.bodyMedium)
+            Spacer(Modifier.size(12.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = { save.launch("wewewe-${LocalDate.now()}.json") }) { Text(stringResource(R.string.backup_export)) }
+                OutlinedButton(onClick = { open.launch(arrayOf("application/json", "application/octet-stream", "*/*")) }) {
+                    Text(stringResource(R.string.backup_import))
+                }
+            }
+        }
     }
 }
 

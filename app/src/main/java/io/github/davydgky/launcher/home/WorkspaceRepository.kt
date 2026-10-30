@@ -71,7 +71,8 @@ class WorkspaceRepository(
                     scheduleSave()
                 } else {
                     // Private space apps stay off the home screen unless the user puts one there.
-                    val privateApps = list.filterTo(HashSet()) { it.isPrivate }.mapTo(HashSet()) { it.key }
+                    // Hidden apps likewise.
+                    val privateApps = list.filter { it.isPrivate || it.hidden }.mapTo(HashSet()) { it.key }
                     update {
                         it.withGrid(columns, rows)
                             .sync(keys, prefs.addNewAppsToHome, packages, unavailable) { key -> key in privateApps }
@@ -230,12 +231,40 @@ class WorkspaceRepository(
     fun toDock(appKey: String, index: Int) = update { it.toDock(appKey, index) }
     fun fromDock(appKey: String, target: Cell?) = update { it.fromDock(appKey, target) }
     fun resizeWidget(id: Long, w: Int, h: Int) = update { it.resize(id, w, h) }
-    fun addWidget(widgetId: Int, provider: String, w: Int, h: Int, page: Int) = update { it.addWidget(widgetId, provider, w, h, page) }
+    fun addWidget(widgetId: Int, provider: String, w: Int, h: Int, page: Int) {
+        // A widget from another app may arrive before the arrangement is loaded.
+        val change = { ws: Workspace -> ws.addWidget(widgetId, provider, w, h, page) }
+        if (state.value == null) pending += change else update(change)
+    }
 
     /** Removes widget ids the host still holds but no element uses (e.g. after a cancelled add). */
     suspend fun cleanUpWidgets() {
         val ws = workspace.first { it != null } ?: return
         widgets.deleteUnused(ws.items.filterIsInstance<WidgetItem>().map { it.widgetId }.toSet())
+    }
+
+    /** The arrangement as a backup stores it. */
+    fun exportText(): String? = state.value?.let(WorkspaceCodec::encode)
+
+    /**
+     * Replaces the arrangement with one from a backup, brought in line with the apps installed now.
+     * Widgets cannot come back (their ids belong to the old installation); false if it is unreadable.
+     */
+    fun restore(text: String): Boolean {
+        val restored = runCatching { WorkspaceCodec.decode(text) }.getOrNull() ?: return false
+        val list = apps.apps.value
+        val keys = list.map { it.key }
+        val packages = list.mapTo(HashSet()) { it.packageName }
+        val current = state.value
+        val ws = restored.copy(items = restored.items.filter { it !is WidgetItem })
+            .let { if (current != null) it.withGrid(current.columns, current.rows) else it }
+            .sync(keys, addNew = false, packages = packages, unavailable = apps.unavailableProfiles.value)
+        expireUndo()
+        if (current != null) undoState.value = Undo(R.string.undo_restored, current, emptyList())
+        state.value = ws
+        updatePins(ws)
+        scheduleSave()
+        return true
     }
 
     private fun scheduleSave() {

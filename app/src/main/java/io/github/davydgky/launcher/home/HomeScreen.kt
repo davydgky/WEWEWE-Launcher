@@ -52,6 +52,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.pager.HorizontalPager
@@ -59,12 +60,14 @@ import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -121,6 +124,7 @@ import io.github.davydgky.launcher.R
 import io.github.davydgky.launcher.ai.NanoAnswers
 import io.github.davydgky.launcher.core.SearchItem
 import io.github.davydgky.launcher.core.SourceKind
+import io.github.davydgky.launcher.gestures.LockService
 import io.github.davydgky.launcher.launcherApp
 import io.github.davydgky.launcher.notifications.Notifications
 import io.github.davydgky.launcher.search.AppTarget
@@ -177,12 +181,16 @@ fun HomeScreen(
         modifier
             .fillMaxSize()
             .onGloballyPositioned { controller.screenWidth = it.size.width.toFloat() }
-            .pointerInput(Unit) {
+            .pointerInput(controller.doubleTapToLock) {
                 // Apps, folders and widgets have their own long press; only the background starts editing.
                 var onItem = false
                 detectTapGestures(
                     onPress = { onItem = controller.itemsPressed > 0 },
                     onTap = { if (!onItem) controller.stopEditing() },
+                    // Only when switched on: a double tap detector delays single taps a little.
+                    onDoubleTap = if (controller.doubleTapToLock) {
+                        { if (!onItem && !controller.editMode && !LockService.lock()) controller.lockUnavailable() }
+                    } else null,
                     onLongPress = {
                         if (!onItem && !controller.editMode) {
                             haptics.performHapticFeedback(HapticFeedbackType.LongPress)
@@ -532,7 +540,10 @@ private fun HomeAppIcon(app: AppTarget, source: DragSource, controller: HomeCont
         ) {
             Box {
                 AppIconImage(app, iconSize, Modifier.onGloballyPositioned(bounds::update))
-                if (unread > 0) NotificationDot(10.dp, Modifier.align(Alignment.TopEnd))
+                if (unread > 0) {
+                    if (controller.badgeNumbers) NotificationBadge(unread, Modifier.align(Alignment.TopEnd).offset(x = 4.dp, y = (-4).dp))
+                    else NotificationDot(10.dp, Modifier.align(Alignment.TopEnd))
+                }
             }
             if (showLabel) {
                 Spacer(Modifier.height(6.dp))
@@ -1185,6 +1196,32 @@ private fun DockSuggestion(app: AppTarget, workspace: Workspace, controller: Hom
     }
 }
 
+/** A new name for an app; empty gives it its own name back. */
+@Composable
+private fun RenameDialog(app: AppTarget, onDismiss: () -> Unit, onRename: (String) -> Unit) {
+    var name by remember { mutableStateOf(app.label) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.menu_rename)) },
+        text = {
+            OutlinedTextField(
+                value = name,
+                onValueChange = { name = it },
+                singleLine = true,
+                placeholder = { Text(app.originalLabel) },
+            )
+        },
+        confirmButton = { TextButton(onClick = { onRename(name) }) { Text(stringResource(R.string.rename_save)) } },
+        dismissButton = {
+            if (app.label != app.originalLabel) {
+                TextButton(onClick = { onRename("") }) { Text(stringResource(R.string.rename_reset)) }
+            } else {
+                TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
+            }
+        },
+    )
+}
+
 @Composable
 private fun AppMenu(
     app: AppTarget,
@@ -1194,14 +1231,24 @@ private fun AppMenu(
     controller: HomeController,
     bounds: ScreenBounds,
 ) {
+    val launcher = LocalContext.current.launcherApp
+    val scope = rememberCoroutineScope()
+    var renaming by remember { mutableStateOf(false) }
+    if (renaming) {
+        RenameDialog(app, onDismiss = { renaming = false }) { name ->
+            renaming = false
+            scope.launch { launcher.settings.setAppLabel(app.key, name) }
+        }
+    }
     DropdownMenu(expanded = expanded, onDismissRequest = onDismiss, shape = RoundedCornerShape(18.dp)) {
         AppMenuExtras(app, controller, onDismiss, bounds)
-        when (source) {
-            is DragSource.Dock -> MenuItem(R.string.menu_remove_from_dock, R.drawable.ic_pin) {
+        when {
+            controller.layoutLocked -> Unit
+            source is DragSource.Dock -> MenuItem(R.string.menu_remove_from_dock, R.drawable.ic_pin) {
                 onDismiss()
                 controller.repository.fromDock(app.key, null)
             }
-            is DragSource.Item -> {
+            source is DragSource.Item -> {
                 if (controller.dockSize < Workspace.DOCK_SIZE) {
                     MenuItem(R.string.menu_add_to_dock, R.drawable.ic_pin) {
                         onDismiss()
@@ -1214,9 +1261,21 @@ private fun AppMenu(
                 }
             }
         }
-        MenuItem(R.string.menu_edit_home, R.drawable.ic_edit) {
+        if (!controller.layoutLocked) {
+            MenuItem(R.string.menu_edit_home, R.drawable.ic_edit) {
+                onDismiss()
+                controller.startEditing()
+            }
+        }
+        MenuItem(R.string.menu_rename, R.drawable.ic_edit) {
             onDismiss()
-            controller.startEditing()
+            renaming = true
+        }
+        MenuItem(R.string.menu_hide_app, R.drawable.ic_hide) {
+            onDismiss()
+            // Off the home screen as well; it can be shown again in the settings.
+            controller.repository.removeApp(app.key)
+            scope.launch { launcher.settings.setAppHidden(app.key, true) }
         }
         MenuItem(R.string.menu_app_info, R.drawable.ic_info) {
             onDismiss()
@@ -1395,6 +1454,31 @@ private fun NotificationDot(size: Dp, modifier: Modifier = Modifier) {
             .clip(CircleShape)
             .background(MaterialTheme.colorScheme.primary),
     )
+}
+
+/** The number of notifications instead of the dot, when the user chose numbers. */
+@Composable
+private fun NotificationBadge(count: Int, modifier: Modifier = Modifier) {
+    Box(
+        modifier
+            .heightIn(min = 18.dp)
+            .widthIn(min = 18.dp)
+            .clip(CircleShape)
+            .background(Color.White)
+            .padding(1.5.dp)
+            .clip(CircleShape)
+            .background(MaterialTheme.colorScheme.primary)
+            .padding(horizontal = 4.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            if (count > 99) "99+" else count.toString(),
+            color = MaterialTheme.colorScheme.onPrimary,
+            fontSize = 10.sp,
+            lineHeight = 12.sp,
+            fontWeight = FontWeight.SemiBold,
+        )
+    }
 }
 
 /** A pinned shortcut: its icon with the app's icon in the corner, like on Pixel phones. */

@@ -44,7 +44,7 @@ class Suggestions(
 
     private fun compute(context: Context): SuggestionState {
         // Paused apps cannot start; private space apps are not shown outside the private space.
-        val allApps = apps.apps.value.filter { !it.paused && !it.isPrivate }
+        val allApps = apps.apps.value.filter { !it.paused && !it.isPrivate && !it.hidden }
         val byKey = allApps.associateBy { it.key }
         val ranking = predictor.rank(usage.combinedEvents(), System.currentTimeMillis(), ZoneId.systemDefault())
 
