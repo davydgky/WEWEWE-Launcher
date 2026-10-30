@@ -141,7 +141,10 @@ class NanoAnswers(private val scope: CoroutineScope) {
         history: List<Pair<String, String>> = emptyList(),
         /** [messages] are all recent ones, to be summed up ("fasse meine Nachrichten zusammen"). */
         overview: Boolean = false,
-        /** A command Nano did not understand is answered as a question instead (a second run). */
+        /**
+         * In a conversation (Enter): a command Nano did not understand is answered as a question instead
+         * (a second run), and answers may be longer. False while typing.
+         */
         answerUnknownCommands: Boolean = true,
     ): Flow<NanoReply> = flow {
         val client = model ?: return@flow
@@ -164,7 +167,12 @@ class NanoAnswers(private val scope: CoroutineScope) {
             val request = generateContentRequest(SystemInstruction(instruction), TextPart(input)) {
                 temperature = 0.3f
                 topK = 24
-                maxOutputTokens = if (overview) MAX_OVERVIEW_TOKENS else MAX_ANSWER_TOKENS
+                // A conversation may go into detail; the line in the search stays short.
+                maxOutputTokens = when {
+                    overview -> MAX_OVERVIEW_TOKENS
+                    answerUnknownCommands -> MAX_CONVERSATION_TOKENS
+                    else -> MAX_ANSWER_TOKENS
+                }
             }
             val text = StringBuilder()
             client.generateContentStream(request).collect { response ->
@@ -360,7 +368,8 @@ class NanoAnswers(private val scope: CoroutineScope) {
 
     private companion object {
         const val TAG = "NanoAnswers"
-        const val MAX_ANSWER_TOKENS = 260
+        const val MAX_ANSWER_TOKENS = 320
+        const val MAX_CONVERSATION_TOKENS = 600
         const val MAX_TERMS = 5
         const val RETRY_MS = 20_000L
         const val READY_WAIT_MS = 2_500L
@@ -374,7 +383,7 @@ class NanoAnswers(private val scope: CoroutineScope) {
         """.trimIndent()
         const val MAX_FOLDER_NAME = 24
         const val MAX_MESSAGE_CHARS = 300
-        const val MAX_OVERVIEW_TOKENS = 420
+        const val MAX_OVERVIEW_TOKENS = 600
         const val MAX_HISTORY = 6
         const val MAX_HISTORY_CHARS = 400
 
