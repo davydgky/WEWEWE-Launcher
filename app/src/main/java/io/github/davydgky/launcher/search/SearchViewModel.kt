@@ -4,12 +4,15 @@ import android.app.Application
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import io.github.davydgky.launcher.R
 import io.github.davydgky.launcher.ai.NanoAnswers
 import io.github.davydgky.launcher.ai.NanoReply
 import io.github.davydgky.launcher.core.Answer
 import io.github.davydgky.launcher.core.Answers
+import io.github.davydgky.launcher.core.QueryKinds
 import io.github.davydgky.launcher.core.QuickAction
 import io.github.davydgky.launcher.core.QuickActions
+import io.github.davydgky.launcher.core.ScoredItem
 import io.github.davydgky.launcher.core.SearchResults
 import io.github.davydgky.launcher.core.SmartAction
 import io.github.davydgky.launcher.core.SourceKind
@@ -24,10 +27,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.distinctUntilChangedBy
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.transformLatest
@@ -61,7 +62,12 @@ class AiAnswer(
     val action: SmartAction? = null,
     /** Messages from the phone the answer may come from, newest first. */
     val sources: List<Message> = emptyList(),
+    /** Why there is no answer (Gemini Nano busy, loading, out of its quota). */
+    val error: String? = null,
 )
+
+/** What other words, suggested by Gemini Nano, found for an input that found nothing itself. */
+class RelatedResults(val query: String, val terms: List<String>, val items: List<ScoredItem>)
 
 /** Apps from the Play Store for [query]; shown when few installed apps match. */
 class StoreResults(val query: String, val apps: List<StoreApp>)
@@ -92,6 +98,9 @@ class SearchViewModel(application: Application) : AndroidViewModel(application) 
         /** Gemini Nano starts once typing pauses this long; every keystroke would only cancel it. */
         const val AI_PAUSE_MS = 280L
         const val MIN_AI_CHARS = 3
+        const val RELATED_PAUSE_MS = 500L
+        const val RELATED_PER_TERM = 3
+        const val MAX_RELATED = 8
         const val MAX_SOURCES = 6
         const val SHOWN_SOURCES = 2
 
@@ -122,26 +131,39 @@ class SearchViewModel(application: Application) : AndroidViewModel(application) 
      * Gemini Nano's answer for the current input, after a short pause in typing; a new input drops the
      * answer being written. Empty ("-" from the model) for inputs that are plain searches.
      */
-    val aiAnswer: StateFlow<AiAnswer?> = input
-        .map { it.first.trim() }
-        .distinctUntilChanged()
-        .transformLatest { query ->
+    val aiAnswer: StateFlow<AiAnswer?> = results
+        .distinctUntilChangedBy { it.query.trim() }
+        .transformLatest { state ->
             emit(null)
-            if (query.length < MIN_AI_CHARS || query.none { it.isLetter() }) return@transformLatest
+            val query = state.query.trim()
+            if (!wantsAnswer(state)) return@transformLatest
             if (!settings.prefs.first().aiAnswers) return@transformLatest
             nano.prepare()
             delay(AI_PAUSE_MS)
-            if (nano.availability.value != NanoAnswers.Availability.Ready) return@transformLatest
             emit(AiAnswer(query, "", done = false))
+            if (!nano.awaitReady()) {
+                // Say why instead of showing nothing; quietly nothing on devices without Gemini Nano.
+                val status = nano.availability.value
+                emit(
+                    when (status) {
+                        NanoAnswers.Availability.Unsupported -> null
+                        NanoAnswers.Availability.Downloading -> AiAnswer(query, "", done = true, error = launcher.getString(R.string.ai_status_downloading))
+                        else -> AiAnswer(query, "", done = true, error = nano.lastError ?: launcher.getString(R.string.ai_not_ready))
+                    },
+                )
+                return@transformLatest
+            }
+            val command = QueryKinds.isCommand(query)
             // Questions may be answered from the messages on the phone ("Wann muss ich zum Bahnhof?").
-            val sources = if (looksLikeQuestion(query)) {
+            val sources = if (!command && looksLikeQuestion(query)) {
                 runCatching { launcher.messages.relevant(query, MAX_SOURCES) }.getOrDefault(emptyList())
             } else emptyList()
             val shownSources = sources.sortedByDescending { it.text.time }.take(SHOWN_SOURCES)
             var last = ""
             var action: SmartAction? = null
+            var error: String? = null
             try {
-                nano.reply(query, sources.map { it.text }).collect { reply ->
+                nano.reply(query, sources.map { it.text }, command).collect { reply ->
                     when (reply) {
                         is NanoReply.Text -> {
                             last = reply.text
@@ -154,14 +176,58 @@ class SearchViewModel(application: Application) : AndroidViewModel(application) 
                 throw e
             } catch (e: Exception) {
                 Log.w(TAG, "Gemini Nano failed", e)
+                error = e.message ?: e.javaClass.simpleName
             }
             emit(
                 when {
                     action != null -> AiAnswer(query, "", done = true, action = action)
-                    last.isEmpty() -> null
-                    else -> AiAnswer(query, last, done = true, sources = shownSources)
+                    last.isNotEmpty() -> AiAnswer(query, last, done = true, sources = shownSources)
+                    error != null -> AiAnswer(query, "", done = true, error = error)
+                    else -> null
                 },
             )
+        }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
+    /**
+     * Whether Gemini Nano should answer: not for a sum or a timer (answered already), not when the input
+     * is exactly the name of an app, contact or setting that was found, not for a letter or two.
+     */
+    private fun wantsAnswer(state: ResultsState): Boolean {
+        val query = state.query.trim()
+        if (query.length < MIN_AI_CHARS || query.none { it.isLetter() }) return false
+        if (state.answer != null || state.action != null) return false
+        val top = state.results.top?.item ?: return true
+        val named = top.kind == SourceKind.App || top.kind == SourceKind.Contact || top.kind == SourceKind.Setting
+        return !(named && QueryKinds.isExactName(query, top.title))
+    }
+
+    /**
+     * When the search finds nothing, Gemini Nano suggests other words for it, and what those find is
+     * shown instead ("Stromrechnung" finds the PDF named "Rechnung Energie").
+     */
+    val related: StateFlow<RelatedResults?> = results
+        .distinctUntilChangedBy { it.query.trim() }
+        .transformLatest { state ->
+            emit(null)
+            val query = state.query.trim()
+            val empty = state.results.top == null && state.results.groups.isEmpty()
+            if (!empty || query.length < MIN_AI_CHARS || state.answer != null || state.action != null) return@transformLatest
+            if (!settings.prefs.first().aiAnswers) return@transformLatest
+            delay(RELATED_PAUSE_MS)
+            if (!nano.awaitReady()) return@transformLatest
+            val terms = runCatching { nano.searchTerms(query) }.getOrDefault(emptyList())
+            if (terms.isEmpty()) return@transformLatest
+            val found = withContext(searchThread) {
+                terms.flatMap { term ->
+                    val r = repository.search(term)
+                    listOfNotNull(r.top) + r.groups.flatMap { it.items.take(RELATED_PER_TERM) }
+                }
+                    .distinctBy { it.item.key }
+                    .sortedByDescending { it.score }
+                    .take(MAX_RELATED)
+            }
+            if (found.isNotEmpty()) emit(RelatedResults(query, terms, found))
         }
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 

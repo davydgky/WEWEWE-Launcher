@@ -213,6 +213,8 @@
     <string name="menu_app_timer">App timer</string>
     <string name="menu_bubble">Bubble</string>
     <string name="ai_title">Gemini Nano</string>
+    <string name="ai_not_ready">Gemini Nano is not ready yet</string>
+    <string name="section_related">Related · %1$s</string>
     <string name="source_messages">Messages</string>
     <string name="source_messages_description">WhatsApp, Instagram, mail and every other app, from their notifications; kept on this device</string>
     <string name="source_sms">SMS</string>

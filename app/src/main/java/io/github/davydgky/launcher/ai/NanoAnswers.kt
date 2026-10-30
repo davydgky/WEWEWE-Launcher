@@ -1,5 +1,6 @@
 package io.github.davydgky.launcher.ai
 
+import android.os.SystemClock
 import android.util.Log
 import io.github.davydgky.launcher.core.MessageText
 import io.github.davydgky.launcher.core.SmartAction
@@ -23,10 +24,12 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withTimeoutOrNull
 
 /** What Gemini Nano made of an input: an answer as it grows, or a request to the phone. */
 sealed interface NanoReply {
@@ -62,6 +65,8 @@ class NanoAnswers(private val scope: CoroutineScope) {
      */
     fun prepare() {
         if (state.value == Availability.Ready || state.value == Availability.Unsupported || preparing?.isActive == true) return
+        // After a failed check, not again on every keystroke.
+        if (SystemClock.elapsedRealtime() - lastFailure < RETRY_MS) return
         preparing = scope.launch {
             try {
                 val client = model ?: Generation.getClient().also { model = it }
@@ -85,43 +90,100 @@ class NanoAnswers(private val scope: CoroutineScope) {
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                Log.w(TAG, "Gemini Nano is not available", e)
-                state.value = Availability.Unsupported
+                // AICore may still be starting (right after boot or an update): try again later.
+                Log.w(TAG, "Gemini Nano is not available yet", e)
+                lastError = e.message
+                lastFailure = SystemClock.elapsedRealtime()
+                state.value = Availability.Unknown
             }
         }
     }
 
+    /** Why Gemini Nano could not be reached last time, for the search to show. */
+    @Volatile var lastError: String? = null
+        private set
+    @Volatile private var lastFailure = 0L
+
+    /** Waits up to [timeoutMs] for Gemini Nano to be ready, starting the check if needed. */
+    suspend fun awaitReady(timeoutMs: Long = READY_WAIT_MS): Boolean {
+        prepare()
+        if (isReady) return true
+        return withTimeoutOrNull(timeoutMs) {
+            availability.first { it == Availability.Ready || it == Availability.Unsupported } == Availability.Ready
+        } ?: false
+    }
+
+    /** Someone is typing: work that can wait stays out of the way for a while. */
+    @Volatile private var interactiveUntil = 0L
+
+    private fun interactive() {
+        interactiveUntil = SystemClock.elapsedRealtime() + INTERACTIVE_MS
+    }
+
     /**
-     * The reply to what was typed into the search: an answer chunk by chunk, or once complete a request
-     * to the phone ("ruf Mama an"). Nothing for plain searches (an app, a name, a single word).
+     * The reply to what was typed into the search. A request to the phone ([command], "ruf Mama an")
+     * comes back once complete as [NanoReply.Command]; anything else is answered, chunk by chunk, with
+     * [messages] from the phone that may hold the answer. Errors are thrown, so the search can show them.
      */
-    fun reply(query: String, messages: List<MessageText> = emptyList()): Flow<NanoReply> = flow {
+    fun reply(query: String, messages: List<MessageText> = emptyList(), command: Boolean = false): Flow<NanoReply> = flow {
         val client = model ?: return@flow
         if (!isReady) return@flow
+        interactive()
         busy.withLock {
-            val request = generateContentRequest(SystemInstruction(searchInstruction() + messageContext(messages)), TextPart(query.trim())) {
-                temperature = 0.2f
-                topK = 16
+            if (command) {
+                val json = generate(client, commandInstruction(), query, maxTokens = 120, temperature = 0.1f)
+                val action = SmartActions.parse(json)
+                if (action != null) {
+                    emit(NanoReply.Command(action))
+                    return@withLock
+                }
+            }
+            val request = generateContentRequest(SystemInstruction(answerInstruction() + messageContext(messages)), TextPart(query.trim())) {
+                temperature = 0.3f
+                topK = 24
                 maxOutputTokens = MAX_ANSWER_TOKENS
             }
             val text = StringBuilder()
             client.generateContentStream(request).collect { response ->
                 val chunk = response.candidates.firstOrNull()?.text ?: return@collect
                 text.append(chunk)
-                val shown = text.toString().trim()
-                // A command is JSON: shown only once it is complete and understood.
-                if (shown.startsWith("{") || shown.startsWith("`")) return@collect
-                if (shown.isNotEmpty() && !NOTHING.startsWith(shown)) emit(NanoReply.Text(shown))
+                val shown = clean(text.toString())
+                if (shown.isNotEmpty()) emit(NanoReply.Text(shown))
             }
-            val full = text.toString().trim()
-            if (full.startsWith("{") || full.startsWith("`")) SmartActions.parse(full)?.let { emit(NanoReply.Command(it)) }
         }
     }
+
+    /** Alternative words for a search that found nothing ("Stromrechnung" → "rechnung, strom, energie"). */
+    suspend fun searchTerms(query: String): List<String> {
+        val reply = ask(TERMS_INSTRUCTION, query, maxTokens = 40) ?: return emptyList()
+        return reply.lineSequence().first().split(',', ';', '\n')
+            .map { it.trim().trim('"', '.', '*', '-', ' ') }
+            .filter { it.length in 2..40 && !it.equals(query, ignoreCase = true) }
+            .distinct()
+            .take(MAX_TERMS)
+    }
+
+    private suspend fun generate(client: GenerativeModel, instruction: String, input: String, maxTokens: Int, temperature: Float): String {
+        val request = generateContentRequest(SystemInstruction(instruction), TextPart(input.trim())) {
+            this.temperature = temperature
+            topK = 8
+            maxOutputTokens = maxTokens
+        }
+        return client.generateContent(request).candidates.firstOrNull()?.text?.trim().orEmpty()
+    }
+
+    /** Small models like to start with "Antwort:" or wrap in code blocks; neither belongs in the row. */
+    private fun clean(text: String): String = text.trim()
+        .removePrefix("```").removeSuffix("```")
+        .replace(Regex("^(Antwort|Answer)\\s*:\\s*", RegexOption.IGNORE_CASE), "")
+        .replace("**", "")
+        .trim()
 
     /** The whole reply to a short task, streamed as it grows (for things the user waits for). */
     fun stream(instruction: String, input: String, maxTokens: Int = 160): Flow<String> = flow {
         val client = model ?: return@flow
         if (!isReady) return@flow
+        interactive()
         busy.withLock {
             val request = generateContentRequest(SystemInstruction(instruction), TextPart(input)) {
                 temperature = 0.2f
@@ -145,8 +207,12 @@ class NanoAnswers(private val scope: CoroutineScope) {
     suspend fun ask(instruction: String, input: String, maxTokens: Int = 64, background: Boolean = false): String? {
         val client = model ?: return null
         if (!isReady) return null
+        if (background && SystemClock.elapsedRealtime() < interactiveUntil) return null
         if (background && !busy.tryLock()) return null
-        if (!background) busy.lock()
+        if (!background) {
+            interactive()
+            busy.lock()
+        }
         return try {
             val request = generateContentRequest(SystemInstruction(instruction), TextPart(input)) {
                 temperature = 0.1f
@@ -200,31 +266,67 @@ class NanoAnswers(private val scope: CoroutineScope) {
         }
     }
 
-    /** The search instruction with today's date, so "tomorrow at 3" becomes a date. */
-    private fun searchInstruction(): String {
-        val now = LocalDateTime.now()
-        val today = now.format(DateTimeFormatter.ofPattern("EEEE, yyyy-MM-dd, HH:mm", Locale.GERMAN))
+    private fun now(): String =
+        LocalDateTime.now().format(DateTimeFormatter.ofPattern("EEEE, d. MMMM yyyy, HH:mm", Locale.GERMAN))
+
+    /** Answers everything typed; a few examples show a small model the length and tone. */
+    private fun answerInstruction(): String = """
+        Du bist die Antwortzeile in der Suche eines Android-Startbildschirms, wie die KI-Übersicht bei Google.
+        Jetzt ist ${now()}.
+        Antworte immer hilfreich, in der Sprache der Eingabe: ein bis drei kurze Sätze, das Wichtigste zuerst,
+        ohne Einleitung, ohne Rückfrage, ohne Markdown.
+        Ist die Eingabe nur ein Begriff oder Name, erkläre in einem Satz, was oder wer das ist.
+        Weißt du etwas nicht sicher, sag das kurz und nenne, was du weißt. Für Live-Daten wie Wetter, Kurse oder
+        Spielstände sag, dass du offline bist, und was man stattdessen tun kann.
+
+        Beispiele:
+        Eingabe: höhe eiffelturm
+        Antwort: Der Eiffelturm ist 330 Meter hoch (mit Antennen); er wurde 1889 für die Weltausstellung in Paris gebaut.
+        Eingabe: was ist eine kWh
+        Antwort: Eine Kilowattstunde ist die Energie, die ein Gerät mit 1000 Watt in einer Stunde verbraucht; danach wird Strom abgerechnet.
+        Eingabe: Pfannkuchen Rezept
+        Antwort: 250 g Mehl, 3 Eier, 500 ml Milch und eine Prise Salz glatt rühren, kurz quellen lassen und dünn in Butter ausbacken.
+        Eingabe: Photosynthese
+        Antwort: Pflanzen wandeln mit Licht Wasser und Kohlendioxid in Zucker und Sauerstoff um.
+    """.trimIndent()
+
+    /** Turns a request into one line of JSON; examples carry the fields and the date format. */
+    private fun commandInstruction(): String {
+        val tomorrow = LocalDateTime.now().plusDays(1).format(DateTimeFormatter.ISO_LOCAL_DATE)
         return """
-            Du bist die Antwortzeile in der Suche eines Android-Startbildschirms, wie die KI-Antwort bei Google.
-            Jetzt ist $today.
-            1. Ist die Eingabe ein Auftrag an das Handy (anrufen, Nachricht oder SMS schreiben, E-Mail schreiben,
-               navigieren oder Route, Termin oder Erinnerung eintragen, im Web suchen), antworte ausschließlich mit
-               einer Zeile JSON ohne Erklärung, mit diesen Feldern:
-               {"action":"call|sms|mail|navigate|event|web","who":"Name oder Nummer","text":"Nachrichtentext",
-               "title":"Titel oder Betreff","place":"Ort","start":"YYYY-MM-DDTHH:MM","end":"YYYY-MM-DDTHH:MM"}
-               Lass Felder weg, die nicht passen. Rechne Angaben wie "morgen 15 Uhr" in ein Datum um.
-            2. Ist die Eingabe eine Frage oder ein Begriff, zu dem man eine Erklärung erwartet, antworte in der
-               Sprache der Eingabe, sachlich und knapp: höchstens drei kurze Sätze, ohne Einleitung, ohne Rückfrage,
-               ohne Markdown. Bei Fakten nenne die Zahl oder den Namen zuerst.
-            3. Ist die Eingabe nur der Name einer App, einer Person, einer Datei oder ein einzelnes Wort ohne
-               erkennbare Frage, oder weißt du es nicht sicher, antworte ausschließlich mit: -
+            Wandle den Auftrag an das Handy in genau eine Zeile JSON um, ohne weiteren Text und ohne Codeblock.
+            Jetzt ist ${now()}.
+            Felder: action (call, sms, mail, navigate, event, web), who, text, title, place, start, end
+            (Zeiten als YYYY-MM-DDTHH:MM). Lass Felder weg, die nicht vorkommen.
+
+            Beispiele:
+            Auftrag: ruf mama an
+            {"action":"call","who":"Mama"}
+            Auftrag: schreib anna dass ich später komme
+            {"action":"sms","who":"Anna","text":"Ich komme später"}
+            Auftrag: navigiere nach hause
+            {"action":"navigate","place":"Zuhause"}
+            Auftrag: termin morgen 15 uhr zahnarzt
+            {"action":"event","title":"Zahnarzt","start":"${tomorrow}T15:00"}
+            Auftrag: mail an tom betreff rechnung
+            {"action":"mail","who":"Tom","title":"Rechnung"}
         """.trimIndent()
     }
 
     private companion object {
         const val TAG = "NanoAnswers"
-        const val MAX_ANSWER_TOKENS = 220
-        const val NOTHING = "-"
+        const val MAX_ANSWER_TOKENS = 260
+        const val MAX_TERMS = 5
+        const val RETRY_MS = 20_000L
+        const val READY_WAIT_MS = 2_500L
+        /** Background tasks wait this long after the last search request. */
+        const val INTERACTIVE_MS = 8_000L
+
+        val TERMS_INSTRUCTION = """
+            Die Suche auf einem Handy hat für die Eingabe nichts gefunden. Nenne bis zu fünf andere Suchbegriffe,
+            unter denen Apps, Kontakte, Dateien, Notizen oder Nachrichten dazu heißen könnten: Synonyme, Oberbegriffe,
+            deutsch und englisch. Nur die Begriffe, kommagetrennt, in einer Zeile.
+        """.trimIndent()
         const val MAX_FOLDER_NAME = 24
         const val MAX_MESSAGE_CHARS = 300
 

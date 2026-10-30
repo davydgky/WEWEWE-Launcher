@@ -37,7 +37,9 @@ Welche Quelle Android unter welcher Bedingung erlaubt und warum die Architektur 
 - **Antworten von Gemini Nano** über den Treffern, wie die KI-Antwort bei Google: auf dem Gerät erzeugt
   (ML Kit Prompt API über AICore), live geschrieben, ohne Internet; nichts verlässt das Handy. Läuft auf
   Geräten mit Gemini Nano für Apps, vor allem Pixel 10; sonst erscheint einfach keine Antwort. Abschaltbar
-  in den Einstellungen.
+  in den Einstellungen. Nano antwortet auf jede Eingabe außer Summen, Timern und genauen App-, Kontakt- oder
+  Einstellungsnamen; Befehle und Fragen bekommen getrennte, kurze Anweisungen mit Beispielen. Findet die
+  Suche nichts, schlägt Nano andere Suchbegriffe vor und zeigt, was diese finden („Passend dazu“).
 - **Gemini Nano im ganzen Launcher** (nur auf dem Gerät, abschaltbar):
   - Sätze werden zu Aktionen: „ruf Mama an“, „schreib Anna, dass ich später komme“, „navigiere nach Hause“,
     „Termin morgen 15 Uhr Zahnarzt“. Ein Tippen öffnet Telefon, Nachrichten, Karten oder Kalender, wo man

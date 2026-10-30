@@ -109,6 +109,7 @@ import io.github.davydgky.launcher.perf.Metric
 import io.github.davydgky.launcher.search.AiAnswer
 import io.github.davydgky.launcher.search.AppTarget
 import io.github.davydgky.launcher.search.ContactTarget
+import io.github.davydgky.launcher.search.RelatedResults
 import io.github.davydgky.launcher.search.ResultActions
 import io.github.davydgky.launcher.search.ResultsState
 import io.github.davydgky.launcher.search.SearchViewModel
@@ -146,6 +147,7 @@ fun SearchPanel(
     val results by viewModel.results.collectAsStateWithLifecycle()
     val aiAnswer by viewModel.aiAnswer.collectAsStateWithLifecycle()
     val storeApps by viewModel.storeApps.collectAsStateWithLifecycle()
+    val related by viewModel.related.collectAsStateWithLifecycle()
     val suggestions by app.suggestions.current.collectAsStateWithLifecycle()
     val usageAccess by app.usage.hasAccess.collectAsStateWithLifecycle()
     val prefs by app.settings.prefs.collectAsStateWithLifecycle(initialValue = LauncherPrefs())
@@ -248,6 +250,7 @@ fun SearchPanel(
                         results,
                         aiAnswer?.takeIf { it.query == results.query.trim() },
                         storeApps?.takeIf { it.query == results.query.trim() },
+                        related?.takeIf { it.query == results.query.trim() },
                         open, external, actions, backdrop,
                     )
                 }
@@ -325,6 +328,7 @@ private fun LazyListScope.resultItems(
     state: ResultsState,
     ai: AiAnswer?,
     store: StoreResults?,
+    related: RelatedResults?,
     open: (SearchItem, Rect?) -> Unit,
     external: (String, (String) -> Unit) -> Unit,
     actions: ResultActions,
@@ -386,6 +390,17 @@ private fun LazyListScope.resultItems(
                         if (index > 0) RowDivider()
                         ResultRow(scored.item, query, open, trailing = contactTrailing(scored.item, actions))
                     }
+                }
+            }
+        }
+    }
+    // Nothing found under these words: what Gemini Nano's other words for them find.
+    if (related != null) {
+        item("related") {
+            Section(stringResource(R.string.section_related, related.terms.joinToString(", ")), backdrop) {
+                related.items.forEachIndexed { index, scored ->
+                    if (index > 0) RowDivider()
+                    ResultRow(scored.item, "", open, trailing = contactTrailing(scored.item, actions))
                 }
             }
         }
@@ -505,7 +520,9 @@ private fun AiAnswerRow(answer: AiAnswer, onCopy: () -> Unit, onOpenSource: (Mes
             Text(stringResource(R.string.ai_title), color = colors.secondaryContent, style = MaterialTheme.typography.labelLarge)
         }
         Spacer(Modifier.height(6.dp))
-        if (answer.text.isEmpty()) {
+        if (answer.error != null) {
+            Text(answer.error, color = colors.secondaryContent, style = MaterialTheme.typography.bodySmall, maxLines = 3, overflow = TextOverflow.Ellipsis)
+        } else if (answer.text.isEmpty()) {
             // Waiting for the first words: three lines that pulse, as Google shows it.
             val pulse by rememberInfiniteTransition(label = "ai").animateFloat(
                 initialValue = 0.25f, targetValue = 0.6f,
