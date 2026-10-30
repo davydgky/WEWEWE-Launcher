@@ -109,6 +109,7 @@ class SearchViewModel(application: Application) : AndroidViewModel(application) 
         val PERSONAL_KINDS = setOf(SourceKind.Contact, SourceKind.Message, SourceKind.Event, SourceKind.Note)
         /** Gemini Nano starts once typing pauses this long; every keystroke would only cancel it. */
         const val AI_PAUSE_MS = 280L
+        const val AI_IDLE_PAUSE_MS = 650L
         const val MIN_AI_CHARS = 3
         const val RELATED_PAUSE_MS = 500L
         const val RELATED_PER_TERM = 3
@@ -146,8 +147,10 @@ class SearchViewModel(application: Application) : AndroidViewModel(application) 
             if (!wantsAnswer(state)) return@transformLatest
             if (!settings.prefs.first().aiAnswers) return@transformLatest
             nano.prepare()
-            delay(AI_PAUSE_MS)
-            emitAll(answer(state.query.trim(), emptyList()))
+            // A question or request is worth answering at once; for other words, wait until typing really stops.
+            val query = state.query.trim()
+            delay(if (QueryKinds.isConversational(query) || QueryKinds.isCommand(query)) AI_PAUSE_MS else AI_IDLE_PAUSE_MS)
+            emitAll(answer(query, emptyList(), typing = true))
         }
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
@@ -161,6 +164,8 @@ class SearchViewModel(application: Application) : AndroidViewModel(application) 
         history: List<Pair<String, String>>,
         /** Messages the previous answer of the conversation was based on. */
         carried: List<Message> = emptyList(),
+        /** While typing a request Nano did not understand gets no second run as a question; Enter gives it one. */
+        typing: Boolean = false,
     ): Flow<AiAnswer?> = flow {
         emit(AiAnswer(query, "", done = false))
         if (!nano.awaitReady()) {
@@ -192,7 +197,7 @@ class SearchViewModel(application: Application) : AndroidViewModel(application) 
         var action: SmartAction? = null
         var error: String? = null
         try {
-            nano.reply(query, sources.map { it.text }, command, history, overview = overview != null).collect { reply ->
+            nano.reply(query, sources.map { it.text }, command, history, overview = overview != null, answerUnknownCommands = !typing).collect { reply ->
                 when (reply) {
                     is NanoReply.Text -> {
                         last = reply.text
@@ -263,7 +268,10 @@ class SearchViewModel(application: Application) : AndroidViewModel(application) 
         if (state.answer != null || state.action != null) return false
         val top = state.results.top?.item ?: return true
         val named = top.kind == SourceKind.App || top.kind == SourceKind.Contact || top.kind == SourceKind.Setting
-        return !(named && QueryKinds.isExactName(query, top.title))
+        if (named && QueryKinds.isExactName(query, top.title)) return false
+        // The start of a name being typed ("spot" for Spotify) is a search, not a question.
+        if (named && ' ' !in query && top.title.startsWith(query, ignoreCase = true) && !QueryKinds.isConversational(query)) return false
+        return true
     }
 
     /**

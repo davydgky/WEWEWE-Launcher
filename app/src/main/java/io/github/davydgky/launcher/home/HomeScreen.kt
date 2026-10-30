@@ -63,8 +63,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
@@ -93,6 +95,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -437,6 +440,17 @@ private fun WorkspacePage(
     }
 }
 
+/** What a screen reader says for an app: its name, whether it is paused, and unread notifications. */
+@Composable
+private fun appDescription(app: AppTarget, unread: Int): String {
+    val parts = listOfNotNull(
+        app.label,
+        stringResource(R.string.work_paused).takeIf { app.paused },
+        if (unread > 0) pluralStringResource(R.plurals.a11y_notifications, unread, unread) else null,
+    )
+    return parts.joinToString(", ")
+}
+
 /** An app icon with label; tap opens, long press shows the menu, long press and move drags it. */
 @Composable
 private fun HomeAppIcon(app: AppTarget, source: DragSource, controller: HomeController, showLabel: Boolean) {
@@ -445,6 +459,8 @@ private fun HomeAppIcon(app: AppTarget, source: DragSource, controller: HomeCont
     var size by remember { mutableStateOf(IntSize.Zero) }
     val haptics = LocalHapticFeedback.current
     val iconSize = LocalIconSize.current
+    val unread = notificationCount(app)
+    val description = appDescription(app, unread)
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
         Column(
             Modifier
@@ -453,6 +469,7 @@ private fun HomeAppIcon(app: AppTarget, source: DragSource, controller: HomeCont
                 .homeItemGestures(
                     key = source,
                     callbacks = HomeItemGestureCallbacks(
+                        description = description,
                         onTap = { controller.actions.launchApp(app, bounds.rect) },
                         onLongPress = {
                             haptics.performHapticFeedback(HapticFeedbackType.LongPress)
@@ -473,7 +490,7 @@ private fun HomeAppIcon(app: AppTarget, source: DragSource, controller: HomeCont
         ) {
             Box {
                 AppIconImage(app, iconSize, Modifier.onGloballyPositioned(bounds::update))
-                if (notificationCount(app) > 0) NotificationDot(10.dp, Modifier.align(Alignment.TopEnd))
+                if (unread > 0) NotificationDot(10.dp, Modifier.align(Alignment.TopEnd))
             }
             if (showLabel) {
                 Spacer(Modifier.height(6.dp))
@@ -523,6 +540,8 @@ private fun FolderCell(folder: FolderItem, apps: Map<String, AppTarget>, control
             .homeItemGestures(
                 key = folder.id,
                 callbacks = HomeItemGestureCallbacks(
+                    // A tile's icons are read one by one; a classic folder is one element.
+                    description = if (folder.style.isTile) null else stringResource(R.string.a11y_folder, folder.name, folder.apps.size),
                     // Tiles: the icons inside take taps themselves; classic folders open on a tap.
                     onTap = if (folder.style.isTile) null else open,
                     onLongPress = {
@@ -763,13 +782,16 @@ private fun WidgetCell(item: WidgetItem, workspace: Workspace, cellW: Dp, cellH:
             .padding(CELL_PADDING)
             .clip(RoundedCornerShape(22.dp)),
     ) {
-        if (info == null) {
+        if (info == null || app.crashGuard.safeMode) {
+            // In safe mode a widget, which runs other apps' code, may be what crashed: shown as a placeholder.
+            val text = if (info == null) R.string.widget_unavailable else R.string.widget_safe_mode
             Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.3f)), contentAlignment = Alignment.Center) {
-                Text(stringResource(R.string.widget_unavailable), color = Color.White, textAlign = TextAlign.Center)
+                Text(stringResource(text), color = Color.White, textAlign = TextAlign.Center)
             }
         } else {
+            DisposableEffect(item.id) { onDispose { controller.widgetViews.remove(item.id) } }
             AndroidView(
-                factory = { ctx -> app.widgets.createView(ctx, item.widgetId, info) },
+                factory = { ctx -> app.widgets.createView(ctx, item.widgetId, info).also { controller.widgetViews[item.id] = it } },
                 update = { view ->
                     val sizeTag = widthDp to heightDp
                     if (view.tag != sizeTag) {
@@ -1087,6 +1109,7 @@ private fun DockSuggestion(app: AppTarget, workspace: Workspace, controller: Hom
             .homeItemGestures(
                 key = "suggestion-${app.key}",
                 callbacks = HomeItemGestureCallbacks(
+                    description = stringResource(R.string.a11y_suggested, app.label),
                     onTap = { controller.actions.launchApp(app, bounds.rect) },
                     onLongPress = {
                         haptics.performHapticFeedback(HapticFeedbackType.LongPress)
@@ -1311,8 +1334,11 @@ private fun AppMenuExtras(app: AppTarget, controller: HomeController, onDismiss:
 /** How many notifications [app] has right now (0 without notification access). */
 @Composable
 private fun notificationCount(app: AppTarget): Int {
-    val byApp by LocalContext.current.launcherApp.notifications.byApp.collectAsStateWithLifecycle()
-    return byApp[Notifications.keyOf(app.packageName, app.user)]?.size ?: 0
+    val byApp = LocalContext.current.launcherApp.notifications.byApp.collectAsStateWithLifecycle()
+    // Only the icons whose count changed recompose when a notification comes in, not all of them.
+    val key = Notifications.keyOf(app.packageName, app.user)
+    val count by remember(key) { derivedStateOf { byApp.value[key]?.size ?: 0 } }
+    return count
 }
 
 /** The dot of an app with notifications, as on Pixel phones. */
@@ -1362,6 +1388,7 @@ private fun ShortcutCell(item: ShortcutItem, target: ShortcutTarget?, controller
                 .homeItemGestures(
                     key = item.id,
                     callbacks = HomeItemGestureCallbacks(
+                        description = label,
                         onTap = {
                             if (target != null) controller.actions.launchShortcut(target, bounds.rect)
                             else Toast.makeText(context, R.string.shortcut_unavailable, Toast.LENGTH_SHORT).show()

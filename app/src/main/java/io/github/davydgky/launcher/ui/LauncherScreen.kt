@@ -151,7 +151,8 @@ fun LauncherScreen(
         Box(
             Modifier
                 .fillMaxSize()
-                .searchGesture(state, distancePx, topInset, swipeUpPx, onSwipeUp = controller::showLibrary) {
+                // The root fills the window, so its positions are window coordinates.
+                .searchGesture(state, distancePx, topInset, swipeUpPx, onSwipeUp = controller::showLibrary, scrollsAt = controller::widgetScrollsAt) {
                     !controller.isEditing && !controller.onLibrary
                 }
                 .homeDragTracker(controller),

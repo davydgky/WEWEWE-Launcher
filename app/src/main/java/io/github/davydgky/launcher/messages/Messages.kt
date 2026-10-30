@@ -233,7 +233,7 @@ class Messages(private val context: Context, settings: LauncherSettings, scope: 
         const val KEEP_DAYS = 90L
         private const val DAY_MS = 24 * 60 * 60 * 1000L
         private const val CACHE_MS = 60_000L
-        private const val MAX_SMS = 20_000
+        private const val MAX_SMS = 5_000
 
         /** Progress bars, music, calls in progress and system status are not messages. */
         private val SKIPPED_CATEGORIES = setOf(

@@ -2,6 +2,8 @@ package io.github.davydgky.launcher.home
 
 import android.appwidget.AppWidgetProviderInfo
 import android.util.Log
+import android.view.View
+import android.view.ViewGroup
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
@@ -89,6 +91,16 @@ class HomeController(
 
     /** A widget resized in edit mode, while its handle is held; the others make room for it live. */
     var resizing by mutableStateOf<WidgetResize?>(null)
+
+    /** The views of the widgets on screen, so a swipe can tell whether it scrolls one of them. */
+    val widgetViews = HashMap<Long, View>()
+
+    /**
+     * True if a widget under [position] (window coordinates) can scroll in [direction] (negative: back
+     * towards its top): then a swipe there is the widget's, not the search's.
+     */
+    fun widgetScrollsAt(position: Offset, direction: Int): Boolean =
+        widgetViews.values.any { it.canScrollAt(position.x, position.y, direction) }
 
     /** The element dropped last, until it has started gliding into its place. */
     var drop by mutableStateOf<DroppedItem?>(null)
@@ -401,4 +413,15 @@ class HomeController(
         const val REORDER_DELAY_MS = 250L
         const val REST_SLOP_DP = 10f
     }
+}
+
+/** True if this view, or one of its children under [x], [y] (window coordinates), can scroll in [direction]. */
+private fun View.canScrollAt(x: Float, y: Float, direction: Int): Boolean {
+    if (!isShown) return false
+    val location = IntArray(2)
+    getLocationInWindow(location)
+    if (x < location[0] || y < location[1] || x >= location[0] + width || y >= location[1] + height) return false
+    if (canScrollVertically(direction)) return true
+    if (this is ViewGroup) for (i in 0 until childCount) if (getChildAt(i).canScrollAt(x, y, direction)) return true
+    return false
 }

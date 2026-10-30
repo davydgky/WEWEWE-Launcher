@@ -1,6 +1,7 @@
 package io.github.davydgky.launcher.home
 
 import android.content.Context
+import android.util.AtomicFile
 import android.util.Log
 import io.github.davydgky.launcher.apps.AppsRepository
 import io.github.davydgky.launcher.apps.DefaultApps
@@ -11,6 +12,7 @@ import io.github.davydgky.launcher.search.AppTarget
 import io.github.davydgky.launcher.usage.UsageHistory
 import io.github.davydgky.launcher.widgets.WidgetHost
 import java.io.File
+import java.io.IOException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -36,7 +38,9 @@ class WorkspaceRepository(
     private val widgets: WidgetHost,
     private val scope: CoroutineScope,
 ) {
-    private val file = File(context.filesDir, "workspace.json")
+    private val file = AtomicFile(File(context.filesDir, "workspace.json"))
+    /** The arrangement as it was at the last start that read it fine. */
+    private val previous = File(context.filesDir, "workspace.prev.json")
     private val state = MutableStateFlow<Workspace?>(null)
     /** Null until loaded. */
     val workspace: StateFlow<Workspace?> = state.asStateFlow()
@@ -47,7 +51,7 @@ class WorkspaceRepository(
         if (started) return
         started = true
         scope.launch {
-            state.value = withContext(Dispatchers.IO) { runCatching { WorkspaceCodec.decode(file.readText()) }.getOrNull() }
+            state.value = withContext(Dispatchers.IO) { load() }
             pinned = state.value?.pinnedShortcuts().orEmpty()
             combine(apps.apps, settings.prefs) { list, prefs -> list to prefs }.collect { (list, prefs) ->
                 val unavailable = apps.unavailableProfiles.value
@@ -76,6 +80,25 @@ class WorkspaceRepository(
                 }
             }
         }
+    }
+
+    /**
+     * The saved arrangement. A file that cannot be read is kept aside, never overwritten, and the one
+     * from the last good start is used instead; only without both is a new arrangement made.
+     */
+    private fun load(): Workspace? {
+        val main = file.baseFile
+        if (!main.exists() && !previous.exists()) return null
+        val text = runCatching { file.readFully().decodeToString() }.getOrNull()
+        val ws = text?.let { runCatching { WorkspaceCodec.decode(it) }.onFailure { e -> Log.e(TAG, "Arrangement unreadable", e) }.getOrNull() }
+        if (ws != null) {
+            runCatching { previous.writeText(text) }
+            return ws
+        }
+        if (main.exists()) main.renameTo(File(context.filesDir, "workspace.broken-${System.currentTimeMillis()}.json"))
+        return runCatching { WorkspaceCodec.decode(previous.readText()) }
+            .onFailure { Log.e(TAG, "No earlier arrangement either", it) }
+            .getOrNull()
     }
 
     /** The grid the user chose, or 5×6 on phones and 6×5 on tablets. */
@@ -173,11 +196,24 @@ class WorkspaceRepository(
         saveJob = scope.launch {
             delay(500)
             val text = WorkspaceCodec.encode(state.value ?: return@launch)
-            withContext(Dispatchers.IO) {
-                val tmp = File(file.parentFile, file.name + ".tmp")
-                tmp.writeText(text)
-                tmp.renameTo(file)
-            }
+            withContext(Dispatchers.IO) { write(text) }
+        }
+    }
+
+    /** Written to a new file, synced and only then swapped in: a crash or full disk leaves the old one. */
+    private fun write(text: String) {
+        val out = try {
+            file.startWrite()
+        } catch (e: IOException) {
+            Log.e(TAG, "Cannot save the arrangement", e)
+            return
+        }
+        try {
+            out.write(text.toByteArray())
+            file.finishWrite(out)
+        } catch (e: IOException) {
+            Log.e(TAG, "Cannot save the arrangement", e)
+            file.failWrite(out)
         }
     }
 

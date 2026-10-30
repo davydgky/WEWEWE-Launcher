@@ -1,6 +1,7 @@
 package io.github.davydgky.launcher.ai
 
 import android.content.Context
+import android.util.AtomicFile
 import android.util.Log
 import io.github.davydgky.launcher.apps.AppsRepository
 import java.io.File
@@ -36,8 +37,10 @@ class AppKnowledge(
     /** By package name. */
     val known: StateFlow<Map<String, Info>> = state.asStateFlow()
 
-    private var loaded = false
+    @Volatile private var loaded = false
     private var worker: Job? = null
+    /** Apps Gemini Nano had nothing useful about in this run: not asked again until the next start. */
+    private val unanswered = HashSet<String>()
 
     fun start() {
         scope.launch {
@@ -59,9 +62,10 @@ class AppKnowledge(
                 }
                 val missing = apps.apps.value
                     .distinctBy { it.packageName }
-                    .firstOrNull { it.packageName !in state.value && it.packageName != context.packageName }
+                    .firstOrNull { it.packageName !in state.value && it.packageName !in unanswered && it.packageName != context.packageName }
                     ?: break
-                nano.prepare()
+                // Describing apps is no reason to download the model: that is up to the search setting.
+                nano.prepare(download = false)
                 if (nano.availability.value == NanoAnswers.Availability.Unsupported) break
                 val reply = if (nano.isReady) {
                     nano.ask(INSTRUCTION, "${missing.label} (${missing.packageName})", maxTokens = 90, background = true)
@@ -73,7 +77,14 @@ class AppKnowledge(
                     continue
                 }
                 misses = 0
-                state.value = state.value + (missing.packageName to parse(reply))
+                val info = parse(reply)
+                if (info.category == null && info.keywords.isEmpty()) {
+                    // An empty description would be kept for good and never improve.
+                    unanswered += missing.packageName
+                    delay(BETWEEN_MS)
+                    continue
+                }
+                state.value = state.value + (missing.packageName to info)
                 withContext(Dispatchers.IO) { runCatching { write(state.value) }.onFailure { Log.w(TAG, "Cannot save", it) } }
                 delay(BETWEEN_MS)
             }
@@ -110,9 +121,15 @@ class AppKnowledge(
         map.forEach { (pkg, info) ->
             json.put(pkg, JSONObject().put("category", info.category.orEmpty()).put("keywords", JSONArray(info.keywords)))
         }
-        val tmp = File(file.parentFile, file.name + ".tmp")
-        tmp.writeText(json.toString())
-        tmp.renameTo(file)
+        val atomic = AtomicFile(file)
+        val out = atomic.startWrite()
+        try {
+            out.write(json.toString().toByteArray())
+            atomic.finishWrite(out)
+        } catch (e: Exception) {
+            atomic.failWrite(out)
+            throw e
+        }
     }
 
     companion object {

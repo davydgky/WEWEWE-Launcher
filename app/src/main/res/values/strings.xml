@@ -279,4 +279,16 @@
     <string name="private_space">Private space</string>
     <string name="work_paused">Work apps paused</string>
     <string name="cannot_unpause">Work apps could not be turned on</string>
+    <plurals name="a11y_notifications">
+        <item quantity="one">%d notification</item>
+        <item quantity="other">%d notifications</item>
+    </plurals>
+    <string name="a11y_folder">Folder %1$s, %2$d apps</string>
+    <string name="a11y_suggested">%s, suggested</string>
+    <string name="widget_safe_mode">Safe mode: widgets are paused after repeated crashes</string>
+    <string name="safe_mode_notice">WEWEWE crashed several times and started in safe mode. Widgets are paused until the next start.</string>
+    <string name="crash_reports">Crash reports</string>
+    <string name="crash_reports_summary">%d saved on this device. Tap to share the latest.</string>
+    <string name="crash_reports_none">None</string>
+    <string name="crash_reports_clear">Delete</string>
 </resources>

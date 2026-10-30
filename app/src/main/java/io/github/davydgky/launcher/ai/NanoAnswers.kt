@@ -63,7 +63,11 @@ class NanoAnswers(private val scope: CoroutineScope) {
      * Checks once whether Gemini Nano is there and fetches it if the system offers it for download
      * (AICore keeps one copy for all apps, so on a Pixel it is usually present already).
      */
-    fun prepare() {
+    /**
+     * Checks whether Gemini Nano can run, and if it still has to be downloaded starts that when
+     * [download] (only for what the user turned on: answers in the search).
+     */
+    fun prepare(download: Boolean = true) {
         if (state.value == Availability.Ready || state.value == Availability.Unsupported || preparing?.isActive == true) return
         // After a failed check, not again on every keystroke.
         if (SystemClock.elapsedRealtime() - lastFailure < RETRY_MS) return
@@ -73,13 +77,17 @@ class NanoAnswers(private val scope: CoroutineScope) {
                 when (client.checkStatus()) {
                     FeatureStatus.AVAILABLE -> state.value = Availability.Ready
                     FeatureStatus.UNAVAILABLE -> state.value = Availability.Unsupported
-                    else -> {
+                    else -> if (!download) {
+                        state.value = Availability.Unknown
+                    } else {
                         state.value = Availability.Downloading
                         client.download().collect { status ->
                             when (status) {
                                 is DownloadStatus.DownloadCompleted -> state.value = Availability.Ready
                                 is DownloadStatus.DownloadFailed -> {
                                     Log.w(TAG, "Gemini Nano download failed", status.e)
+                                    lastError = status.e.message
+                                    lastFailure = SystemClock.elapsedRealtime()
                                     state.value = Availability.Unknown
                                 }
                                 else -> Unit
@@ -133,6 +141,8 @@ class NanoAnswers(private val scope: CoroutineScope) {
         history: List<Pair<String, String>> = emptyList(),
         /** [messages] are all recent ones, to be summed up ("fasse meine Nachrichten zusammen"). */
         overview: Boolean = false,
+        /** A command Nano did not understand is answered as a question instead (a second run). */
+        answerUnknownCommands: Boolean = true,
     ): Flow<NanoReply> = flow {
         val client = model ?: return@flow
         if (!isReady) return@flow
@@ -148,6 +158,7 @@ class NanoAnswers(private val scope: CoroutineScope) {
                     emit(NanoReply.Command(action))
                     return@withLock
                 }
+                if (!answerUnknownCommands) return@withLock
             }
             val instruction = answerInstruction() + messageContext(messages, overview) + if (history.isEmpty()) "" else "\n\n" + FOLLOW_UP_INSTRUCTION
             val request = generateContentRequest(SystemInstruction(instruction), TextPart(input)) {

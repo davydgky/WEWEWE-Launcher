@@ -12,6 +12,13 @@ import androidx.compose.ui.input.pointer.PointerId
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.onLongClick
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
+import kotlin.math.abs
 
 /** Callbacks of [homeItemGestures]; positions are in root coordinates. */
 class HomeItemGestureCallbacks(
@@ -31,7 +38,12 @@ class HomeItemGestureCallbacks(
     val editing: () -> Boolean = { false },
     /** A tap in edit mode (e.g. a widget's size menu); apps do not open then. */
     val onEditTap: (() -> Unit)? = null,
+    /** What a screen reader says for the element (its name; with unread notifications, those too). */
+    val description: String? = null,
 )
+
+/** In edit mode, a sideways move faster than this after touching down is a page flick, not a drag. */
+private const val EDIT_FLICK_MS = 160L
 
 private const val LONG_PRESS = 0
 private const val TAP = 1
@@ -52,6 +64,15 @@ fun Modifier.homeItemGestures(key: Any, callbacks: HomeItemGestureCallbacks): Mo
     // The gesture outlives recompositions; always call the latest callbacks.
     val current by rememberUpdatedState(callbacks)
     this
+        // The gestures are custom, so TalkBack and switch access need them spelled out.
+        // Widgets have no description: their own content stays readable.
+        .semantics(mergeDescendants = callbacks.description != null) {
+            callbacks.description?.let { contentDescription = it }
+            role = Role.Button
+            val tap = if (callbacks.editing()) callbacks.onEditTap else callbacks.onTap
+            if (tap != null) onClick { tap(); true }
+            onLongClick { current.onLongPress(); true }
+        }
         .onGloballyPositioned { holder.coordinates = it }
         .pointerInput(key) {
             val timeout = viewConfiguration.longPressTimeoutMillis
@@ -62,21 +83,27 @@ fun Modifier.homeItemGestures(key: Any, callbacks: HomeItemGestureCallbacks): Mo
                     current.onDown()
                     if (current.editing()) {
                         try {
-                            down.consume()
                             var dragging = false
                             while (true) {
                                 val event = awaitPointerEvent(PointerEventPass.Initial)
                                 val change = event.changes.firstOrNull { it.id == down.id } ?: break
-                                change.consume()
                                 if (!change.pressed) {
+                                    change.consume()
                                     if (!dragging) current.onEditTap?.invoke()
                                     break
                                 }
                                 val coordinates = holder.coordinates ?: continue
-                                if (!dragging && (change.position - down.position).getDistance() > slop) {
+                                val moved = change.position - down.position
+                                if (!dragging && moved.getDistance() > slop) {
+                                    // A quick sideways flick turns the page, as on iOS; a finger that rested
+                                    // first, or moves up or down, moves the element. Until then nothing is
+                                    // consumed, so the pager can still take the flick.
+                                    if (change.uptimeMillis - down.uptimeMillis < EDIT_FLICK_MS && abs(moved.x) > abs(moved.y)) break
                                     dragging = true
                                     current.onDragStart(coordinates.localToRoot(change.position), down.position, down.id)
                                 }
+                                // Children (a widget) get nothing once the element moves.
+                                if (dragging) change.consume()
                             }
                         } finally {
                             current.onRelease()

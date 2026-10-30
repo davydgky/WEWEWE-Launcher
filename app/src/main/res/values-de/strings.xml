@@ -278,4 +278,16 @@
     <string name="private_space">Privater Bereich</string>
     <string name="work_paused">Arbeit pausiert</string>
     <string name="cannot_unpause">Arbeits-Apps konnten nicht aktiviert werden</string>
+    <plurals name="a11y_notifications">
+        <item quantity="one">%d Benachrichtigung</item>
+        <item quantity="other">%d Benachrichtigungen</item>
+    </plurals>
+    <string name="a11y_folder">Ordner %1$s, %2$d Apps</string>
+    <string name="a11y_suggested">%s, Vorschlag</string>
+    <string name="widget_safe_mode">Abgesicherter Modus: Widgets pausieren nach mehreren Abstürzen</string>
+    <string name="safe_mode_notice">WEWEWE ist mehrmals abgestürzt und im abgesicherten Modus gestartet. Widgets pausieren bis zum nächsten Start.</string>
+    <string name="crash_reports">Absturzberichte</string>
+    <string name="crash_reports_summary">%d auf diesem Gerät gespeichert. Tippen, um den neuesten zu teilen.</string>
+    <string name="crash_reports_none">Keine</string>
+    <string name="crash_reports_clear">Löschen</string>
 </resources>

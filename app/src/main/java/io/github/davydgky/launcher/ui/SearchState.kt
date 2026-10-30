@@ -156,6 +156,8 @@ fun Modifier.searchGesture(
     topInsetPx: Float,
     swipeUpPx: Float,
     onSwipeUp: () -> Unit,
+    /** True if what is under the finger (window coordinates) scrolls in that direction (negative: down). */
+    scrollsAt: (Offset, Int) -> Boolean = { _, _ -> false },
     enabled: () -> Boolean,
 ): Modifier = pointerInput(state, distancePx, topInsetPx, swipeUpPx) {
     val config: ViewConfiguration = viewConfiguration
@@ -193,7 +195,10 @@ fun Modifier.searchGesture(
                     val slop = config.touchSlop
                     if (abs(total.x) > slop && abs(total.x) > abs(total.y)) break // a page swipe
                     if (total.y < -slop) upward = true
+                    if (upward && scrollsAt(down.position, 1)) break
                     if (!upward && total.y > slop && total.y > abs(total.x)) {
+                        // A list in a widget that is not at its top scrolls back first.
+                        if (scrollsAt(down.position, -1)) break
                         dragging = true
                         state.onDragStart(change.uptimeMillis)
                     }

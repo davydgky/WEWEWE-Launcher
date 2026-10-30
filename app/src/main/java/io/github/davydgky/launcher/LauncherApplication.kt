@@ -6,6 +6,7 @@ import androidx.datastore.preferences.preferencesDataStore
 import io.github.davydgky.launcher.ai.AppKnowledge
 import io.github.davydgky.launcher.ai.NanoAnswers
 import io.github.davydgky.launcher.apps.AppsRepository
+import io.github.davydgky.launcher.crash.CrashGuard
 import io.github.davydgky.launcher.data.LaunchLog
 import io.github.davydgky.launcher.data.LauncherSettings
 import io.github.davydgky.launcher.home.WorkspaceRepository
@@ -52,9 +53,11 @@ class LauncherApplication : Application() {
     val playStore: PlayStore by lazy { PlayStore(this, nano) }
     val messages: Messages by lazy { Messages(this, settings, appScope) }
     val perf = PerfStats()
+    val crashGuard: CrashGuard by lazy { CrashGuard(filesDir) }
 
     override fun onCreate() {
         super.onCreate()
+        crashGuard.install()
         // Start indexing right away, before the first frame needs it.
         appKnowledge.start()
         search.start()

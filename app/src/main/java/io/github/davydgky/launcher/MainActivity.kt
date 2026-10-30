@@ -87,7 +87,10 @@ class MainActivity : ComponentActivity() {
         launcherApp.updater.onAppStarted()
         launcherApp.updater.onAppResumed()
         // Gemini Nano describes new apps for the search, only while the home screen is in use.
-        lifecycleScope.launch { if (launcherApp.settings.prefs.first().aiAnswers) launcherApp.appKnowledge.resume() }
+        // In safe mode after a crash loop, no background work that is not needed.
+        lifecycleScope.launch {
+            if (launcherApp.settings.prefs.first().aiAnswers && !launcherApp.crashGuard.safeMode) launcherApp.appKnowledge.resume()
+        }
     }
 
     override fun onPause() {

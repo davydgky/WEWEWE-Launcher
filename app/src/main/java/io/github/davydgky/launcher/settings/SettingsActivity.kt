@@ -461,6 +461,44 @@ private fun UpdateGroup(
             Spacer(Modifier.width(12.dp))
             Switch(checked = autoUpdate, onCheckedChange = onAutoUpdate)
         }
+        HorizontalDivider()
+        CrashReportsRow()
+    }
+}
+
+/** Crash reports kept on the device: shared only when the user taps them. */
+@Composable
+private fun CrashReportsRow() {
+    val context = LocalContext.current
+    val guard = context.launcherApp.crashGuard
+    var reports by remember { mutableStateOf(guard.reports()) }
+    val share = {
+        reports.firstOrNull()?.let { latest ->
+            val send = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, latest.readText())
+            context.startActivity(Intent.createChooser(send, context.getString(R.string.crash_reports)))
+        }
+    }
+    Row(
+        Modifier.fillMaxWidth().clickable(enabled = reports.isNotEmpty(), onClick = { share() }).padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(stringResource(R.string.crash_reports), style = MaterialTheme.typography.titleMedium)
+            Text(
+                if (reports.isEmpty()) stringResource(R.string.crash_reports_none) else stringResource(R.string.crash_reports_summary, reports.size),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            if (guard.safeMode) {
+                Text(stringResource(R.string.safe_mode_notice), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
+            }
+        }
+        if (reports.isNotEmpty()) {
+            TextButton(onClick = {
+                guard.clear()
+                reports = emptyList()
+            }) { Text(stringResource(R.string.crash_reports_clear)) }
+        }
     }
 }
 
@@ -529,7 +567,7 @@ private fun SavedMessagesRow(enabled: Boolean, onToggle: (Boolean) -> Unit) {
 @Composable
 private fun AiAnswersRow(enabled: Boolean, onToggle: (Boolean) -> Unit) {
     val nano = LocalContext.current.launcherApp.nano
-    LaunchedEffect(Unit) { nano.prepare() }
+    LaunchedEffect(enabled) { nano.prepare(download = enabled) }
     val availability by nano.availability.collectAsStateWithLifecycle()
     val status = when (availability) {
         NanoAnswers.Availability.Ready -> stringResource(R.string.ai_status_ready)

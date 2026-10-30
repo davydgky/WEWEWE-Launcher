@@ -11,6 +11,8 @@ import io.github.davydgky.launcher.messages.Message
 import io.github.davydgky.launcher.messages.Messages
 import io.github.davydgky.launcher.notifications.Notifications
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 
@@ -29,13 +31,16 @@ class MessagesSource(
 
     override suspend fun load(): List<SearchItem> = messages.saved().map { it.toItem(context) }
 
+    @OptIn(FlowPreview::class)
     override fun observe(onChange: () -> Unit): AutoCloseable {
-        val job = scope.launch { messages.version.drop(1).collect { onChange() } }
+        // A busy chat brings a message every few seconds: the index is rebuilt once they pause.
+        val job = scope.launch { messages.version.drop(1).debounce(REBUILD_PAUSE_MS).collect { onChange() } }
         return AutoCloseable { job.cancel() }
     }
 
     companion object {
         const val ID = "messages"
+        private const val REBUILD_PAUSE_MS = 8_000L
     }
 }
 
