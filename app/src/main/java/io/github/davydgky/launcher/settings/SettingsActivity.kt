@@ -568,10 +568,11 @@ private fun CrashReportsRow() {
     val context = LocalContext.current
     val guard = context.launcherApp.crashGuard
     var reports by remember { mutableStateOf(guard.reports()) }
+    val chooserTitle = stringResource(R.string.crash_reports)
     val share = {
         reports.firstOrNull()?.let { latest ->
             val send = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, latest.readText())
-            context.startActivity(Intent.createChooser(send, context.getString(R.string.crash_reports)))
+            context.startActivity(Intent.createChooser(send, chooserTitle))
         }
     }
     Row(
