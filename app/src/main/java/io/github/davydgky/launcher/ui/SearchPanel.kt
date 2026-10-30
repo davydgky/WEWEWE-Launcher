@@ -563,10 +563,6 @@ private fun AiAnswerRow(
     showTitle: Boolean = true,
 ) {
     val colors = LocalGlassColors.current
-    // In a conversation every answer is shown in full; in the search a long one is shortened until opened.
-    val conversation = onContinue == null
-    var expanded by remember(answer.query) { mutableStateOf(false) }
-    var overflowing by remember(answer.query) { mutableStateOf(false) }
     Column(
         Modifier
             .fillMaxWidth()
@@ -610,21 +606,8 @@ private fun AiAnswerRow(
                 )
             }
         } else {
-            Text(
-                answer.text,
-                color = colors.content,
-                style = MaterialTheme.typography.bodyLarge,
-                maxLines = if (expanded || conversation) Int.MAX_VALUE else AI_LINES,
-                overflow = TextOverflow.Ellipsis,
-                // Whether the text really is cut off decides the button, not its length.
-                onTextLayout = { layout -> if (!expanded) overflowing = layout.hasVisualOverflow },
-            )
-            // While it is still being written, already offer to read the rest.
-            if (!conversation && (overflowing || expanded)) {
-                TextButton(onClick = { expanded = !expanded }, contentPadding = PaddingValues(horizontal = 0.dp)) {
-                    Text(stringResource(if (expanded) R.string.show_less else R.string.show_more))
-                }
-            }
+            // Always the whole answer, as the user prefers; the results below move down as it grows.
+            Text(answer.text, color = colors.content, style = MaterialTheme.typography.bodyLarge)
             if (answer.done) {
                 Spacer(Modifier.height(6.dp))
                 Text(stringResource(R.string.ai_footnote), color = colors.secondaryContent, style = MaterialTheme.typography.bodySmall)
@@ -819,7 +802,6 @@ private fun SmartActionRow(action: SmartAction, onRun: () -> Unit) {
     }
 }
 
-private const val AI_LINES = 6
 
 /** "Start a timer for 5 min" / "Set an alarm for 7:30", from what was typed. */
 @Composable
