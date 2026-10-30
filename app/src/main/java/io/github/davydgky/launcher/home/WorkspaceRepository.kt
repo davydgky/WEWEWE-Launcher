@@ -3,6 +3,7 @@ package io.github.davydgky.launcher.home
 import android.content.Context
 import android.util.AtomicFile
 import android.util.Log
+import io.github.davydgky.launcher.R
 import io.github.davydgky.launcher.apps.AppsRepository
 import io.github.davydgky.launcher.apps.DefaultApps
 import io.github.davydgky.launcher.core.Cell
@@ -21,6 +22,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -53,7 +55,11 @@ class WorkspaceRepository(
         scope.launch {
             state.value = withContext(Dispatchers.IO) { load() }
             pinned = state.value?.pinnedShortcuts().orEmpty()
-            combine(apps.apps, settings.prefs) { list, prefs -> list to prefs }.collect { (list, prefs) ->
+            // Only the settings that shape the home screen: a new recent search is no reason to sync.
+            val homePrefs = settings.prefs.distinctUntilChanged { a, b ->
+                a.gridColumns == b.gridColumns && a.gridRows == b.gridRows && a.addNewAppsToHome == b.addNewAppsToHome
+            }
+            combine(apps.apps, homePrefs) { list, prefs -> list to prefs }.collect { (list, prefs) ->
                 val unavailable = apps.unavailableProfiles.value
                 if (list.isEmpty()) return@collect
                 val keys = list.map { it.key }
@@ -154,16 +160,57 @@ class WorkspaceRepository(
         pinned = now
     }
 
+    /** The last removal, for a few seconds: it can be taken back. */
+    class Undo internal constructor(val message: Int, internal val before: Workspace, internal val widgetIds: List<Int>)
+
+    private val undoState = MutableStateFlow<Undo?>(null)
+    val undo: StateFlow<Undo?> = undoState.asStateFlow()
+    private var undoJob: Job? = null
+
+    /**
+     * Applies a removal that can be taken back. Removed widgets keep their ids (and with them their
+     * content and settings) until it can no longer be undone.
+     */
+    private fun removing(message: Int, widgetIds: List<Int>, change: (Workspace) -> Workspace) {
+        val before = state.value ?: return
+        update(change)
+        if (state.value == before) return
+        expireUndo()
+        undoState.value = Undo(message, before, widgetIds)
+        undoJob = scope.launch {
+            delay(UNDO_MS)
+            expireUndo()
+        }
+    }
+
+    private fun expireUndo() {
+        undoJob?.cancel()
+        undoState.value?.widgetIds?.forEach(widgets::deleteId)
+        undoState.value = null
+    }
+
+    fun undo() {
+        val undo = undoState.value ?: return
+        undoJob?.cancel()
+        undoState.value = null
+        update { undo.before }
+    }
+
     fun move(id: Long, target: Cell) = update { it.move(id, target) }
     fun removeItem(id: Long) {
-        val item = state.value?.item(id)
-        if (item is WidgetItem) widgets.deleteId(item.widgetId)
-        update { it.remove(id) }
+        val item = state.value?.item(id) ?: return
+        val widgetIds = listOfNotNull((item as? WidgetItem)?.widgetId)
+        val message = when (item) {
+            is WidgetItem -> R.string.undo_widget_removed
+            is FolderItem -> R.string.undo_folder_removed
+            else -> R.string.undo_removed
+        }
+        removing(message, widgetIds) { it.remove(id) }
     }
-    fun removeApp(appKey: String) = update { it.removeApp(appKey) }
+    fun removeApp(appKey: String) = removing(R.string.undo_removed, emptyList()) { it.removeApp(appKey) }
     fun removePage(page: Int) {
-        state.value?.itemsOn(page)?.filterIsInstance<WidgetItem>()?.forEach { widgets.deleteId(it.widgetId) }
-        update { it.removePage(page) }
+        val widgetIds = state.value?.itemsOn(page)?.filterIsInstance<WidgetItem>()?.map { it.widgetId }.orEmpty()
+        removing(R.string.undo_page_removed, widgetIds) { it.removePage(page) }
     }
     fun addApp(appKey: String) = update { it.addApp(appKey) }
     fun addShortcut(shortcutKey: String, label: String, page: Int) {
@@ -176,7 +223,7 @@ class WorkspaceRepository(
     fun makeFolderFromDock(appKey: String, targetId: Long, name: String) = update { it.makeFolderWith(appKey, targetId, name) }
     fun addToFolder(appKey: String, folderId: Long) = update { it.addToFolder(appKey, folderId) }
     fun removeFromFolder(folderId: Long, appKey: String) = update { it.removeFromFolder(folderId, appKey) }
-    fun dissolveFolder(folderId: Long) = update { it.dissolveFolder(folderId) }
+    fun dissolveFolder(folderId: Long) = removing(R.string.undo_folder_dissolved, emptyList()) { it.dissolveFolder(folderId) }
     fun renameFolder(folderId: Long, name: String) = update { it.renameFolder(folderId, name) }
     fun setFolderStyle(folderId: Long, style: FolderStyle) = update { it.setFolderStyle(folderId, style) }
     fun setFolderPlayful(folderId: Long, playful: Boolean) = update { it.setFolderPlayful(folderId, playful) }
@@ -220,5 +267,6 @@ class WorkspaceRepository(
     private companion object {
         const val TAG = "WorkspaceRepository"
         const val PRIOR_WAIT_MS = 1_500L
+        const val UNDO_MS = 6_000L
     }
 }

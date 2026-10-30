@@ -9,10 +9,13 @@ import android.net.Uri
 import android.util.LruCache
 import android.util.Size
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.State
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.State
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.core.graphics.createBitmap
@@ -35,6 +38,18 @@ class IconCache(private val context: Context) {
     }
 
     fun cached(key: String): ImageBitmap? = cache.get(key)
+
+    /** Changes whenever icons were dropped, so the ones on screen are loaded again. */
+    var generation by mutableIntStateOf(0)
+        private set
+
+    /** An app was updated or changed its icon: its icons and shortcut icons are loaded again. */
+    fun evictPackage(packageName: String) {
+        val stale = cache.snapshot().keys.filter { "/$packageName/" in it }
+        if (stale.isEmpty()) return
+        stale.forEach(cache::remove)
+        generation++
+    }
 
     suspend fun preloadApps(apps: List<AppTarget>) = withContext(Dispatchers.IO) {
         apps.forEach { app -> if (cache.get(app.key) == null) loadApp(app) }
@@ -83,8 +98,9 @@ class IconCache(private val context: Context) {
  */
 @Composable
 fun rememberIcon(cache: IconCache, key: String, loader: () -> ImageBitmap?): State<ImageBitmap?> {
-    val state = remember(cache, key) { mutableStateOf(cache.cached(key)) }
-    LaunchedEffect(cache, key) {
+    val generation = cache.generation
+    val state = remember(cache, key, generation) { mutableStateOf(cache.cached(key)) }
+    LaunchedEffect(cache, key, generation) {
         if (state.value == null) state.value = cache.load(key, loader)
     }
     return state

@@ -291,4 +291,10 @@
     <string name="crash_reports_summary">%d saved on this device. Tap to share the latest.</string>
     <string name="crash_reports_none">None</string>
     <string name="crash_reports_clear">Delete</string>
+    <string name="undo">Undo</string>
+    <string name="undo_removed">Removed from the home screen</string>
+    <string name="undo_widget_removed">Widget removed</string>
+    <string name="undo_folder_removed">Folder removed</string>
+    <string name="undo_folder_dissolved">Folder ungrouped</string>
+    <string name="undo_page_removed">Page removed</string>
 </resources>

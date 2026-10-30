@@ -26,6 +26,7 @@ import java.io.File
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 
 private val Context.launcherDataStore by preferencesDataStore(name = "launcher")
 
@@ -58,6 +59,8 @@ class LauncherApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         crashGuard.install()
+        // An updated app may come with a new icon.
+        appScope.launch { apps.packageChanges.collect(icons::evictPackage) }
         // Start indexing right away, before the first frame needs it.
         appKnowledge.start()
         search.start()

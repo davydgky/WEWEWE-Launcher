@@ -8,6 +8,7 @@ import android.graphics.Rect
 import android.os.Bundle
 import android.util.SizeF
 import android.widget.Toast
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -19,6 +20,10 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -61,6 +66,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
@@ -97,6 +103,9 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -213,6 +222,7 @@ fun HomeScreen(
                 }
             }
             Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth()) {
+                UndoPill(controller.repository)
                 // The dots move down into the dock's place as it fades out.
                 Box(Modifier.graphicsLayer { translationY = libraryProgress() * barsHeight }) {
                     PageIndicator(homePages, pagerState, onEditTap = { controller.pagesOverviewOpen = true }.takeIf { controller.editMode })
@@ -260,6 +270,38 @@ private fun wiggleAngle(active: Boolean): State<Float> {
         animationSpec = infiniteRepeatable(tween(140, easing = LinearEasing), RepeatMode.Reverse),
         label = "wiggle",
     )
+}
+
+/** "Widget entfernt · Rückgängig" for a few seconds after something was taken off the home screen. */
+@Composable
+private fun UndoPill(repository: WorkspaceRepository) {
+    val undo by repository.undo.collectAsStateWithLifecycle()
+    // The last message stays while the pill fades out.
+    var shown by remember { mutableStateOf<WorkspaceRepository.Undo?>(null) }
+    if (undo != null) shown = undo
+    AnimatedVisibility(
+        visible = undo != null,
+        enter = fadeIn() + expandVertically(expandFrom = Alignment.Bottom),
+        exit = fadeOut() + shrinkVertically(shrinkTowards = Alignment.Bottom),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        val message = shown?.message ?: return@AnimatedVisibility
+        Box(Modifier.fillMaxWidth().padding(bottom = 8.dp), contentAlignment = Alignment.Center) {
+            Row(
+                Modifier
+                    .clip(RoundedCornerShape(50))
+                    .background(Color(0xE6202124))
+                    .semantics { liveRegion = LiveRegionMode.Polite }
+                    .padding(start = 16.dp, end = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(stringResource(message), color = Color.White, fontSize = 14.sp)
+                TextButton(onClick = repository::undo) {
+                    Text(stringResource(R.string.undo), color = Color(0xFF8AB4F8), fontWeight = FontWeight.SemiBold)
+                }
+            }
+        }
+    }
 }
 
 /** The grey minus of edit mode that takes an element off the home screen. */
