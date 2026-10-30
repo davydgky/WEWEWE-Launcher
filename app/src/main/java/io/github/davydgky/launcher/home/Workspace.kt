@@ -303,20 +303,32 @@ data class Workspace(
     /**
      * Brings the arrangement in line with the installed apps: uninstalled apps disappear from pages,
      * folders and dock, and so do shortcuts of packages no longer in [packages] (if known); newly
-     * installed apps are added to the first free cell if [addNew].
+     * installed apps are added to the first free cell if [addNew], except those [keepOffHome] rejects.
+     *
+     * Apps and shortcuts of the profiles in [unavailable] (a paused work profile, a locked private
+     * space) are missing from [installed] without being uninstalled: they keep their places, and they
+     * are not new when the profile comes back.
      */
-    fun sync(installed: List<String>, addNew: Boolean, packages: Set<String>? = null): Workspace {
+    fun sync(
+        installed: List<String>,
+        addNew: Boolean,
+        packages: Set<String>? = null,
+        unavailable: Set<Long> = emptySet(),
+        keepOffHome: (String) -> Boolean = { false },
+    ): Workspace {
         val present = installed.toSet()
+        val away = { key: String -> userSerialOf(key)?.let { it in unavailable } == true }
+        val keeps = { key: String -> key in present || away(key) }
         var ws = copy(
             items = items.mapNotNull { item ->
                 when (item) {
-                    is AppItem -> item.takeIf { it.appKey in present }
-                    is FolderItem -> item.withApps(item.apps.filter { it in present })
+                    is AppItem -> item.takeIf { keeps(it.appKey) }
+                    is FolderItem -> item.withApps(item.apps.filter(keeps))
                     is WidgetItem -> item
-                    is ShortcutItem -> item.takeIf { packages == null || it.packageName in packages }
+                    is ShortcutItem -> item.takeIf { packages == null || it.packageName in packages || it.userSerial in unavailable }
                 }
             },
-            dock = dock.filter { it in present },
+            dock = dock.filter(keeps),
         )
         ws = ws.withCells(ws.cells())
         // Tiles from before the limit keep their first apps; the others get their own cells.
@@ -327,9 +339,9 @@ data class Workspace(
         }
         if (addNew) {
             val onHome = ws.appsOnHome()
-            installed.filter { it !in knownApps && it !in onHome }.forEach { ws = ws.addApp(it) }
+            installed.filter { it !in knownApps && it !in onHome && !keepOffHome(it) }.forEach { ws = ws.addApp(it) }
         }
-        return ws.copy(knownApps = present)
+        return ws.copy(knownApps = present + knownApps.filter(away))
     }
 
     /** A folder with one app left becomes that app; an empty folder disappears. */
@@ -341,6 +353,10 @@ data class Workspace(
 
     companion object {
         const val DOCK_SIZE = 5
+
+        /** The user serial in an app key ("app:<serial>/<component>"), or null. */
+        fun userSerialOf(appKey: String): Long? =
+            if (appKey.startsWith("app:")) appKey.substring(4).substringBefore('/').toLongOrNull() else null
 
         /** A first arrangement: [dock] in the dock, all other apps in the given order on the pages. */
         fun initial(columns: Int, rows: Int, apps: List<String>, dock: List<String>): Workspace {

@@ -16,6 +16,10 @@ class AppTarget(
     val user: UserHandle,
     val isWorkProfile: Boolean,
     val info: LauncherActivityInfo,
+    /** Its profile is paused (work apps turned off): shown greyed, a tap offers to turn it back on. */
+    val paused: Boolean = false,
+    /** Belongs to the private space: never placed on the home screen by itself. */
+    val isPrivate: Boolean = false,
 ) : Target {
     val packageName: String get() = component.packageName
 }

@@ -275,4 +275,7 @@
     <string name="folder_playful">Verspielt anordnen</string>
     <string name="setting_grid">Raster</string>
     <string name="setting_grid_description">Spalten × Zeilen der Home-Bildschirm-Seiten. Alles behält seinen Platz, soweit es passt.</string>
+    <string name="private_space">Privater Bereich</string>
+    <string name="work_paused">Arbeit pausiert</string>
+    <string name="cannot_unpause">Arbeits-Apps konnten nicht aktiviert werden</string>
 </resources>

@@ -87,6 +87,48 @@ class WorkspaceTest {
     }
 
     @Test
+    fun aPausedWorkProfileKeepsItsPlaces() {
+        val personal = (1..4).map { "app:0/p.$it/.Main" }
+        val work = (1..3).map { "app:10/w.$it/.Main" }
+        val start = Workspace.initial(4, 6, personal + work, dock = listOf(personal[0], work[0]))
+            .let { it.makeFolder(it.appItem(work[2]).id, it.appItem(personal[3]).id, "Mixed") }
+        val placed = start.items.map { it.cell }
+
+        // Work apps paused: they are missing from the list, but not uninstalled.
+        val paused = start.sync(personal, addNew = true, unavailable = setOf(10L))
+        assertEquals(placed, paused.items.map { it.cell })
+        assertEquals(start.dock, paused.dock)
+        assertTrue(work[2] in paused.items.filterIsInstance<FolderItem>().single().apps)
+
+        // Back on: nothing moves, nothing is added twice.
+        val back = paused.sync(personal + work, addNew = true)
+        assertEquals(start.items, back.items)
+        assertEquals(start.dock, back.dock)
+
+        // Really removed while available: gone.
+        val removed = back.sync(personal + work.drop(1), addNew = true)
+        assertFalse(work[0] in removed.dock)
+    }
+
+    @Test
+    fun privateSpaceAppsStayOffTheHomeScreen() {
+        val ws = initial()
+        val synced = ws.sync(apps + "app:11/secret/.Main", addNew = true) { it.startsWith("app:11/") }
+        assertFalse("app:11/secret/.Main" in synced.appsOnHome())
+        // Known now: locking and unlocking the space later does not add it either.
+        val locked = synced.sync(apps, addNew = true, unavailable = setOf(11L))
+        assertTrue("app:11/secret/.Main" in locked.knownApps)
+        assertFalse("app:11/secret/.Main" in locked.sync(apps + "app:11/secret/.Main", addNew = true).appsOnHome())
+    }
+
+    @Test
+    fun userSerialsComeFromAppKeys() {
+        assertEquals(10L, Workspace.userSerialOf("app:10/com.x/.Main"))
+        assertEquals(null, Workspace.userSerialOf("shortcut:0/com.x/id"))
+        assertEquals(null, Workspace.userSerialOf("app1"))
+    }
+
+    @Test
     fun movingOntoAnOccupiedCellSwapsPlaces() {
         val ws = initial()
         val moved = ws.move(ws.appItem("app5").id, Cell(0, 0, 0))

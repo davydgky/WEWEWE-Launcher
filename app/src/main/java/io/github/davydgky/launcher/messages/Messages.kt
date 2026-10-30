@@ -8,6 +8,7 @@ import android.content.pm.PackageManager
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 import android.net.Uri
+import android.os.Process
 import android.provider.ContactsContract
 import android.provider.Telephony
 import android.service.notification.StatusBarNotification
@@ -16,8 +17,10 @@ import androidx.core.app.NotificationCompat
 import io.github.davydgky.launcher.R
 import io.github.davydgky.launcher.core.MessageRetrieval
 import io.github.davydgky.launcher.core.MessageText
+import io.github.davydgky.launcher.core.Secrets
 import io.github.davydgky.launcher.data.LauncherSettings
 import java.security.MessageDigest
+import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -41,8 +44,10 @@ class Message(val text: MessageText, val target: MessageTarget)
 class Messages(private val context: Context, settings: LauncherSettings, scope: CoroutineScope) {
 
     private val store = MessageStore(context)
-    private val labels = HashMap<String, String>()
-    @Volatile private var saving = true
+    private val labels = ConcurrentHashMap<String, String>()
+    /** Off until the setting is known: nothing is saved that the user may have switched off. */
+    @Volatile private var saving = false
+    @Volatile private var prunedAt = 0L
 
     private val versionState = MutableStateFlow(0)
     /** Changes whenever saved messages change. */
@@ -53,7 +58,14 @@ class Messages(private val context: Context, settings: LauncherSettings, scope: 
 
     init {
         scope.launch { settings.prefs.collect { saving = it.saveMessages } }
-        scope.launch(Dispatchers.IO) { runCatching { store.deleteBefore(cutoff()) } }
+    }
+
+    /** Deletes what is older than [KEEP_DAYS] days, at most once a day. */
+    private fun pruneIfDue() {
+        val now = System.currentTimeMillis()
+        if (now - prunedAt < DAY_MS) return
+        prunedAt = now
+        runCatching { store.deleteBefore(cutoff()) }.onFailure { Log.w(TAG, "Cannot delete old messages", it) }
     }
 
     val hasSmsAccess: Boolean
@@ -65,6 +77,7 @@ class Messages(private val context: Context, settings: LauncherSettings, scope: 
         val messages = runCatching { extract(sbn) }.onFailure { Log.w(TAG, "Cannot read ${sbn.packageName}", it) }.getOrNull()
         if (messages.isNullOrEmpty()) return
         scope.launch(Dispatchers.IO) {
+            pruneIfDue()
             if (store.add(messages) > 0) {
                 cache = null
                 versionState.value++
@@ -73,7 +86,10 @@ class Messages(private val context: Context, settings: LauncherSettings, scope: 
     }
 
     /** Messages saved from notifications in the last [KEEP_DAYS] days, newest first. */
-    suspend fun saved(): List<Message> = withContext(Dispatchers.IO) { store.since(cutoff()) }
+    suspend fun saved(): List<Message> = withContext(Dispatchers.IO) {
+        pruneIfDue()
+        store.since(cutoff())
+    }
 
     /** SMS of the last [KEEP_DAYS] days when allowed, newest first. */
     suspend fun sms(): List<Message> = withContext(Dispatchers.IO) { readSms() }
@@ -82,6 +98,8 @@ class Messages(private val context: Context, settings: LauncherSettings, scope: 
     suspend fun all(): List<Message> = withContext(Dispatchers.IO) {
         val fresh = cache?.takeIf { System.currentTimeMillis() - cachedAt < CACHE_MS }
         fresh ?: (store.since(cutoff()) + readSms())
+            // Codes saved before they were recognised as such.
+            .filterNot { Secrets.isOneTimeCode(it.text.text) }
             .sortedByDescending { it.text.time }
             .also {
                 cache = it
@@ -119,8 +137,13 @@ class Messages(private val context: Context, settings: LauncherSettings, scope: 
 
     suspend fun savedCount(): Int = withContext(Dispatchers.IO) { store.count() }
 
-    private fun extract(sbn: StatusBarNotification): List<Message> {
+    /** Sign-in codes are not kept or handed to Gemini Nano: they are secrets for a minute, then noise. */
+    private fun extract(sbn: StatusBarNotification): List<Message> = extractAll(sbn).filterNot { Secrets.isOneTimeCode(it.text.text) }
+
+    private fun extractAll(sbn: StatusBarNotification): List<Message> {
         if (sbn.packageName == context.packageName || sbn.isOngoing) return emptyList()
+        // Work profile messages belong to work: they are not kept in the personal launcher.
+        if (sbn.user != Process.myUserHandle()) return emptyList()
         val n = sbn.notification
         if (n.flags and Notification.FLAG_GROUP_SUMMARY != 0) return emptyList()
         if (n.category in SKIPPED_CATEGORIES) return emptyList()
@@ -166,7 +189,7 @@ class Messages(private val context: Context, settings: LauncherSettings, scope: 
                 while (c.moveToNext() && out.size < MAX_SMS) {
                     val address = c.getString(2).orEmpty()
                     val body = c.getString(3)?.trim().orEmpty()
-                    if (body.isEmpty()) continue
+                    if (body.isEmpty() || Secrets.isOneTimeCode(body)) continue
                     val name = names.getOrPut(address) { contactName(address) ?: address }
                     val sent = c.getInt(5) == Telephony.Sms.MESSAGE_TYPE_SENT
                     val time = c.getLong(4)

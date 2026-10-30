@@ -48,6 +48,13 @@ class AppsRepository(private val context: Context, private val scope: CoroutineS
     /** Packages that were installed, updated or removed. */
     val packageChanges: SharedFlow<String> = changedPackages.asSharedFlow()
 
+    private val unavailableState = MutableStateFlow<Set<Long>>(emptySet())
+    /**
+     * Serial numbers of profiles that are paused or locked right now. Their apps are not gone: the home
+     * screen keeps their places until the profile is back.
+     */
+    val unavailableProfiles: StateFlow<Set<Long>> = unavailableState.asStateFlow()
+
     private val shortcutAccessState = MutableStateFlow(false)
     val hasShortcutAccess: StateFlow<Boolean> = shortcutAccessState.asStateFlow()
 
@@ -102,7 +109,10 @@ class AppsRepository(private val context: Context, private val scope: CoroutineS
         appsJob?.cancel()
         appsJob = scope.launch {
             delay(delayMs)
-            appState.value = withContext(Dispatchers.IO) { queryApps() }
+            val (list, unavailable) = withContext(Dispatchers.IO) { queryApps() }
+            // Both before the list: whoever reacts to the list must already know what is only paused.
+            unavailableState.value = unavailable
+            appState.value = list
             reloadShortcuts(0)
         }
     }
@@ -118,17 +128,27 @@ class AppsRepository(private val context: Context, private val scope: CoroutineS
         }
     }
 
-    private fun visibleProfiles(): List<UserHandle> = launcherApps.profiles.filter { user ->
-        // A paused work profile (or locked private space) shows no apps.
-        user == Process.myUserHandle() || (!userManager.isQuietModeEnabled(user) && userManager.isUserUnlocked(user))
-    }
+    private fun isAvailable(user: UserHandle) = user == Process.myUserHandle() ||
+        (!userManager.isQuietModeEnabled(user) && userManager.isUserUnlocked(user))
 
-    private fun queryApps(): List<AppTarget> {
+    private fun isPrivate(user: UserHandle) = runCatching {
+        launcherApps.getLauncherUserInfo(user)?.userType == UserManager.USER_TYPE_PROFILE_PRIVATE
+    }.getOrDefault(false)
+
+    /** Apps of all profiles, and the serials of the profiles that are paused or locked. */
+    private fun queryApps(): Pair<List<AppTarget>, Set<Long>> {
         val me = Process.myUserHandle()
         val collator = Collator.getInstance()
-        return visibleProfiles().flatMap { user ->
+        val unavailable = HashSet<Long>()
+        val list = launcherApps.profiles.flatMap { user ->
             val serial = userManager.getSerialNumberForUser(user)
-            launcherApps.getActivityList(null, user).mapNotNull { info ->
+            val available = isAvailable(user)
+            val private = user != me && isPrivate(user)
+            if (!available) unavailable += serial
+            // A locked private space shows nothing at all; a paused work profile shows its apps greyed.
+            if (private && !available) return@flatMap emptyList()
+            val activities = runCatching { launcherApps.getActivityList(null, user) }.getOrDefault(emptyList())
+            activities.mapNotNull { info ->
                 if (info.componentName.packageName == context.packageName) return@mapNotNull null
                 AppTarget(
                     key = appKey(serial, info.componentName.flattenToShortString()),
@@ -137,10 +157,19 @@ class AppsRepository(private val context: Context, private val scope: CoroutineS
                     user = user,
                     isWorkProfile = user != me,
                     info = info,
+                    paused = !available,
+                    isPrivate = private,
                 )
             }
         }.sortedWith { a, b -> collator.compare(a.label, b.label) }
+        return list to unavailable
     }
+
+    /** Asks the system to turn the paused profile of [app] back on; false if it cannot. */
+    fun unpause(app: AppTarget): Boolean =
+        runCatching { userManager.requestQuietModeEnabled(false, app.user) }
+            .onFailure { Log.w(TAG, "Cannot turn on ${app.user}", it) }
+            .getOrDefault(false)
 
     private fun queryShortcuts(labels: Map<Pair<String, UserHandle>, String>): List<ShortcutTarget> {
         val query = LauncherApps.ShortcutQuery().setQueryFlags(
@@ -149,7 +178,7 @@ class AppsRepository(private val context: Context, private val scope: CoroutineS
                 LauncherApps.ShortcutQuery.FLAG_MATCH_PINNED or
                 LauncherApps.ShortcutQuery.FLAG_MATCH_CACHED,
         )
-        return visibleProfiles().flatMap { user ->
+        return launcherApps.profiles.filter(::isAvailable).flatMap { user ->
             val serial = userManager.getSerialNumberForUser(user)
             val list = try {
                 launcherApps.getShortcuts(query, user).orEmpty()

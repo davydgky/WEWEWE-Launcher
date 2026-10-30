@@ -28,6 +28,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.ColorMatrix
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.LayoutCoordinates
@@ -199,8 +201,11 @@ fun SymbolTile(icon: Int, size: Dp) {
 fun AppIconImage(app: AppTarget, size: Dp, modifier: Modifier = Modifier) {
     val icons = LocalContext.current.launcherApp.icons
     val icon by rememberIcon(icons, app.key) { icons.loadApp(app) }
-    BitmapIcon(icon, size, null, modifier = modifier)
+    BitmapIcon(icon, size, null, modifier = modifier, filter = if (app.paused) PausedFilter else null)
 }
+
+/** Grey and faded, as paused work apps look on the system launcher. */
+private val PausedFilter = ColorFilter.colorMatrix(ColorMatrix().apply { setToSaturation(0f) })
 
 @Composable
 private fun BitmapIcon(
@@ -209,10 +214,11 @@ private fun BitmapIcon(
     shape: RoundedCornerShape?,
     scale: ContentScale = ContentScale.Fit,
     modifier: Modifier = Modifier,
+    filter: ColorFilter? = null,
 ) {
     val clipped = if (shape != null) modifier.size(size).clip(shape) else modifier.size(size)
     if (bitmap != null) {
-        Image(bitmap, contentDescription = null, modifier = clipped, contentScale = scale)
+        Image(bitmap, contentDescription = null, modifier = clipped, contentScale = scale, colorFilter = filter)
     } else {
         Box(clipped.background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f), shape ?: CircleShape))
     }

@@ -306,13 +306,12 @@ fun SearchPanel(
                         actions.run(action)
                         state.reset()
                     }
+                    // Requests and conversations are personal ("schreib Anna …"): not kept as recent searches.
                     smart != null -> {
-                        rememberSearch(results.query)
                         actions.runSmart(smart)
                         state.reset()
                     }
                     typed.isNotEmpty() && aiAvailable && (QueryKinds.isConversational(typed) || (top == null && ai != null)) -> {
-                        rememberSearch(typed)
                         viewModel.ask(typed, ai)
                         state.query.clearText()
                     }
@@ -457,7 +456,12 @@ private fun LazyListScope.resultItems(
             Section(stringResource(R.string.section_store), backdrop) {
                 store.apps.forEachIndexed { index, app ->
                     if (index > 0) RowDivider()
-                    StoreAppRow(app, onOpen = { actions.openStorePage(app.packageName) }, onInstall = { actions.installFromStore(app.packageName) })
+                    if (app.suggested) {
+                        // Nano's package names may be made up: a suggestion opens a store search for its name.
+                        StoreAppRow(app, onOpen = { actions.searchStore(app.title) }, onInstall = { actions.searchStore(app.title) })
+                    } else {
+                        StoreAppRow(app, onOpen = { actions.openStorePage(app.packageName) }, onInstall = { actions.installFromStore(app.packageName) })
+                    }
                 }
             }
         }

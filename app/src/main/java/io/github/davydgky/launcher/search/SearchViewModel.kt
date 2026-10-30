@@ -105,6 +105,8 @@ class SearchViewModel(application: Application) : AndroidViewModel(application) 
 
     private companion object {
         const val TAG = "SearchViewModel"
+        /** Results that make an input personal: it is not sent to the Play Store. */
+        val PERSONAL_KINDS = setOf(SourceKind.Contact, SourceKind.Message, SourceKind.Event, SourceKind.Note)
         /** Gemini Nano starts once typing pauses this long; every keystroke would only cancel it. */
         const val AI_PAUSE_MS = 280L
         const val MIN_AI_CHARS = 3
@@ -298,6 +300,8 @@ class SearchViewModel(application: Application) : AndroidViewModel(application) 
     /**
      * Play Store apps for the current input, once typing pauses, when at most one installed app matches
      * and the input is not a sum or a timer: "bahn tickets" shows the store, "whatsapp" does not.
+     * Only if the user turned it on; and never for what is personal: questions, commands and inputs
+     * that match contacts, messages or appointments stay on the phone.
      */
     val storeApps: StateFlow<StoreResults?> = results
         .distinctUntilChangedBy { it.query }
@@ -310,6 +314,9 @@ class SearchViewModel(application: Application) : AndroidViewModel(application) 
             val listed = state.results.groups.firstOrNull { it.kind == SourceKind.App }?.items?.size ?: 0
             if (top + listed > 1) return@transformLatest
             if (!settings.prefs.first().storeResults) return@transformLatest
+            if (QueryKinds.isConversational(query) || QueryKinds.isCommand(query)) return@transformLatest
+            val kinds = state.results.groups.map { it.kind } + listOfNotNull(state.results.top?.item?.kind)
+            if (kinds.any { it in PERSONAL_KINDS }) return@transformLatest
             delay(STORE_PAUSE_MS)
             val installed = launcher.apps.apps.value.mapTo(HashSet()) { it.packageName }
             val found = try {

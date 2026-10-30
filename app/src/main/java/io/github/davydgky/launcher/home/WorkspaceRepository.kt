@@ -50,6 +50,7 @@ class WorkspaceRepository(
             state.value = withContext(Dispatchers.IO) { runCatching { WorkspaceCodec.decode(file.readText()) }.getOrNull() }
             pinned = state.value?.pinnedShortcuts().orEmpty()
             combine(apps.apps, settings.prefs) { list, prefs -> list to prefs }.collect { (list, prefs) ->
+                val unavailable = apps.unavailableProfiles.value
                 if (list.isEmpty()) return@collect
                 val keys = list.map { it.key }
                 val packages = list.mapTo(HashSet()) { it.packageName }
@@ -59,7 +60,13 @@ class WorkspaceRepository(
                     state.value = createInitial(keys, prefs.dock, columns, rows)
                     scheduleSave()
                 } else {
-                    update { it.withGrid(columns, rows).sync(keys, prefs.addNewAppsToHome, packages).withoutMissingWidgets() }
+                    // Private space apps stay off the home screen unless the user puts one there.
+                    val privateApps = list.filterTo(HashSet()) { it.isPrivate }.mapTo(HashSet()) { it.key }
+                    update {
+                        it.withGrid(columns, rows)
+                            .sync(keys, prefs.addNewAppsToHome, packages, unavailable) { key -> key in privateApps }
+                            .withoutMissingWidgets()
+                    }
                 }
                 // Edits that came in before the arrangement was loaded (a shortcut added from another app).
                 if (pending.isNotEmpty()) {
@@ -78,7 +85,7 @@ class WorkspaceRepository(
     }
 
     private suspend fun createInitial(keys: List<String>, legacyDock: List<String>?, columns: Int, rows: Int): Workspace {
-        val all = apps.apps.value
+        val all = apps.apps.value.filter { !it.isPrivate && !it.paused }
         // Four default apps: the fifth place is left to the suggested app.
         val dock = legacyDock?.filter { it in keys } ?: DefaultApps.resolve(context, all).take(Workspace.DOCK_SIZE - 1).map { it.key }
         // Most used apps first, so the first page is the useful one; the rest alphabetically.

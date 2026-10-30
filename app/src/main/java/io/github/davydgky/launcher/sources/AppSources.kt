@@ -27,13 +27,20 @@ class AppsSource(
 
     override suspend fun load(): List<SearchItem> {
         val work = context.getString(R.string.work_profile)
+        val paused = context.getString(R.string.work_paused)
+        val private = context.getString(R.string.private_space)
         val known = knowledge.known.value
         return apps.apps.value.map { app ->
             SearchItem(
                 key = app.key,
                 kind = SourceKind.App,
                 title = app.label,
-                subtitle = if (app.isWorkProfile) work else "",
+                subtitle = when {
+                    app.isPrivate -> private
+                    app.paused -> paused
+                    app.isWorkProfile -> work
+                    else -> ""
+                },
                 keywords = known[app.packageName]?.keywords.orEmpty(),
                 payload = app,
             )

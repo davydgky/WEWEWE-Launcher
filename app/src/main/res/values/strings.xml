@@ -276,4 +276,7 @@
     <string name="folder_playful">Playful arrangement</string>
     <string name="setting_grid">Grid</string>
     <string name="setting_grid_description">Columns × rows of the home screen pages. Everything keeps its place where it fits.</string>
+    <string name="private_space">Private space</string>
+    <string name="work_paused">Work apps paused</string>
+    <string name="cannot_unpause">Work apps could not be turned on</string>
 </resources>

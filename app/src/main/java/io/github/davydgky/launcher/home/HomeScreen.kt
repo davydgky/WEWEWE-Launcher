@@ -119,6 +119,7 @@ import io.github.davydgky.launcher.ui.LocalLightWallpaper
 import io.github.davydgky.launcher.ui.ResultIcon
 import io.github.davydgky.launcher.ui.ScreenBounds
 import io.github.davydgky.launcher.ui.wallpaperTextColor
+import io.github.davydgky.launcher.widgets.ResizeLimits
 import io.github.davydgky.launcher.widgets.WidgetHost
 import kotlin.math.floor
 import kotlin.math.roundToInt
@@ -823,6 +824,17 @@ private fun WidgetCell(item: WidgetItem, workspace: Workspace, cellW: Dp, cellH:
  * resizes the widget cell by cell within the sizes it allows, the others making room live; letting go
  * keeps the size. Widgets of a fixed size get no handles.
  */
+private class ResizeFrame(val limits: ResizeLimits, val cellWidthPx: Float, val cellHeightPx: Float, val columns: Int, val rows: Int)
+
+/**
+ * The span a widget may take: within its limits and the room to the grid's edge. If its limits ask for
+ * more than there is room (a widget placed before the grid shrank), it keeps at least one cell.
+ */
+private fun resizeSpan(wanted: Int, min: Int, max: Int, room: Int): Int {
+    val upper = minOf(max, room).coerceAtLeast(1)
+    return wanted.coerceIn(min.coerceAtMost(upper), upper)
+}
+
 @Composable
 private fun WidgetResizeHandles(item: WidgetItem, cellW: Dp, cellH: Dp, columns: Int, rows: Int, controller: HomeController) {
     val app = LocalContext.current.launcherApp
@@ -831,8 +843,8 @@ private fun WidgetResizeHandles(item: WidgetItem, cellW: Dp, cellH: Dp, columns:
     if (!limits.horizontal && !limits.vertical) return
     val haptics = LocalHapticFeedback.current
     val density = LocalDensity.current
-    val cellWidthPx = with(density) { cellW.toPx() }
-    val cellHeightPx = with(density) { cellH.toPx() }
+    // Read inside the gesture through state: a rotation or a grid change must not leave it stale.
+    val sizes by rememberUpdatedState(ResizeFrame(limits, with(density) { cellW.toPx() }, with(density) { cellH.toPx() }, columns, rows))
     val current by rememberUpdatedState(item)
     val frame = Color.White.copy(alpha = 0.85f)
 
@@ -855,11 +867,12 @@ private fun WidgetResizeHandles(item: WidgetItem, cellW: Dp, cellH: Dp, columns:
                         onDrag = { change, amount ->
                             change.consume()
                             total += amount
+                            val f = sizes
                             val w = if (horizontal) {
-                                (startW + Math.round(total.x / cellWidthPx)).coerceIn(limits.minW, minOf(limits.maxW, columns - current.cell.x))
+                                resizeSpan(startW + Math.round(total.x / f.cellWidthPx), f.limits.minW, f.limits.maxW, f.columns - current.cell.x)
                             } else startW
                             val h = if (vertical) {
-                                (startH + Math.round(total.y / cellHeightPx)).coerceIn(limits.minH, minOf(limits.maxH, rows - current.cell.y))
+                                resizeSpan(startH + Math.round(total.y / f.cellHeightPx), f.limits.minH, f.limits.maxH, f.rows - current.cell.y)
                             } else startH
                             val now = controller.resizing
                             if (now == null || now.w != w || now.h != h) {

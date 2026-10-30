@@ -79,6 +79,24 @@ class Notifications(private val context: Context) {
             .groupBy({ keyOf(it.packageName, it.user) }, ::toAppNotification)
     }
 
+    /** One notification came or changed: only its app's list is touched, the shade is not read again. */
+    internal fun posted(sbn: StatusBarNotification) {
+        val app = keyOf(sbn.packageName, sbn.user)
+        val current = state.value
+        val others = current[app].orEmpty().filter { it.key != sbn.key }
+        val list = if (shows(sbn)) (others + toAppNotification(sbn)).sortedByDescending { it.postTime } else others
+        state.value = if (list.isEmpty()) current - app else current + (app to list)
+    }
+
+    internal fun removed(sbn: StatusBarNotification) {
+        val app = keyOf(sbn.packageName, sbn.user)
+        val current = state.value
+        val list = current[app] ?: return
+        val rest = list.filter { it.key != sbn.key }
+        if (rest.size == list.size) return
+        state.value = if (rest.isEmpty()) current - app else current + (app to rest)
+    }
+
     /** Ongoing notifications (music, navigation) and group summaries get no dot, as in the shade. */
     private fun shows(sbn: StatusBarNotification): Boolean {
         val n = sbn.notification
@@ -122,9 +140,9 @@ class NotificationListener : NotificationListenerService() {
     override fun onListenerDisconnected() = notifications.detach(this)
 
     override fun onNotificationPosted(sbn: StatusBarNotification) {
-        notifications.refresh()
+        notifications.posted(sbn)
         app.messages.capture(sbn, app.appScope)
     }
 
-    override fun onNotificationRemoved(sbn: StatusBarNotification) = notifications.refresh()
+    override fun onNotificationRemoved(sbn: StatusBarNotification) = notifications.removed(sbn)
 }

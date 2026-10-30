@@ -62,6 +62,11 @@ class ResultActions(private val activity: Activity) {
     }
 
     fun launchApp(target: AppTarget, bounds: Rect?) {
+        if (target.paused) {
+            // Like the system launcher: a tap on a paused work app asks to turn work apps on.
+            if (!app.apps.unpause(target)) toast(R.string.cannot_unpause)
+            return
+        }
         try {
             launcherApps.startMainActivity(target.component, target.user, bounds, options(bounds))
             app.launchLog.record(target.key)
@@ -189,6 +194,15 @@ class ResultActions(private val activity: Activity) {
         val store = Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=$packageName")).setPackage(PLAY_STORE)
         if (!start(store, null, null, quiet = true)) {
             start(Intent(Intent.ACTION_VIEW, Uri.parse("https://play.google.com/store/apps/details?id=$packageName")), null, null)
+        }
+    }
+
+    /** The store's own search for [name]: never a wrong app, whatever the name. */
+    fun searchStore(name: String) {
+        val query = Uri.encode(name)
+        val store = Intent(Intent.ACTION_VIEW, Uri.parse("market://search?q=$query&c=apps")).setPackage(PLAY_STORE)
+        if (!start(store, null, null, quiet = true)) {
+            start(Intent(Intent.ACTION_VIEW, Uri.parse("https://play.google.com/store/search?q=$query&c=apps")), null, null)
         }
     }
 
