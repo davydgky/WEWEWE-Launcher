@@ -26,6 +26,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.Arrangement
@@ -78,6 +79,7 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
@@ -104,9 +106,9 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.davydgky.launcher.R
+import io.github.davydgky.launcher.ai.NanoAnswers
 import io.github.davydgky.launcher.core.SearchItem
 import io.github.davydgky.launcher.core.SourceKind
-import io.github.davydgky.launcher.ai.NanoAnswers
 import io.github.davydgky.launcher.launcherApp
 import io.github.davydgky.launcher.notifications.Notifications
 import io.github.davydgky.launcher.search.AppTarget
@@ -353,7 +355,14 @@ private fun WorkspacePage(
         // While an element is dragged the others stand where they make room for it, maybe on another
         // page; the dragged one keeps its place (unseen), so its gesture is never moved around.
         val dragged = (drag?.source as? DragSource.Item)?.item?.id
-        fun cellOf(item: HomeItem) = if (drag == null || item.id == dragged) item.cell else drag.cellOf(item)
+        // A widget being resized pushes the others aside as it grows, before the finger lifts.
+        val resizing = controller.resizing
+        val resized = remember(resizing, workspace) { resizing?.let { workspace.resize(it.id, it.w, it.h) } }
+        fun cellOf(item: HomeItem) = when {
+            drag != null -> if (item.id == dragged) item.cell else drag.cellOf(item)
+            resized != null -> resized.item(item.id)?.cell ?: item.cell
+            else -> item.cell
+        }
         val drop = controller.drop
         CompositionLocalProvider(LocalIconSize provides iconSize) { workspace.items.filter { cellOf(it).page == page }.forEach { item ->
             key(item.id) {
@@ -416,6 +425,9 @@ private fun WorkspacePage(
                                 onClick = { controller.repository.removeItem(item.id) },
                                 modifier = Modifier.align(Alignment.TopStart),
                             )
+                        }
+                        if (item is WidgetItem && drag == null) {
+                            WidgetResizeHandles(item, cellW, cellH, workspace.columns, workspace.rows, controller)
                         }
                     }
                 }
@@ -803,6 +815,85 @@ private fun WidgetCell(item: WidgetItem, workspace: Workspace, cellW: Dp, cellH:
                 }
             }
         }
+    }
+}
+
+/**
+ * A frame with handles on the right, the bottom and the corner of a widget in edit mode: dragging one
+ * resizes the widget cell by cell within the sizes it allows, the others making room live; letting go
+ * keeps the size. Widgets of a fixed size get no handles.
+ */
+@Composable
+private fun WidgetResizeHandles(item: WidgetItem, cellW: Dp, cellH: Dp, columns: Int, rows: Int, controller: HomeController) {
+    val app = LocalContext.current.launcherApp
+    val info = remember(item.widgetId) { app.widgets.info(item.widgetId) } ?: return
+    val limits = remember(info, cellW, cellH, columns, rows) { WidgetHost.resizeLimits(info, cellW.value, cellH.value, columns, rows) }
+    if (!limits.horizontal && !limits.vertical) return
+    val haptics = LocalHapticFeedback.current
+    val density = LocalDensity.current
+    val cellWidthPx = with(density) { cellW.toPx() }
+    val cellHeightPx = with(density) { cellH.toPx() }
+    val current by rememberUpdatedState(item)
+    val frame = Color.White.copy(alpha = 0.85f)
+
+    @Composable
+    fun Handle(modifier: Modifier, horizontal: Boolean, vertical: Boolean) {
+        Box(
+            modifier
+                .size(32.dp)
+                .pointerInput(item.id, horizontal, vertical) {
+                    var startW = 0
+                    var startH = 0
+                    var total = Offset.Zero
+                    detectDragGestures(
+                        onDragStart = {
+                            startW = current.cell.w
+                            startH = current.cell.h
+                            total = Offset.Zero
+                            controller.resizing = WidgetResize(current.id, startW, startH)
+                        },
+                        onDrag = { change, amount ->
+                            change.consume()
+                            total += amount
+                            val w = if (horizontal) {
+                                (startW + Math.round(total.x / cellWidthPx)).coerceIn(limits.minW, minOf(limits.maxW, columns - current.cell.x))
+                            } else startW
+                            val h = if (vertical) {
+                                (startH + Math.round(total.y / cellHeightPx)).coerceIn(limits.minH, minOf(limits.maxH, rows - current.cell.y))
+                            } else startH
+                            val now = controller.resizing
+                            if (now == null || now.w != w || now.h != h) {
+                                haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                controller.resizing = WidgetResize(current.id, w, h)
+                            }
+                        },
+                        onDragEnd = {
+                            controller.resizing?.let { r ->
+                                if (r.w != current.cell.w || r.h != current.cell.h) controller.repository.resizeWidget(r.id, r.w, r.h)
+                            }
+                            controller.resizing = null
+                        },
+                        onDragCancel = { controller.resizing = null },
+                    )
+                },
+            contentAlignment = Alignment.Center,
+        ) {
+            Box(
+                Modifier
+                    .size(if (horizontal && vertical) 16.dp else 12.dp)
+                    .shadow(3.dp, CircleShape)
+                    .clip(CircleShape)
+                    .background(Color.White),
+            )
+        }
+    }
+
+    Box(Modifier.fillMaxSize().padding(CELL_PADDING)) {
+        Box(Modifier.matchParentSize().border(2.dp, frame, RoundedCornerShape(22.dp)))
+        // Inside the widget's bounds: touches outside them would not reach the handles.
+        if (limits.horizontal) Handle(Modifier.align(Alignment.CenterEnd), horizontal = true, vertical = false)
+        if (limits.vertical) Handle(Modifier.align(Alignment.BottomCenter), horizontal = false, vertical = true)
+        if (limits.horizontal && limits.vertical) Handle(Modifier.align(Alignment.BottomEnd), horizontal = true, vertical = true)
     }
 }
 

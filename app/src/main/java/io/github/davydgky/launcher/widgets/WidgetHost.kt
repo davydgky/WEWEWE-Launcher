@@ -68,8 +68,8 @@ class WidgetHost(private val context: Context) {
             return WidgetSpan(w.coerceIn(1, columns), h.coerceIn(1, rows))
         }
 
-        /** Sizes offered in the widget's menu: its own size and a few common ones it allows. */
-        fun sizeOptions(info: AppWidgetProviderInfo, cellW: Float, cellH: Float, columns: Int, rows: Int): List<WidgetSpan> {
+        /** How far the widget lets itself be resized, in cells; fixed directions keep its default size. */
+        fun resizeLimits(info: AppWidgetProviderInfo, cellW: Float, cellH: Float, columns: Int, rows: Int): ResizeLimits {
             val default = defaultSpan(info, cellW, cellH, columns, rows)
             val horizontal = info.resizeMode and AppWidgetProviderInfo.RESIZE_HORIZONTAL != 0
             val vertical = info.resizeMode and AppWidgetProviderInfo.RESIZE_VERTICAL != 0
@@ -77,6 +77,17 @@ class WidgetHost(private val context: Context) {
             val minH = if (vertical) cellsFor(info.minResizeHeight.pxToDp().takeIf { it > 0 } ?: info.minHeight.pxToDp(), cellH, rows) else default.h
             val maxW = if (!horizontal) default.w else if (info.maxResizeWidth > 0) cellsFor(info.maxResizeWidth.pxToDp(), cellW, columns) else columns
             val maxH = if (!vertical) default.h else if (info.maxResizeHeight > 0) cellsFor(info.maxResizeHeight.pxToDp(), cellH, rows) else rows
+            return ResizeLimits(horizontal, vertical, minOf(minW, default.w), minOf(minH, default.h), maxOf(maxW, default.w), maxOf(maxH, default.h))
+        }
+
+        /** Sizes offered in the widget's menu: its own size and a few common ones it allows. */
+        fun sizeOptions(info: AppWidgetProviderInfo, cellW: Float, cellH: Float, columns: Int, rows: Int): List<WidgetSpan> {
+            val default = defaultSpan(info, cellW, cellH, columns, rows)
+            val limits = resizeLimits(info, cellW, cellH, columns, rows)
+            val minW = limits.minW
+            val minH = limits.minH
+            val maxW = limits.maxW
+            val maxH = limits.maxH
             val candidates = listOf(
                 default,
                 WidgetSpan(minW, minH),
@@ -96,3 +107,6 @@ class WidgetHost(private val context: Context) {
         private fun Int.pxToDp(): Int = (this / Resources.getSystem().displayMetrics.density).toInt()
     }
 }
+
+/** The sizes a widget allows, in cells, and in which directions it can be resized at all. */
+data class ResizeLimits(val horizontal: Boolean, val vertical: Boolean, val minW: Int, val minH: Int, val maxW: Int, val maxH: Int)

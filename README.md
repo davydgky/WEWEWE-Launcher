@@ -107,7 +107,7 @@ Welche Quelle Android unter welcher Bedingung erlaubt und warum die Architektur 
   soweit es passt; Symbole werden bei vielen Spalten kleiner.
 - **App-Mediathek** rechts neben der letzten Seite, wie bei iOS, oder mit einem Wisch nach oben wie die App-Übersicht beim Pixel: Vorschläge, zuletzt installiert und Kategorien,
   die die Apps selbst angeben, jeweils nach Nutzung sortiert. Neue Apps landen wahlweise nur hier.
-- **Widgets**: im Bearbeitungsmodus über „Widget hinzufügen“. Die Auswahl zeigt Vorschauen, danach folgt
+- **Widgets**: im Bearbeitungsmodus über „Widget hinzufügen“; dort zeigen sie Griffe rechts, unten und an der Ecke, mit denen man sie Zelle für Zelle größer oder kleiner zieht (andere Elemente machen live Platz). Die Auswahl zeigt Vorschauen, danach folgt
   bei Bedarf die einmalige Erlaubnis und der Einrichtungsbildschirm des Widgets. Die Größe ändert ein Tipp
   auf das Widget im Bearbeitungsmodus oder langes Drücken.
 - **Dock** mit bis zu fünf Apps, per Ziehen oder Menü befüllbar. Ein freier Platz zeigt eine vorgeschlagene

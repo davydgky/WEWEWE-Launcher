@@ -48,6 +48,9 @@ sealed interface DropTarget {
 /** Where the elements stand while the dragged one hovers over [cell]: they have made room for it. */
 class DragPreview(val cell: Cell, val cells: Map<Long, Cell>)
 
+/** A widget being resized by its handles: the size it has under the finger, in cells. */
+data class WidgetResize(val id: Long, val w: Int, val h: Int)
+
 /** An element just let go; it glides from [topLeft] (root coordinates) into its new place. */
 class DroppedItem(val id: Long, val topLeft: Offset)
 
@@ -84,6 +87,9 @@ class HomeController(
     var drag by mutableStateOf<DragState?>(null)
         private set
 
+    /** A widget resized in edit mode, while its handle is held; the others make room for it live. */
+    var resizing by mutableStateOf<WidgetResize?>(null)
+
     /** The element dropped last, until it has started gliding into its place. */
     var drop by mutableStateOf<DroppedItem?>(null)
     var openFolderId by mutableStateOf<Long?>(null)
@@ -100,7 +106,7 @@ class HomeController(
      * glass behind a panel would otherwise blur a new picture every frame.
      */
     val wiggling: Boolean
-        get() = editMode && drag == null && openFolderId == null && openCategory == null && !widgetPickerOpen && !pagesOverviewOpen
+        get() = editMode && drag == null && resizing == null && openFolderId == null && openCategory == null && !widgetPickerOpen && !pagesOverviewOpen
 
     fun startEditing() {
         editMode = true
