@@ -96,6 +96,16 @@ class Messages(private val context: Context, settings: LauncherSettings, scope: 
         return MessageRetrieval.relevant(question, all.map { it.text }, System.currentTimeMillis(), limit).mapNotNull { byKey[it.key] }
     }
 
+    /** The messages of the last [hours] hours, from apps whose name contains [app] if given; oldest first. */
+    suspend fun recent(hours: Int, app: String?, limit: Int = 40): List<Message> {
+        val since = System.currentTimeMillis() - hours * 60 * 60 * 1000L
+        return all()
+            .filter { it.text.time >= since }
+            .filter { app == null || it.text.app.contains(app, ignoreCase = true) || it.target.packageName.contains(app, ignoreCase = true) }
+            .take(limit)
+            .reversed()
+    }
+
     /** SMS changed: read them again next time. */
     fun smsChanged() {
         cache = null

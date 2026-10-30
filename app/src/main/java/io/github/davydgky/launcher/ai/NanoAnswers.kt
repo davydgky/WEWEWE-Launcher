@@ -125,7 +125,15 @@ class NanoAnswers(private val scope: CoroutineScope) {
      * comes back once complete as [NanoReply.Command]; anything else is answered, chunk by chunk, with
      * [messages] from the phone that may hold the answer. Errors are thrown, so the search can show them.
      */
-    fun reply(query: String, messages: List<MessageText> = emptyList(), command: Boolean = false): Flow<NanoReply> = flow {
+    fun reply(
+        query: String,
+        messages: List<MessageText> = emptyList(),
+        command: Boolean = false,
+        /** Earlier questions and answers of the conversation, oldest first, for follow-ups ("und morgen?"). */
+        history: List<Pair<String, String>> = emptyList(),
+        /** [messages] are all recent ones, to be summed up ("fasse meine Nachrichten zusammen"). */
+        overview: Boolean = false,
+    ): Flow<NanoReply> = flow {
         val client = model ?: return@flow
         if (!isReady) return@flow
         interactive()
@@ -138,10 +146,11 @@ class NanoAnswers(private val scope: CoroutineScope) {
                     return@withLock
                 }
             }
-            val request = generateContentRequest(SystemInstruction(answerInstruction() + messageContext(messages)), TextPart(query.trim())) {
+            val instruction = answerInstruction() + messageContext(messages, overview) + conversation(history)
+            val request = generateContentRequest(SystemInstruction(instruction), TextPart(query.trim())) {
                 temperature = 0.3f
                 topK = 24
-                maxOutputTokens = MAX_ANSWER_TOKENS
+                maxOutputTokens = if (overview) MAX_OVERVIEW_TOKENS else MAX_ANSWER_TOKENS
             }
             val text = StringBuilder()
             client.generateContentStream(request).collect { response ->
@@ -250,7 +259,8 @@ class NanoAnswers(private val scope: CoroutineScope) {
      * Messages from the phone that may answer the question, oldest first, for questions like "Wann muss
      * ich zum Bahnhof?". Only these few are given, never the whole history.
      */
-    private fun messageContext(messages: List<MessageText>): String {
+    private fun messageContext(messages: List<MessageText>, overview: Boolean = false): String {
+        if (overview && messages.isEmpty()) return "\n\n" + NO_MESSAGES_INSTRUCTION
         if (messages.isEmpty()) return ""
         val format = DateTimeFormatter.ofPattern("EEE dd.MM. HH:mm", Locale.GERMAN)
         val zone = ZoneId.systemDefault()
@@ -259,10 +269,29 @@ class NanoAnswers(private val scope: CoroutineScope) {
             "- $time · ${m.app} · ${m.sender}: ${m.text.take(MAX_MESSAGE_CHARS).replace('\n', ' ')}"
         }
         return buildString {
-            append("\n\nNachrichten auf diesem Handy, die zur Eingabe passen könnten (Zeit · App · Absender: Text):\n")
-            append(lines)
-            append("\n")
-            append(MESSAGE_INSTRUCTION)
+            if (overview) {
+                append("\n\nDie neuesten Nachrichten auf diesem Handy (Zeit · App · Absender: Text):\n")
+                append(lines)
+                append("\n")
+                append(OVERVIEW_INSTRUCTION)
+            } else {
+                append("\n\nNachrichten auf diesem Handy, die zur Eingabe passen könnten (Zeit · App · Absender: Text):\n")
+                append(lines)
+                append("\n")
+                append(MESSAGE_INSTRUCTION)
+            }
+        }
+    }
+
+    /** The conversation so far, so a follow-up refers to it. */
+    private fun conversation(history: List<Pair<String, String>>): String {
+        if (history.isEmpty()) return ""
+        return buildString {
+            append("\n\nBisheriges Gespräch (beziehe dich darauf, wenn die Eingabe daran anknüpft):\n")
+            history.takeLast(MAX_HISTORY).forEach { (question, answer) ->
+                append("Nutzer: ").append(question.take(MAX_HISTORY_CHARS)).append('\n')
+                append("Du: ").append(answer.take(MAX_HISTORY_CHARS)).append('\n')
+            }
         }
     }
 
@@ -329,6 +358,20 @@ class NanoAnswers(private val scope: CoroutineScope) {
         """.trimIndent()
         const val MAX_FOLDER_NAME = 24
         const val MAX_MESSAGE_CHARS = 300
+        const val MAX_OVERVIEW_TOKENS = 420
+        const val MAX_HISTORY = 4
+        const val MAX_HISTORY_CHARS = 400
+
+        val OVERVIEW_INSTRUCTION = """
+            Fasse diese Nachrichten für den Nutzer zusammen: pro Person oder Gruppe in einer kurzen Zeile mit "• ",
+            was sie will oder mitteilt; Termine, Uhrzeiten, Fragen an den Nutzer und Dringendes zuerst. Werbung und
+            automatische Meldungen nur ganz kurz am Ende. Ohne Einleitung, ohne Markdown außer "• ".
+        """.trimIndent()
+
+        val NO_MESSAGES_INSTRUCTION = """
+            Für diesen Zeitraum sind keine Nachrichten auf dem Handy gespeichert. Sag das kurz und dass der Launcher
+            nur Nachrichten kennt, die als Benachrichtigung ankamen, seit "Nachrichten aufbewahren" an ist.
+        """.trimIndent()
 
         val MESSAGE_INSTRUCTION = """
             Beantworte Fragen zu Treffen, Terminen, Uhrzeiten, Orten, Paketen, Codes oder Absprachen anhand dieser

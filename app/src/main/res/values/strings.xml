@@ -213,6 +213,11 @@
     <string name="menu_app_timer">App timer</string>
     <string name="menu_bubble">Bubble</string>
     <string name="ai_title">Gemini Nano</string>
+    <string name="ai_no_answer">No answer this time; try asking differently.</string>
+    <string name="ai_continue">Continue as a conversation</string>
+    <string name="ai_continue_short">Ask more</string>
+    <string name="ai_follow_up_hint">Ask a follow-up…</string>
+    <string name="ai_end_chat">End conversation</string>
     <string name="ai_not_ready">Gemini Nano is not ready yet</string>
     <string name="section_related">Related · %1$s</string>
     <string name="source_messages">Messages</string>

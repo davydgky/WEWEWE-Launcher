@@ -7,6 +7,7 @@ import android.graphics.Rect
 import android.net.Uri
 import android.provider.Settings
 import android.text.format.DateUtils
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -16,6 +17,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -95,7 +97,9 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.davydgky.launcher.R
+import io.github.davydgky.launcher.ai.NanoAnswers
 import io.github.davydgky.launcher.core.Answer
+import io.github.davydgky.launcher.core.QueryKinds
 import io.github.davydgky.launcher.core.QuickAction
 import io.github.davydgky.launcher.core.ScoredItem
 import io.github.davydgky.launcher.core.SearchItem
@@ -108,6 +112,7 @@ import io.github.davydgky.launcher.messages.Message
 import io.github.davydgky.launcher.perf.Metric
 import io.github.davydgky.launcher.search.AiAnswer
 import io.github.davydgky.launcher.search.AppTarget
+import io.github.davydgky.launcher.search.ChatTurn
 import io.github.davydgky.launcher.search.ContactTarget
 import io.github.davydgky.launcher.search.RelatedResults
 import io.github.davydgky.launcher.search.ResultActions
@@ -148,9 +153,15 @@ fun SearchPanel(
     val aiAnswer by viewModel.aiAnswer.collectAsStateWithLifecycle()
     val storeApps by viewModel.storeApps.collectAsStateWithLifecycle()
     val related by viewModel.related.collectAsStateWithLifecycle()
+    val chat by viewModel.chat.collectAsStateWithLifecycle()
+    val nanoState by app.nano.availability.collectAsStateWithLifecycle()
+    // A conversation lasts while the search is open; back ends it first.
+    LaunchedEffect(state.isActive) { if (!state.isActive) viewModel.endChat() }
+    BackHandler(enabled = chat.isNotEmpty()) { viewModel.endChat() }
     val suggestions by app.suggestions.current.collectAsStateWithLifecycle()
     val usageAccess by app.usage.hasAccess.collectAsStateWithLifecycle()
     val prefs by app.settings.prefs.collectAsStateWithLifecycle(initialValue = LauncherPrefs())
+    val aiAvailable = prefs.aiAnswers && nanoState != NanoAnswers.Availability.Unsupported
     val scope = rememberCoroutineScope()
     val keyboard = LocalSoftwareKeyboardController.current
     val density = LocalDensity.current
@@ -205,7 +216,11 @@ fun SearchPanel(
                 .windowInsetsPadding(WindowInsets.ime.union(WindowInsets.navigationBars)),
         ) {
             val listState = rememberLazyListState()
-            LaunchedEffect(results.query) { listState.scrollToItem(0) }
+            LaunchedEffect(results.query) { if (chat.isEmpty()) listState.scrollToItem(0) }
+            // The newest message of the conversation stays in view, next to the field.
+            LaunchedEffect(chat.size) {
+                if (chat.isNotEmpty()) listState.animateScrollToItem(if (prefs.resultsAtBottom) 0 else chat.size)
+            }
             LazyColumn(
                 state = listState,
                 // From the search field upwards: the best result sits right above the thumb.
@@ -220,7 +235,12 @@ fun SearchPanel(
                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 12.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp, if (prefs.resultsAtBottom) Alignment.Bottom else Alignment.Top),
             ) {
-                if (state.query.text.isBlank()) {
+                if (chat.isNotEmpty()) {
+                    chatItems(
+                        chat, newestFirst = prefs.resultsAtBottom, backdrop = backdrop, actions = actions,
+                        onClose = viewModel::endChat,
+                    )
+                } else if (state.query.text.isBlank()) {
                     if (prefs.recentSearches.isNotEmpty()) {
                         item("recent") {
                             RecentSearches(
@@ -252,15 +272,30 @@ fun SearchPanel(
                         storeApps?.takeIf { it.query == results.query.trim() },
                         related?.takeIf { it.query == results.query.trim() },
                         open, external, actions, backdrop,
+                        onContinue = { ai ->
+                            viewModel.ask(ai.query, ai)
+                            state.query.clearText()
+                        },
                     )
                 }
             }
             // The result of a sum shows in the field itself, as on a calculator.
             val answer = results.answer?.takeIf { results.query == state.query.text.toString() }
-            SearchField(state, focusRequester, backdrop, answer, onSubmit = {
-                // Enter: a timer or alarm, a request Gemini Nano understood, the top hit, else the calculated
-                // answer, else the first result, else the web.
-                val smart = aiAnswer?.takeIf { it.query == results.query.trim() }?.action
+            SearchField(state, focusRequester, backdrop, answer, chatting = chat.isNotEmpty(), onSubmit = submit@{
+                val typed = state.query.text.toString().trim()
+                // In a conversation, Enter sends the next message.
+                if (chat.isNotEmpty()) {
+                    if (typed.isNotEmpty()) {
+                        viewModel.ask(typed)
+                        state.query.clearText()
+                    }
+                    return@submit
+                }
+                // Enter: a timer or alarm, a request Gemini Nano understood, a question or instruction (which
+                // starts a conversation with Gemini Nano), the top hit, else the calculated answer, else the
+                // first result, else the web.
+                val ai = aiAnswer?.takeIf { it.query == results.query.trim() }
+                val smart = ai?.action
                 val action = results.action
                 val top = results.results.top?.item
                 val answer = results.answer
@@ -275,6 +310,11 @@ fun SearchPanel(
                         rememberSearch(results.query)
                         actions.runSmart(smart)
                         state.reset()
+                    }
+                    typed.isNotEmpty() && aiAvailable && (QueryKinds.isConversational(typed) || (top == null && ai != null)) -> {
+                        rememberSearch(typed)
+                        viewModel.ask(typed, ai)
+                        state.query.clearText()
                     }
                     top != null -> open(top, null)
                     answer != null -> actions.copy(answer.copyText)
@@ -333,6 +373,7 @@ private fun LazyListScope.resultItems(
     external: (String, (String) -> Unit) -> Unit,
     actions: ResultActions,
     backdrop: Backdrop,
+    onContinue: (AiAnswer) -> Unit,
 ) {
     val results = state.results
     val query = state.query
@@ -355,7 +396,12 @@ private fun LazyListScope.resultItems(
                     if (action != null) {
                         SmartActionRow(action) { actions.runSmart(action) }
                     } else {
-                        AiAnswerRow(ai, onCopy = { actions.copy(ai.text) }, onOpenSource = { actions.openMessage(it.target, null, null) })
+                        AiAnswerRow(
+                            ai,
+                            onCopy = { actions.copy(ai.text) },
+                            onOpenSource = { actions.openMessage(it.target, null, null) },
+                            onContinue = { onContinue(ai) },
+                        )
                     }
                 }
             }
@@ -504,22 +550,40 @@ private fun AnswerRow(answer: Answer, onCopy: () -> Unit) {
  * copies it.
  */
 @Composable
-private fun AiAnswerRow(answer: AiAnswer, onCopy: () -> Unit, onOpenSource: (Message) -> Unit) {
+private fun AiAnswerRow(
+    answer: AiAnswer,
+    onCopy: () -> Unit,
+    onOpenSource: (Message) -> Unit,
+    /** Null inside a conversation; in the search a tap continues the answer as a conversation. */
+    onContinue: (() -> Unit)? = null,
+    showTitle: Boolean = true,
+) {
     val colors = LocalGlassColors.current
     var expanded by remember(answer.query) { mutableStateOf(false) }
     Column(
         Modifier
             .fillMaxWidth()
-            .clickable(onClickLabel = stringResource(R.string.answer_copy), enabled = answer.done, onClick = onCopy)
+            .combinedClickable(
+                enabled = answer.done,
+                onClickLabel = stringResource(if (onContinue != null) R.string.ai_continue else R.string.answer_copy),
+                onLongClickLabel = stringResource(R.string.answer_copy),
+                onLongClick = onCopy,
+                onClick = onContinue ?: onCopy,
+            )
             .animateContentSize()
             .padding(horizontal = 14.dp, vertical = 12.dp),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(painterResource(R.drawable.ic_sparkle), null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
-            Spacer(Modifier.width(8.dp))
-            Text(stringResource(R.string.ai_title), color = colors.secondaryContent, style = MaterialTheme.typography.labelLarge)
+        if (showTitle) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(painterResource(R.drawable.ic_sparkle), null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
+                Spacer(Modifier.width(8.dp))
+                Text(stringResource(R.string.ai_title), color = colors.secondaryContent, style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f))
+                if (onContinue != null && answer.done && answer.text.isNotEmpty()) {
+                    Text(stringResource(R.string.ai_continue_short), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge)
+                }
+            }
+            Spacer(Modifier.height(6.dp))
         }
-        Spacer(Modifier.height(6.dp))
         if (answer.error != null) {
             Text(answer.error, color = colors.secondaryContent, style = MaterialTheme.typography.bodySmall, maxLines = 3, overflow = TextOverflow.Ellipsis)
         } else if (answer.text.isEmpty()) {
@@ -630,6 +694,85 @@ private fun StoreIcon(url: String?, size: Dp) {
         Image(image, null, Modifier.size(size).clip(RoundedCornerShape(size * 0.24f)))
     } else {
         SymbolTile(R.drawable.ic_store, size)
+    }
+}
+
+/**
+ * The conversation with Gemini Nano: each question as the user's bubble, the reply below it as it is
+ * written; a close button ends it. [newestFirst] for results that stack upwards from the field.
+ */
+private fun LazyListScope.chatItems(
+    chat: List<ChatTurn>,
+    newestFirst: Boolean,
+    backdrop: Backdrop,
+    actions: ResultActions,
+    onClose: () -> Unit,
+) {
+    val header: LazyListScope.() -> Unit = { item("chat-header") { ChatHeader(onClose) } }
+    if (!newestFirst) header()
+    val turns = if (newestFirst) chat.asReversed() else chat
+    turns.forEach { turn ->
+        // Within a turn the answer sits below the question; reversed lists draw items bottom up.
+        val question: LazyListScope.() -> Unit = {
+            item("q-${turn.id}") { UserBubble(turn.question, Modifier.animateItem()) }
+        }
+        val reply: LazyListScope.() -> Unit = {
+            item("a-${turn.id}") {
+                Box(Modifier.animateItem()) {
+                    Section(null, backdrop) {
+                        val action = turn.answer.action
+                        if (action != null) {
+                            SmartActionRow(action) { actions.runSmart(action) }
+                        } else {
+                            AiAnswerRow(
+                                turn.answer,
+                                onCopy = { actions.copy(turn.answer.text) },
+                                onOpenSource = { actions.openMessage(it.target, null, null) },
+                                showTitle = false,
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        if (newestFirst) {
+            reply()
+            question()
+        } else {
+            question()
+            reply()
+        }
+    }
+    if (newestFirst) header()
+}
+
+@Composable
+private fun ChatHeader(onClose: () -> Unit) {
+    val colors = LocalGlassColors.current
+    Row(Modifier.fillMaxWidth().padding(start = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+        Icon(painterResource(R.drawable.ic_sparkle), null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
+        Spacer(Modifier.width(8.dp))
+        Text(stringResource(R.string.ai_title), color = colors.content, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+        IconButton(onClick = onClose) {
+            Icon(painterResource(R.drawable.ic_close), stringResource(R.string.ai_end_chat), Modifier.size(18.dp), tint = colors.secondaryContent)
+        }
+    }
+}
+
+/** What the user asked, on the right as in a messenger. */
+@Composable
+private fun UserBubble(text: String, modifier: Modifier = Modifier) {
+    Row(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+        Text(
+            text,
+            color = MaterialTheme.colorScheme.onPrimary,
+            style = MaterialTheme.typography.bodyLarge,
+            modifier = Modifier
+                .padding(start = 48.dp)
+                .clip(RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp, bottomStart = 20.dp, bottomEnd = 6.dp))
+                .background(MaterialTheme.colorScheme.primary)
+                .padding(horizontal = 14.dp, vertical = 10.dp),
+        )
     }
 }
 
@@ -852,7 +995,14 @@ private fun AppGrid(apps: List<AppTarget>, onClick: (AppTarget, Rect?) -> Unit) 
 }
 
 @Composable
-private fun SearchField(state: SearchState, focusRequester: FocusRequester, backdrop: Backdrop, answer: Answer?, onSubmit: () -> Unit) {
+private fun SearchField(
+    state: SearchState,
+    focusRequester: FocusRequester,
+    backdrop: Backdrop,
+    answer: Answer?,
+    chatting: Boolean,
+    onSubmit: () -> Unit,
+) {
     val colors = LocalGlassColors.current
     Row(
         Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
@@ -870,7 +1020,7 @@ private fun SearchField(state: SearchState, focusRequester: FocusRequester, back
             Spacer(Modifier.width(10.dp))
             Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
                 if (state.query.text.isEmpty()) {
-                    Text(stringResource(R.string.search_hint), color = colors.secondaryContent, maxLines = 1)
+                    Text(stringResource(if (chatting) R.string.ai_follow_up_hint else R.string.search_hint), color = colors.secondaryContent, maxLines = 1)
                 }
                 BasicTextField(
                     state = state.query,

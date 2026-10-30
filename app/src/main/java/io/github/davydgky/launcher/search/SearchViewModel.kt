@@ -23,12 +23,17 @@ import java.text.DecimalFormatSymbols
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.distinctUntilChangedBy
+import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.transformLatest
@@ -55,7 +60,7 @@ class ResultsState(
  * Gemini Nano's reply to [query]: an answer [text] so far ([done] once complete), or a request to the
  * phone ([action], "ruf Mama an") to confirm with a tap.
  */
-class AiAnswer(
+data class AiAnswer(
     val query: String,
     val text: String,
     val done: Boolean,
@@ -65,6 +70,9 @@ class AiAnswer(
     /** Why there is no answer (Gemini Nano busy, loading, out of its quota). */
     val error: String? = null,
 )
+
+/** One exchange of the conversation with Gemini Nano: what was asked and the reply so far. */
+data class ChatTurn(val id: Int, val question: String, val answer: AiAnswer)
 
 /** What other words, suggested by Gemini Nano, found for an input that found nothing itself. */
 class RelatedResults(val query: String, val terms: List<String>, val items: List<ScoredItem>)
@@ -104,16 +112,6 @@ class SearchViewModel(application: Application) : AndroidViewModel(application) 
         const val MAX_SOURCES = 6
         const val SHOWN_SOURCES = 2
 
-        private val QUESTION_WORDS = setOf(
-            "wann", "wo", "wohin", "wer", "was", "wie", "welche", "welcher", "welches", "hat", "habe", "ist", "muss", "soll",
-            "when", "where", "who", "what", "how", "which", "did", "does", "is", "do",
-        )
-
-        /** "Wann muss ich zum Bahnhof?", "wo treffen wir uns", "was hat Anna geschrieben". */
-        fun looksLikeQuestion(text: String): Boolean {
-            val words = text.trim().lowercase().split(Regex("\\s+"))
-            return text.contains('?') || words.firstOrNull() in QUESTION_WORDS || words.size >= 4
-        }
         /** The store is asked once typing pauses this long, not for every letter. */
         const val STORE_PAUSE_MS = 600L
         const val MIN_STORE_CHARS = 3
@@ -121,6 +119,8 @@ class SearchViewModel(application: Application) : AndroidViewModel(application) 
 
     private val launcher = application.launcherApp
     private val nano = application.launcherApp.nano
+    // Before the flows below, which read it as soon as they start.
+    private val chatState = MutableStateFlow<List<ChatTurn>>(emptyList())
     private val settings = application.launcherApp.settings
 
     init {
@@ -135,59 +135,106 @@ class SearchViewModel(application: Application) : AndroidViewModel(application) 
         .distinctUntilChangedBy { it.query.trim() }
         .transformLatest { state ->
             emit(null)
-            val query = state.query.trim()
+            // In a conversation, typing only prepares the next question; Enter sends it.
+            if (chatState.value.isNotEmpty()) return@transformLatest
             if (!wantsAnswer(state)) return@transformLatest
             if (!settings.prefs.first().aiAnswers) return@transformLatest
             nano.prepare()
             delay(AI_PAUSE_MS)
-            emit(AiAnswer(query, "", done = false))
-            if (!nano.awaitReady()) {
-                // Say why instead of showing nothing; quietly nothing on devices without Gemini Nano.
-                val status = nano.availability.value
-                emit(
-                    when (status) {
-                        NanoAnswers.Availability.Unsupported -> null
-                        NanoAnswers.Availability.Downloading -> AiAnswer(query, "", done = true, error = launcher.getString(R.string.ai_status_downloading))
-                        else -> AiAnswer(query, "", done = true, error = nano.lastError ?: launcher.getString(R.string.ai_not_ready))
-                    },
-                )
-                return@transformLatest
-            }
-            val command = QueryKinds.isCommand(query)
-            // Questions may be answered from the messages on the phone ("Wann muss ich zum Bahnhof?").
-            val sources = if (!command && looksLikeQuestion(query)) {
-                runCatching { launcher.messages.relevant(query, MAX_SOURCES) }.getOrDefault(emptyList())
-            } else emptyList()
-            val shownSources = sources.sortedByDescending { it.text.time }.take(SHOWN_SOURCES)
-            var last = ""
-            var action: SmartAction? = null
-            var error: String? = null
-            try {
-                nano.reply(query, sources.map { it.text }, command).collect { reply ->
-                    when (reply) {
-                        is NanoReply.Text -> {
-                            last = reply.text
-                            emit(AiAnswer(query, reply.text, done = false, sources = shownSources))
-                        }
-                        is NanoReply.Command -> action = reply.action
-                    }
-                }
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                Log.w(TAG, "Gemini Nano failed", e)
-                error = e.message ?: e.javaClass.simpleName
-            }
-            emit(
-                when {
-                    action != null -> AiAnswer(query, "", done = true, action = action)
-                    last.isNotEmpty() -> AiAnswer(query, last, done = true, sources = shownSources)
-                    error != null -> AiAnswer(query, "", done = true, error = error)
-                    else -> null
-                },
-            )
+            emitAll(answer(state.query.trim(), emptyList()))
         }
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
+    /**
+     * Gemini Nano's reply to [query] as it grows, after [history] of a conversation: a command, an answer
+     * (from the matching messages for questions, from all recent ones for "fasse meine Nachrichten
+     * zusammen"), or why there is none. Ends with a done answer or null.
+     */
+    private fun answer(query: String, history: List<Pair<String, String>>): Flow<AiAnswer?> = flow {
+        emit(AiAnswer(query, "", done = false))
+        if (!nano.awaitReady()) {
+            // Say why instead of showing nothing; quietly nothing on devices without Gemini Nano.
+            emit(
+                when (nano.availability.value) {
+                    NanoAnswers.Availability.Unsupported -> null
+                    NanoAnswers.Availability.Downloading -> AiAnswer(query, "", done = true, error = launcher.getString(R.string.ai_status_downloading))
+                    else -> AiAnswer(query, "", done = true, error = nano.lastError ?: launcher.getString(R.string.ai_not_ready))
+                },
+            )
+            return@flow
+        }
+        val command = QueryKinds.isCommand(query)
+        val overview = if (command) null else QueryKinds.wantsMessages(query)
+        val sources = when {
+            overview != null -> runCatching { launcher.messages.recent(overview.hours, overview.app) }.getOrDefault(emptyList())
+            // Questions may be answered from the messages on the phone ("Wann muss ich zum Bahnhof?").
+            !command && QueryKinds.isQuestion(query) -> runCatching { launcher.messages.relevant(query, MAX_SOURCES) }.getOrDefault(emptyList())
+            else -> emptyList()
+        }
+        val shownSources = if (overview != null) emptyList() else sources.sortedByDescending { it.text.time }.take(SHOWN_SOURCES)
+        var last = ""
+        var action: SmartAction? = null
+        var error: String? = null
+        try {
+            nano.reply(query, sources.map { it.text }, command, history, overview = overview != null).collect { reply ->
+                when (reply) {
+                    is NanoReply.Text -> {
+                        last = reply.text
+                        emit(AiAnswer(query, reply.text, done = false, sources = shownSources))
+                    }
+                    is NanoReply.Command -> action = reply.action
+                }
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "Gemini Nano failed", e)
+            error = e.message ?: e.javaClass.simpleName
+        }
+        emit(
+            when {
+                action != null -> AiAnswer(query, "", done = true, action = action)
+                last.isNotEmpty() -> AiAnswer(query, last, done = true, sources = shownSources)
+                error != null -> AiAnswer(query, "", done = true, error = error)
+                else -> null
+            },
+        )
+    }
+
+    /** The conversation with Gemini Nano in the search, oldest first; empty when there is none. */
+    val chat: StateFlow<List<ChatTurn>> = chatState.asStateFlow()
+
+    private var chatJob: Job? = null
+    private var nextTurn = 0
+
+    /**
+     * Sends [question] to the conversation (starting one): it moves up as the user's message and Gemini
+     * Nano's reply grows below it. [known] is an answer the search already has for it.
+     */
+    fun ask(question: String, known: AiAnswer? = null) {
+        val text = question.trim()
+        if (text.isEmpty()) return
+        chatJob?.cancel()
+        // An answer cut short by the next question keeps what it had.
+        chatState.value = chatState.value.map { if (it.answer.done) it else it.copy(answer = it.answer.copy(done = true)) }
+        val history = chatState.value.filter { it.answer.text.isNotEmpty() }.map { it.question to it.answer.text }
+        val id = nextTurn++
+        val start = known?.takeIf { it.done && it.query == text } ?: AiAnswer(text, "", done = false)
+        chatState.value = chatState.value + ChatTurn(id, text, start)
+        if (start.done) return
+        chatJob = viewModelScope.launch {
+            answer(text, history).collect { reply ->
+                val shown = reply ?: AiAnswer(text, "", done = true, error = launcher.getString(R.string.ai_no_answer))
+                chatState.value = chatState.value.map { if (it.id == id) it.copy(answer = shown) else it }
+            }
+        }
+    }
+
+    /** Ends the conversation (closing the search, back, the close button). */
+    fun endChat() {
+        chatJob?.cancel()
+        chatState.value = emptyList()
+    }
 
     /**
      * Whether Gemini Nano should answer: not for a sum or a timer (answered already), not when the input
@@ -211,6 +258,7 @@ class SearchViewModel(application: Application) : AndroidViewModel(application) 
         .transformLatest { state ->
             emit(null)
             val query = state.query.trim()
+            if (chatState.value.isNotEmpty()) return@transformLatest
             val empty = state.results.top == null && state.results.groups.isEmpty()
             if (!empty || query.length < MIN_AI_CHARS || state.answer != null || state.action != null) return@transformLatest
             if (!settings.prefs.first().aiAnswers) return@transformLatest
@@ -241,6 +289,7 @@ class SearchViewModel(application: Application) : AndroidViewModel(application) 
         .transformLatest { state ->
             emit(null)
             val query = state.query.trim()
+            if (chatState.value.isNotEmpty()) return@transformLatest
             if (query.length < MIN_STORE_CHARS || state.answer != null || state.action != null) return@transformLatest
             val top = if (state.results.top?.item?.kind == SourceKind.App) 1 else 0
             val listed = state.results.groups.firstOrNull { it.kind == SourceKind.App }?.items?.size ?: 0

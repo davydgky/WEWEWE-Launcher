@@ -40,6 +40,10 @@ Welche Quelle Android unter welcher Bedingung erlaubt und warum die Architektur 
   in den Einstellungen. Nano antwortet auf jede Eingabe außer Summen, Timern und genauen App-, Kontakt- oder
   Einstellungsnamen; Befehle und Fragen bekommen getrennte, kurze Anweisungen mit Beispielen. Findet die
   Suche nichts, schlägt Nano andere Suchbegriffe vor und zeigt, was diese finden („Passend dazu“).
+- **Gespräch mit Gemini Nano**: Enter auf eine Frage oder Anweisung schiebt sie als Nachricht nach oben ins
+  Nano-Fenster, darunter entsteht die Antwort; weitere Fragen beziehen sich darauf („und morgen?“). Zurück
+  oder × beendet das Gespräch. „Fasse meine Nachrichten zusammen“, „was gibt es Neues auf WhatsApp“, „meine
+  Chats der letzten Woche“ fassen die gespeicherten Nachrichten des Zeitraums zusammen.
 - **Gemini Nano im ganzen Launcher** (nur auf dem Gerät, abschaltbar):
   - Sätze werden zu Aktionen: „ruf Mama an“, „schreib Anna, dass ich später komme“, „navigiere nach Hause“,
     „Termin morgen 15 Uhr Zahnarzt“. Ein Tippen öffnet Telefon, Nachrichten, Karten oder Kalender, wo man
