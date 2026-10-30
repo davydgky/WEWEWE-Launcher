@@ -138,16 +138,19 @@ class NanoAnswers(private val scope: CoroutineScope) {
         if (!isReady) return@flow
         interactive()
         busy.withLock {
+            // The conversation so far goes into the input itself, as a transcript ending with the new
+            // message: small models follow that far better than history tucked into the instruction.
+            val input = transcript(history, query)
             if (command) {
-                val json = generate(client, commandInstruction(), query, maxTokens = 120, temperature = 0.1f)
+                val json = generate(client, commandInstruction(), input, maxTokens = 120, temperature = 0.1f)
                 val action = SmartActions.parse(json)
                 if (action != null) {
                     emit(NanoReply.Command(action))
                     return@withLock
                 }
             }
-            val instruction = answerInstruction() + messageContext(messages, overview) + conversation(history)
-            val request = generateContentRequest(SystemInstruction(instruction), TextPart(query.trim())) {
+            val instruction = answerInstruction() + messageContext(messages, overview) + if (history.isEmpty()) "" else "\n\n" + FOLLOW_UP_INSTRUCTION
+            val request = generateContentRequest(SystemInstruction(instruction), TextPart(input)) {
                 temperature = 0.3f
                 topK = 24
                 maxOutputTokens = if (overview) MAX_OVERVIEW_TOKENS else MAX_ANSWER_TOKENS
@@ -184,7 +187,7 @@ class NanoAnswers(private val scope: CoroutineScope) {
     /** Small models like to start with "Antwort:" or wrap in code blocks; neither belongs in the row. */
     private fun clean(text: String): String = text.trim()
         .removePrefix("```").removeSuffix("```")
-        .replace(Regex("^(Antwort|Answer)\\s*:\\s*", RegexOption.IGNORE_CASE), "")
+        .replace(Regex("^(Antwort|Answer|Du|You)\\s*:\\s*", RegexOption.IGNORE_CASE), "")
         .replace("**", "")
         .trim()
 
@@ -283,15 +286,15 @@ class NanoAnswers(private val scope: CoroutineScope) {
         }
     }
 
-    /** The conversation so far, so a follow-up refers to it. */
-    private fun conversation(history: List<Pair<String, String>>): String {
-        if (history.isEmpty()) return ""
+    /** The new message, after the conversation so far when there is one. */
+    private fun transcript(history: List<Pair<String, String>>, query: String): String {
+        if (history.isEmpty()) return query.trim()
         return buildString {
-            append("\n\nBisheriges Gespräch (beziehe dich darauf, wenn die Eingabe daran anknüpft):\n")
             history.takeLast(MAX_HISTORY).forEach { (question, answer) ->
                 append("Nutzer: ").append(question.take(MAX_HISTORY_CHARS)).append('\n')
-                append("Du: ").append(answer.take(MAX_HISTORY_CHARS)).append('\n')
+                append("Du: ").append(answer.take(MAX_HISTORY_CHARS)).append("\n\n")
             }
+            append("Nutzer: ").append(query.trim())
         }
     }
 
@@ -324,6 +327,8 @@ class NanoAnswers(private val scope: CoroutineScope) {
         val tomorrow = LocalDateTime.now().plusDays(1).format(DateTimeFormatter.ISO_LOCAL_DATE)
         return """
             Wandle den Auftrag an das Handy in genau eine Zeile JSON um, ohne weiteren Text und ohne Codeblock.
+            Steht davor ein Gespräch, gilt der letzte Auftrag; Wörter wie "sie", "ihm" oder "dort" meinen, was
+            im Gespräch zuletzt genannt wurde.
             Jetzt ist ${now()}.
             Felder: action (call, sms, mail, navigate, event, web), who, text, title, place, start, end
             (Zeiten als YYYY-MM-DDTHH:MM). Lass Felder weg, die nicht vorkommen.
@@ -359,8 +364,15 @@ class NanoAnswers(private val scope: CoroutineScope) {
         const val MAX_FOLDER_NAME = 24
         const val MAX_MESSAGE_CHARS = 300
         const val MAX_OVERVIEW_TOKENS = 420
-        const val MAX_HISTORY = 4
+        const val MAX_HISTORY = 6
         const val MAX_HISTORY_CHARS = 400
+
+        val FOLLOW_UP_INSTRUCTION = """
+            Die Eingabe ist ein Gespräch: frühere Nachrichten des Nutzers ("Nutzer:") und deine Antworten ("Du:").
+            Antworte nur auf die letzte Nutzer-Nachricht, aber im Zusammenhang des Gesprächs: kurze Folgefragen wie
+            "und morgen?", "warum?", "mehr dazu", "und sie?" beziehen sich auf das zuvor Besprochene. Wiederhole
+            frühere Antworten nicht, schreibe nicht "Du:" oder "Nutzer:" in deine Antwort.
+        """.trimIndent()
 
         val OVERVIEW_INSTRUCTION = """
             Fasse diese Nachrichten für den Nutzer zusammen: pro Person oder Gruppe in einer kurzen Zeile mit "• ",

@@ -69,6 +69,8 @@ data class AiAnswer(
     val sources: List<Message> = emptyList(),
     /** Why there is no answer (Gemini Nano busy, loading, out of its quota). */
     val error: String? = null,
+    /** All messages the answer was given, so follow-up questions in a conversation still have them. */
+    val context: List<Message> = emptyList(),
 )
 
 /** One exchange of the conversation with Gemini Nano: what was asked and the reply so far. */
@@ -110,6 +112,8 @@ class SearchViewModel(application: Application) : AndroidViewModel(application) 
         const val RELATED_PER_TERM = 3
         const val MAX_RELATED = 8
         const val MAX_SOURCES = 6
+        /** Messages given to Gemini Nano at most, found and carried together. */
+        const val MAX_CONTEXT = 40
         const val SHOWN_SOURCES = 2
 
         /** The store is asked once typing pauses this long, not for every letter. */
@@ -150,7 +154,12 @@ class SearchViewModel(application: Application) : AndroidViewModel(application) 
      * (from the matching messages for questions, from all recent ones for "fasse meine Nachrichten
      * zusammen"), or why there is none. Ends with a done answer or null.
      */
-    private fun answer(query: String, history: List<Pair<String, String>>): Flow<AiAnswer?> = flow {
+    private fun answer(
+        query: String,
+        history: List<Pair<String, String>>,
+        /** Messages the previous answer of the conversation was based on. */
+        carried: List<Message> = emptyList(),
+    ): Flow<AiAnswer?> = flow {
         emit(AiAnswer(query, "", done = false))
         if (!nano.awaitReady()) {
             // Say why instead of showing nothing; quietly nothing on devices without Gemini Nano.
@@ -165,13 +174,18 @@ class SearchViewModel(application: Application) : AndroidViewModel(application) 
         }
         val command = QueryKinds.isCommand(query)
         val overview = if (command) null else QueryKinds.wantsMessages(query)
-        val sources = when {
+        // In a conversation the words of the previous question count too ("und Anna?" after "wer kommt zum Essen?").
+        val searchText = (history.lastOrNull()?.first?.let { "$it " }.orEmpty()) + query
+        val found = when {
             overview != null -> runCatching { launcher.messages.recent(overview.hours, overview.app) }.getOrDefault(emptyList())
             // Questions may be answered from the messages on the phone ("Wann muss ich zum Bahnhof?").
-            !command && QueryKinds.isQuestion(query) -> runCatching { launcher.messages.relevant(query, MAX_SOURCES) }.getOrDefault(emptyList())
+            !command && (QueryKinds.isQuestion(query) || history.isNotEmpty()) ->
+                runCatching { launcher.messages.relevant(searchText, MAX_SOURCES) }.getOrDefault(emptyList())
             else -> emptyList()
         }
-        val shownSources = if (overview != null) emptyList() else sources.sortedByDescending { it.text.time }.take(SHOWN_SOURCES)
+        // A follow-up keeps the messages the conversation is about.
+        val sources = (found + carried.filter { c -> found.none { it.text.key == c.text.key } }).take(MAX_CONTEXT)
+        val shownSources = if (overview != null) emptyList() else found.ifEmpty { carried }.sortedByDescending { it.text.time }.take(SHOWN_SOURCES)
         var last = ""
         var action: SmartAction? = null
         var error: String? = null
@@ -180,7 +194,7 @@ class SearchViewModel(application: Application) : AndroidViewModel(application) 
                 when (reply) {
                     is NanoReply.Text -> {
                         last = reply.text
-                        emit(AiAnswer(query, reply.text, done = false, sources = shownSources))
+                        emit(AiAnswer(query, reply.text, done = false, sources = shownSources, context = sources))
                     }
                     is NanoReply.Command -> action = reply.action
                 }
@@ -194,7 +208,7 @@ class SearchViewModel(application: Application) : AndroidViewModel(application) 
         emit(
             when {
                 action != null -> AiAnswer(query, "", done = true, action = action)
-                last.isNotEmpty() -> AiAnswer(query, last, done = true, sources = shownSources)
+                last.isNotEmpty() -> AiAnswer(query, last, done = true, sources = shownSources, context = sources)
                 error != null -> AiAnswer(query, "", done = true, error = error)
                 else -> null
             },
@@ -218,12 +232,13 @@ class SearchViewModel(application: Application) : AndroidViewModel(application) 
         // An answer cut short by the next question keeps what it had.
         chatState.value = chatState.value.map { if (it.answer.done) it else it.copy(answer = it.answer.copy(done = true)) }
         val history = chatState.value.filter { it.answer.text.isNotEmpty() }.map { it.question to it.answer.text }
+        val carried = chatState.value.lastOrNull { it.answer.context.isNotEmpty() }?.answer?.context.orEmpty()
         val id = nextTurn++
         val start = known?.takeIf { it.done && it.query == text } ?: AiAnswer(text, "", done = false)
         chatState.value = chatState.value + ChatTurn(id, text, start)
         if (start.done) return
         chatJob = viewModelScope.launch {
-            answer(text, history).collect { reply ->
+            answer(text, history, carried).collect { reply ->
                 val shown = reply ?: AiAnswer(text, "", done = true, error = launcher.getString(R.string.ai_no_answer))
                 chatState.value = chatState.value.map { if (it.id == id) it.copy(answer = shown) else it }
             }
