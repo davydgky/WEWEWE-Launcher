@@ -71,7 +71,14 @@ class ImeController(private val view: View, private val perf: PerfStats) {
         val signal = CancellationSignal()
         cancellation = signal
         // Duration -1: the animation has no fixed length, it follows the finger.
-        insetsController.controlWindowInsetsAnimation(WindowInsets.Type.ime(), -1, null, signal, listener)
+        try {
+            insetsController.controlWindowInsetsAnimation(WindowInsets.Type.ime(), -1, null, signal, listener)
+        } catch (e: IllegalStateException) {
+            // A keyboard animation is being cancelled right now: no control this time, the plain
+            // request in finish() still brings the keyboard.
+            Log.w(TAG, "Keyboard busy", e)
+            reset()
+        }
     }
 
     fun setFraction(value: Float) {
@@ -90,8 +97,7 @@ class ImeController(private val view: View, private val perf: PerfStats) {
      */
     fun animate(shown: Boolean) {
         if (controller != null || requested) cancel()
-        val insets = view.windowInsetsController ?: return
-        if (shown) insets.show(WindowInsets.Type.ime()) else if (isKeyboardVisible) insets.hide(WindowInsets.Type.ime())
+        if (shown) request { show(WindowInsets.Type.ime()) } else if (isKeyboardVisible) request { hide(WindowInsets.Type.ime()) }
     }
 
     /** Ends the controlled animation with the keyboard [shown] or hidden. */
@@ -106,8 +112,8 @@ class ImeController(private val view: View, private val perf: PerfStats) {
                 controller = null
             }
             requested -> pendingFinish = shown
-            shown -> view.windowInsetsController?.show(WindowInsets.Type.ime())
-            else -> view.windowInsetsController?.hide(WindowInsets.Type.ime())
+            shown -> request { show(WindowInsets.Type.ime()) }
+            else -> request { hide(WindowInsets.Type.ime()) }
         }
     }
 
@@ -136,6 +142,19 @@ class ImeController(private val view: View, private val perf: PerfStats) {
         // The new keyboard position reaches the screen with the next frame.
         Choreographer.getInstance().postFrameCallback {
             perf.record(Metric.Keyboard, (SystemClock.uptimeMillis() - start).toDouble())
+        }
+    }
+
+    /**
+     * A plain show or hide. The system throws if an animation of the keyboard is being cancelled at
+     * that moment; the keyboard then just stays where it is instead of taking the launcher down.
+     */
+    private inline fun request(action: android.view.WindowInsetsController.() -> Unit) {
+        val insets = view.windowInsetsController ?: return
+        try {
+            insets.action()
+        } catch (e: IllegalStateException) {
+            Log.w(TAG, "Keyboard busy", e)
         }
     }
 
@@ -175,7 +194,12 @@ class ImeController(private val view: View, private val perf: PerfStats) {
             Log.d(TAG, "Keyboard control refused; showing it normally: $wanted")
             reset()
             // The system refused control (another animation was running); fall back to a plain request.
-            if (wanted) view.windowInsetsController?.show(WindowInsets.Type.ime()) else view.windowInsetsController?.hide(WindowInsets.Type.ime())
+            // Not from inside this callback: the cancelled animation is still being torn down, and
+            // starting a new one now throws (Android 17). Right after it, the request is accepted.
+            view.post {
+                if (controller != null || requested) return@post
+                if (wanted) request { show(WindowInsets.Type.ime()) } else if (isKeyboardVisible) request { hide(WindowInsets.Type.ime()) }
+            }
         }
     }
 }
