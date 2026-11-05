@@ -60,7 +60,7 @@ class LauncherApplication : Application() {
         super.onCreate()
         crashGuard.install()
         // An updated app may come with a new icon.
-        appScope.launch { apps.packageChanges.collect(icons::evictPackage) }
+        appScope.launch { apps.refreshedPackages.collect(icons::evictPackage) }
         appScope.launch { settings.prefs.collect { icons.setThemed(it.themedIcons) } }
         // Start indexing right away, before the first frame needs it.
         appKnowledge.start()

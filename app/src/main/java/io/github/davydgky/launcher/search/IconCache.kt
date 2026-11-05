@@ -1,6 +1,7 @@
 package io.github.davydgky.launcher.search
 
 import android.content.Context
+import android.content.pm.LauncherActivityInfo
 import android.content.pm.LauncherApps
 import android.content.res.Configuration
 import android.graphics.Bitmap
@@ -48,9 +49,9 @@ class IconCache(private val context: Context) {
 
     /** An app was updated or changed its icon: its icons and shortcut icons are loaded again. */
     fun evictPackage(packageName: String) {
-        val stale = cache.snapshot().keys.filter { "/$packageName/" in it }
-        if (stale.isEmpty()) return
-        stale.forEach(cache::remove)
+        cache.snapshot().keys.filter { "/$packageName/" in it }.forEach(cache::remove)
+        // Also when nothing was cached: a placeholder shown during the update is not kept, and is
+        // replaced by the real icon only when the icons on screen load again.
         generation++
     }
 
@@ -66,8 +67,27 @@ class IconCache(private val context: Context) {
     }
 
     fun loadApp(app: AppTarget): ImageBitmap? = cache.get(app.key) ?: runCatching {
-        (themedIcon(app) ?: app.info.getBadgedIcon(density)).render()
-    }.getOrNull()?.also { cache.put(app.key, it) }
+        val (drawable, real) = appIcon(app)
+        // The system's placeholder is shown, but not kept: the next load asks again.
+        drawable.render().also { if (real) cache.put(app.key, it) }
+    }.getOrNull()
+
+    /** The app's icon, and whether it is its own and not the system's placeholder robot. */
+    private fun appIcon(app: AppTarget): Pair<Drawable, Boolean> {
+        if (!isPlaceholder(app.info)) return (themedIcon(app, app.info) ?: app.info.getBadgedIcon(density)) to true
+        // The entry may be from before an update, when the app's resources were being replaced:
+        // ask the system for a fresh one.
+        val fresh = runCatching {
+            launcherApps.getActivityList(app.packageName, app.user).firstOrNull { it.componentName == app.component }
+        }.getOrNull()
+        if (fresh != null && !isPlaceholder(fresh)) return (themedIcon(app, fresh) ?: fresh.getBadgedIcon(density)) to true
+        return app.info.getBadgedIcon(density) to false
+    }
+
+    private fun isPlaceholder(info: LauncherActivityInfo): Boolean {
+        val state = runCatching { info.getIcon(density).constantState }.getOrNull() ?: return false
+        return state == context.packageManager.defaultActivityIcon.constantState
+    }
 
     /** Icons in the wallpaper colors, for apps that have a monochrome icon. */
     @Volatile var themed = false
@@ -84,9 +104,9 @@ class IconCache(private val context: Context) {
      * The app's monochrome icon on a tinted background, in the system's dynamic colors as on Pixel
      * phones (light: light background, dark symbol; dark the other way round); null if it has none.
      */
-    private fun themedIcon(app: AppTarget): Drawable? {
+    private fun themedIcon(app: AppTarget, info: LauncherActivityInfo): Drawable? {
         if (!themed) return null
-        val icon = app.info.getIcon(density) as? AdaptiveIconDrawable ?: return null
+        val icon = info.getIcon(density) as? AdaptiveIconDrawable ?: return null
         val mono = icon.monochrome ?: return null
         val dark = context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
         val background = context.getColor(if (dark) android.R.color.system_neutral1_800 else android.R.color.system_accent1_100)

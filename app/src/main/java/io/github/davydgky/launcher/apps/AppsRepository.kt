@@ -55,6 +55,15 @@ class AppsRepository(private val context: Context, private val settings: Launche
     /** Packages that were installed, updated or removed. */
     val packageChanges: SharedFlow<String> = changedPackages.asSharedFlow()
 
+    /** Packages changed since the last reload; announced once the list holds their new state. */
+    private val unreloaded = HashSet<String>()
+    private val reloadedPackages = MutableSharedFlow<String>(extraBufferCapacity = 64)
+    /**
+     * Packages whose entries in [apps] were just replaced after an install or update. Only now is it
+     * safe to load their icons again: during the update the old entries return the default icon.
+     */
+    val refreshedPackages: SharedFlow<String> = reloadedPackages.asSharedFlow()
+
     private val unavailableState = MutableStateFlow<Set<Long>>(emptySet())
     /**
      * Serial numbers of profiles that are paused or locked right now. Their apps are not gone: the home
@@ -91,6 +100,13 @@ class AppsRepository(private val context: Context, private val settings: Launche
             }.collect {
                 appState.value = it
                 reloadShortcuts(0)
+            }
+        }
+        scope.launch {
+            installedState.collect {
+                val done = unreloaded.toList()
+                unreloaded.clear()
+                done.forEach(reloadedPackages::tryEmit)
             }
         }
         reloadApps(0)
@@ -235,6 +251,7 @@ class AppsRepository(private val context: Context, private val settings: Launche
     }
 
     private fun changed(packageName: String) {
+        unreloaded += packageName
         changedPackages.tryEmit(packageName)
         reloadApps(APP_DEBOUNCE_MS)
     }
