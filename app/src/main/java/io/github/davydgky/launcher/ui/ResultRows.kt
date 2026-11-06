@@ -57,6 +57,7 @@ import io.github.davydgky.launcher.search.ImageTarget
 import io.github.davydgky.launcher.search.SettingTarget
 import io.github.davydgky.launcher.search.ShortcutTarget
 import io.github.davydgky.launcher.search.WebTarget
+import io.github.davydgky.launcher.search.rememberAppIcon
 import io.github.davydgky.launcher.search.rememberIcon
 import io.github.davydgky.launcher.sources.Velo
 import io.github.davydgky.launcher.ui.glass.LocalGlassColors
@@ -200,7 +201,7 @@ fun SymbolTile(icon: Int, size: Dp) {
 @Composable
 fun AppIconImage(app: AppTarget, size: Dp, modifier: Modifier = Modifier) {
     val icons = LocalContext.current.launcherApp.icons
-    val icon by rememberIcon(icons, app.key) { icons.loadApp(app) }
+    val icon by rememberAppIcon(icons, app)
     BitmapIcon(icon, size, null, modifier = modifier, filter = if (app.paused) PausedFilter else null)
 }
 
