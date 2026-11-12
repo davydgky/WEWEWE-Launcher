@@ -39,6 +39,22 @@ data class TodoSuggestion(
     val messageTime: Long = 0L,
 )
 
+/** The parts of the organizer page, which the user can put in any order and hide. */
+object OrganizerSections {
+    const val CALENDAR = "calendar"
+    const val AGENDA = "agenda"
+    const val SUGGESTIONS = "suggestions"
+    const val TASKS = "tasks"
+
+    val DEFAULT = listOf(CALENDAR, AGENDA, SUGGESTIONS, TASKS)
+
+    /** [order] as saved, without names it does not know, and with parts added since at the end. */
+    fun normalized(order: List<String>): List<String> {
+        val known = order.distinct().filter { it in DEFAULT }
+        return known + DEFAULT.filter { it !in known }
+    }
+}
+
 /** Everything the organizer page keeps of its own (the calendar itself stays in the system provider). */
 data class OrganizerState(
     val lists: List<TodoList> = emptyList(),
@@ -47,6 +63,9 @@ data class OrganizerState(
     val suggestions: List<TodoSuggestion> = emptyList(),
     /** Messages up to this time have been looked through for suggestions. */
     val scannedUntil: Long = 0L,
+    /** The page's parts from top to bottom ([OrganizerSections]). */
+    val sections: List<String> = OrganizerSections.DEFAULT,
+    val hiddenSections: Set<String> = emptySet(),
 ) {
 
     fun list(id: Long): TodoList? = lists.firstOrNull { it.id == id }
@@ -117,6 +136,8 @@ object OrganizerCodec {
             }
         })
         put("scannedUntil", state.scannedUntil)
+        put("sections", JSONArray(state.sections))
+        put("hidden", JSONArray(state.hiddenSections.sorted()))
     }.toString()
 
     fun decode(text: String): OrganizerState {
@@ -166,6 +187,10 @@ object OrganizerCodec {
             nextId = root.optLong("nextId", highestId + 1),
             suggestions = suggestions,
             scannedUntil = root.optLong("scannedUntil"),
+            sections = OrganizerSections.normalized(root.optJSONArray("sections").strings()),
+            hiddenSections = root.optJSONArray("hidden").strings().filterTo(HashSet()) { it in OrganizerSections.DEFAULT },
         )
     }
+
+    private fun JSONArray?.strings(): List<String> = if (this == null) emptyList() else (0 until length()).map { getString(it) }
 }

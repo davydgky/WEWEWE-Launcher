@@ -236,7 +236,7 @@ fun HomeScreen(
                 beyondViewportPageCount = homePages,
             ) { page ->
                 when {
-                    page < offset -> OrganizerPage(context.launcherApp.organizer, bottomSpace = sidePageBottom)
+                    page < offset -> OrganizerPage(context.launcherApp.organizer, bottomSpace = sidePageBottom, active = pagerState.currentPage < offset)
                     page < homePages + offset -> {
                         Box(Modifier.statusBarsPadding().navigationBarsPadding().padding(bottom = INDICATOR_HEIGHT + barsHeightDp)) {
                             WorkspacePage(page - offset, workspace, apps, shortcuts, controller)

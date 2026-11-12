@@ -12,6 +12,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -133,7 +134,13 @@ private val LIST_PALETTE = listOf(
  * tab per list. A reminder due on a day shows there in the calendar too.
  */
 @Composable
-fun OrganizerPage(repository: OrganizerRepository, modifier: Modifier = Modifier, bottomSpace: Dp = 0.dp) {
+fun OrganizerPage(
+    repository: OrganizerRepository,
+    modifier: Modifier = Modifier,
+    bottomSpace: Dp = 0.dp,
+    /** The page is on screen; arranging it ends when it is swiped away. */
+    active: Boolean = true,
+) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val organizer by repository.organizer.collectAsStateWithLifecycle()
@@ -181,6 +188,10 @@ fun OrganizerPage(repository: OrganizerRepository, modifier: Modifier = Modifier
         state.todos.mapNotNullTo(HashSet()) { it.dueAtMillis?.toLocalDate() }
     }
 
+    // Arranging the page: its parts as cards to drag into another order or hide.
+    var editing by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(active) { if (!active) editing = false }
+    androidx.activity.compose.BackHandler(enabled = editing && active) { editing = false }
     var showAddEvent by remember { mutableStateOf(false) }
     var editingTodo by remember { mutableStateOf<Todo?>(null) }
 
@@ -195,59 +206,81 @@ fun OrganizerPage(repository: OrganizerRepository, modifier: Modifier = Modifier
         ) {
             Spacer(Modifier.windowInsetsTopHeight(WindowInsets.statusBars))
             Spacer(Modifier.height(12.dp))
-            Text(
-                stringResource(R.string.organizer_title),
-                color = wallpaperTextColor(),
-                fontSize = 26.sp,
-                fontWeight = FontWeight.Bold,
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    stringResource(R.string.organizer_title),
+                    color = wallpaperTextColor(),
+                    fontSize = 26.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.weight(1f),
+                )
+                if (editing) {
+                    TextButton(onClick = { editing = false }) {
+                        Text(stringResource(R.string.organizer_done), color = wallpaperTextColor(), fontWeight = FontWeight.SemiBold)
+                    }
+                } else {
+                    IconButton(onClick = { editing = true }) {
+                        Icon(painterResource(R.drawable.ic_edit), stringResource(R.string.organizer_edit), tint = wallpaperTextColor())
+                    }
+                }
+            }
             Spacer(Modifier.height(16.dp))
 
-            if (!hasReadAccess) {
-                PermissionBanner(stringResource(R.string.organizer_connect_calendar)) { readPermission.launch(Manifest.permission.READ_CALENDAR) }
-                Spacer(Modifier.height(12.dp))
-            }
-
-            CalendarCard(
-                scale = scale,
-                selectedDate = selectedDate,
-                eventsByDay = eventsByDay,
-                todoDays = todoDays,
-                onScaleChange = { scale = it },
-                onSelectDate = { selectedDate = it },
-            )
-
-            Spacer(Modifier.height(18.dp))
-            AgendaSection(
-                date = selectedDate,
-                events = eventsByDay[selectedDate].orEmpty(),
-                todos = state.todos.filter { it.dueAtMillis?.toLocalDate() == selectedDate },
-                onAddEvent = {
-                    if (!hasWriteAccess) writePermission.launch(Manifest.permission.WRITE_CALENDAR)
-                    showAddEvent = true
-                },
-                onToggleTodo = repository::toggleDone,
-                onEditTodo = { editingTodo = it },
-            )
-
-            if (state.suggestions.isNotEmpty()) {
-                Spacer(Modifier.height(26.dp))
-                SuggestionsSection(
-                    suggestions = state.suggestions,
-                    onAccept = { repository.acceptSuggestion(it.id, selectedTab) },
-                    onDismiss = { repository.dismissSuggestion(it.id) },
-                    onDismissAll = repository::dismissAllSuggestions,
+            if (editing) {
+                OrganizerEditor(
+                    sections = state.sections,
+                    hidden = state.hiddenSections,
+                    onMove = repository::moveSection,
+                    onSetHidden = repository::setSectionHidden,
                 )
+            } else {
+                if (!hasReadAccess && OrganizerSections.CALENDAR !in state.hiddenSections) {
+                    PermissionBanner(stringResource(R.string.organizer_connect_calendar)) { readPermission.launch(Manifest.permission.READ_CALENDAR) }
+                    Spacer(Modifier.height(12.dp))
+                }
+                var first = true
+                state.sections.filter { it !in state.hiddenSections }.forEach { section ->
+                    // Suggestions only take room while there are some.
+                    if (section == OrganizerSections.SUGGESTIONS && state.suggestions.isEmpty()) return@forEach
+                    if (!first) Spacer(Modifier.height(if (section == OrganizerSections.AGENDA) 18.dp else 26.dp))
+                    first = false
+                    when (section) {
+                        OrganizerSections.CALENDAR -> CalendarCard(
+                            scale = scale,
+                            selectedDate = selectedDate,
+                            eventsByDay = eventsByDay,
+                            todoDays = todoDays,
+                            onScaleChange = { scale = it },
+                            onSelectDate = { selectedDate = it },
+                        )
+                        OrganizerSections.AGENDA -> AgendaSection(
+                            date = selectedDate,
+                            events = eventsByDay[selectedDate].orEmpty(),
+                            todos = state.todos.filter { it.dueAtMillis?.toLocalDate() == selectedDate },
+                            onAddEvent = {
+                                if (!hasWriteAccess) writePermission.launch(Manifest.permission.WRITE_CALENDAR)
+                                showAddEvent = true
+                            },
+                            onToggleTodo = repository::toggleDone,
+                            onEditTodo = { editingTodo = it },
+                        )
+                        OrganizerSections.SUGGESTIONS -> SuggestionsSection(
+                            suggestions = state.suggestions,
+                            onAccept = { repository.acceptSuggestion(it.id, selectedTab) },
+                            onDismiss = { repository.dismissSuggestion(it.id) },
+                            onDismissAll = repository::dismissAllSuggestions,
+                        )
+                        OrganizerSections.TASKS -> TodoSection(
+                            state = state,
+                            repository = repository,
+                            selectedTab = selectedTab,
+                            onSelectTab = { selectedTab = it },
+                            onEditTodo = { editingTodo = it },
+                        )
+                        else -> Unit
+                    }
+                }
             }
-
-            Spacer(Modifier.height(26.dp))
-            TodoSection(
-                state = state,
-                repository = repository,
-                selectedTab = selectedTab,
-                onSelectTab = { selectedTab = it },
-                onEditTodo = { editingTodo = it },
-            )
             // The page reaches the bottom edge; its end scrolls up above the page dots and navigation bar.
             Spacer(Modifier.height(24.dp + bottomSpace))
         }
@@ -428,20 +461,46 @@ private fun TodoSection(
 ) {
     val color = wallpaperTextColor()
     var newListName by remember { mutableStateOf<String?>(null) }
+    // A long press on a list's tab: rename it or delete it (its reminders move to another list).
+    var menuList by remember { mutableStateOf<TodoList?>(null) }
+    var renaming by remember { mutableStateOf<Pair<TodoList, String>?>(null) }
 
     Text(stringResource(R.string.organizer_tasks), color = color, fontSize = 20.sp, fontWeight = FontWeight.Bold)
     Spacer(Modifier.height(10.dp))
     LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         items(state.lists, key = { it.id }) { list ->
             val selected = list.id == selectedTab
-            Row(
-                Modifier
-                    .clip(RoundedCornerShape(50))
-                    .background(if (selected) LIST_PALETTE[list.colorIndex % LIST_PALETTE.size] else color.copy(alpha = 0.08f))
-                    .clickable { onSelectTab(list.id) }
-                    .padding(horizontal = 14.dp, vertical = 8.dp),
-            ) {
-                Text(list.name, color = if (selected) Color.White else color, fontSize = 13.sp, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal)
+            Box {
+                Row(
+                    Modifier
+                        .clip(RoundedCornerShape(50))
+                        .background(if (selected) LIST_PALETTE[list.colorIndex % LIST_PALETTE.size] else color.copy(alpha = 0.08f))
+                        .combinedClickable(onClick = { onSelectTab(list.id) }, onLongClick = { menuList = list })
+                        .padding(horizontal = 14.dp, vertical = 8.dp),
+                ) {
+                    Text(list.name, color = if (selected) Color.White else color, fontSize = 13.sp, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal)
+                }
+                androidx.compose.material3.DropdownMenu(expanded = menuList?.id == list.id, onDismissRequest = { menuList = null }) {
+                    androidx.compose.material3.DropdownMenuItem(
+                        text = { Text(stringResource(R.string.organizer_rename_list)) },
+                        leadingIcon = { Icon(painterResource(R.drawable.ic_edit), null) },
+                        onClick = {
+                            menuList = null
+                            renaming = list to list.name
+                        },
+                    )
+                    if (state.lists.size > 1) {
+                        androidx.compose.material3.DropdownMenuItem(
+                            text = { Text(stringResource(R.string.delete)) },
+                            leadingIcon = { Icon(painterResource(R.drawable.ic_trash), null) },
+                            onClick = {
+                                menuList = null
+                                if (selectedTab == list.id) onSelectTab(state.lists.first { it.id != list.id }.id)
+                                repository.removeList(list.id)
+                            },
+                        )
+                    }
+                }
             }
         }
         item {
@@ -456,6 +515,19 @@ private fun TodoSection(
         }
     }
     AddTodoRow(color = color, onAdd = { title -> repository.addTodo(selectedTab, title, dueAtMillis = null, hasTime = false) })
+
+    renaming?.let { (list, name) ->
+        NewListDialog(
+            name = name,
+            title = stringResource(R.string.organizer_rename_list),
+            onNameChange = { renaming = list to it },
+            onDismiss = { renaming = null },
+            onConfirm = {
+                if (name.isNotBlank()) repository.renameList(list.id, name.trim())
+                renaming = null
+            },
+        )
+    }
 
     val pendingName = newListName
     if (pendingName != null) {
@@ -547,10 +619,16 @@ private fun AddTodoRow(color: Color, onAdd: (String) -> Unit) {
 }
 
 @Composable
-private fun NewListDialog(name: String, onNameChange: (String) -> Unit, onDismiss: () -> Unit, onConfirm: () -> Unit) {
+private fun NewListDialog(
+    name: String,
+    onNameChange: (String) -> Unit,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit,
+    title: String = stringResource(R.string.organizer_new_list),
+) {
     androidx.compose.material3.AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.organizer_new_list)) },
+        title = { Text(title) },
         text = {
             androidx.compose.material3.OutlinedTextField(value = name, onValueChange = onNameChange, singleLine = true)
         },

@@ -367,4 +367,12 @@
     <string name="organizer_accept">Add to reminders</string>
     <string name="organizer_dismiss">Dismiss</string>
     <string name="organizer_dismiss_all">Dismiss all</string>
+    <string name="organizer_edit">Arrange page</string>
+    <string name="organizer_done">Done</string>
+    <string name="organizer_edit_hint">Drag the parts into the order you like; hide what you do not need.</string>
+    <string name="organizer_section_calendar">Calendar</string>
+    <string name="organizer_section_agenda">Selected day</string>
+    <string name="organizer_hide">Hide</string>
+    <string name="organizer_show">Show</string>
+    <string name="organizer_rename_list">Rename</string>
 </resources>

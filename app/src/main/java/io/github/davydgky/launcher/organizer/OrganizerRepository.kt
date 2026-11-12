@@ -127,6 +127,18 @@ class OrganizerRepository(private val context: Context, private val scope: Corou
 
     fun dismissAllSuggestions() = update { st -> st.copy(suggestions = emptyList()) }
 
+    /** Moves the page part at [from] to [to] (indexes in [OrganizerState.sections]). */
+    fun moveSection(from: Int, to: Int) = update { st ->
+        if (from !in st.sections.indices || to !in st.sections.indices || from == to) return@update st
+        val order = st.sections.toMutableList()
+        order.add(to, order.removeAt(from))
+        st.copy(sections = order)
+    }
+
+    fun setSectionHidden(section: String, hidden: Boolean) = update { st ->
+        st.copy(hiddenSections = if (hidden) st.hiddenSections + section else st.hiddenSections - section)
+    }
+
     private fun scheduleSave() {
         saveJob?.cancel()
         saveJob = scope.launch {

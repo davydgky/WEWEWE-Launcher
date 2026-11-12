@@ -60,6 +60,23 @@ class OrganizerStateTest {
     }
 
     @Test
+    fun theArrangedPageIsKept() {
+        val state = OrganizerState.initial("Reminders").copy(
+            sections = listOf(OrganizerSections.TASKS, OrganizerSections.CALENDAR, OrganizerSections.AGENDA, OrganizerSections.SUGGESTIONS),
+            hiddenSections = setOf(OrganizerSections.AGENDA),
+        )
+        assertEquals(state, OrganizerCodec.decode(OrganizerCodec.encode(state)))
+    }
+
+    @Test
+    fun partsUnknownOrNewAreSortedOutWhenRead() {
+        // A name from a later version is dropped; a part added since goes to the end.
+        val order = OrganizerSections.normalized(listOf("tasks", "weather", "calendar", "tasks"))
+        assertEquals(listOf("tasks", "calendar", "agenda", "suggestions"), order)
+        assertEquals(OrganizerSections.DEFAULT, OrganizerCodec.decode("""{"lists":[],"todos":[]}""").sections)
+    }
+
+    @Test
     fun aTodoWithoutADueDateHasNone() {
         val decoded = OrganizerCodec.decode(OrganizerCodec.encode(OrganizerState.initial("Reminders")))
         assertTrue(decoded.todos.isEmpty())

@@ -366,4 +366,12 @@
     <string name="organizer_accept">Zu Erinnerungen hinzufügen</string>
     <string name="organizer_dismiss">Verwerfen</string>
     <string name="organizer_dismiss_all">Alle verwerfen</string>
+    <string name="organizer_edit">Seite anordnen</string>
+    <string name="organizer_done">Fertig</string>
+    <string name="organizer_edit_hint">Zieh die Bereiche in die Reihenfolge, die du magst; blende aus, was du nicht brauchst.</string>
+    <string name="organizer_section_calendar">Kalender</string>
+    <string name="organizer_section_agenda">Ausgewählter Tag</string>
+    <string name="organizer_hide">Ausblenden</string>
+    <string name="organizer_show">Einblenden</string>
+    <string name="organizer_rename_list">Umbenennen</string>
 </resources>
