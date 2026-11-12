@@ -9,6 +9,19 @@ import android.os.Bundle
 import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.style.TextAlign
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -98,7 +111,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-/** Sources, permissions, note folders, text recognition progress and latency measurements. */
+/**
+ * The launcher's settings: an overview of categories (home screen, search, Gemini Nano and messages,
+ * backup, updates, advanced), each opening a page of its own.
+ */
 class SettingsActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -194,258 +210,321 @@ private fun SettingsScreen(activity: ComponentActivity) {
         }
     }
 
-    LazyColumn(
-        Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing),
-        contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(20.dp),
-    ) {
-        item {
-            Text(stringResource(R.string.settings_title), style = MaterialTheme.typography.headlineMedium, modifier = Modifier.padding(top = 8.dp))
-        }
-        if (!isDefaultLauncher) {
-            item {
-                Card {
-                    Column(Modifier.padding(16.dp)) {
-                        Text(stringResource(R.string.default_launcher_title), style = MaterialTheme.typography.titleMedium)
-                        Spacer(Modifier.size(4.dp))
-                        Text(stringResource(R.string.default_launcher_description), style = MaterialTheme.typography.bodyMedium)
-                        Spacer(Modifier.size(12.dp))
-                        Button(onClick = { grant(Requirement.DefaultLauncher) }) { Text(stringResource(R.string.default_launcher_action)) }
-                    }
+    // The overview lists the categories; each opens its own page, and back returns to the overview.
+    var page by rememberSaveable { mutableStateOf<SettingsPage?>(null) }
+    BackHandler(enabled = page != null) { page = null }
+
+    AnimatedContent(
+        targetState = page,
+        transitionSpec = {
+            val forward = targetState != null
+            (slideInHorizontally { width -> if (forward) width / 4 else -width / 4 } + fadeIn()) togetherWith fadeOut()
+        },
+        label = "settingsPage",
+    ) { shown ->
+        LazyColumn(
+            Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing),
+            contentPadding = PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(20.dp),
+        ) {
+            if (shown == null) {
+                item {
+                    Text(stringResource(R.string.settings_title), style = MaterialTheme.typography.headlineMedium, modifier = Modifier.padding(top = 8.dp))
                 }
-            }
-        }
-        item {
-            Group(stringResource(R.string.settings_home)) {
-                Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
-                    Text(stringResource(R.string.setting_grid), style = MaterialTheme.typography.titleMedium)
-                    Text(
-                        stringResource(R.string.setting_grid_description),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    val tablet = LocalConfiguration.current.smallestScreenWidthDp >= 600
-                    val current = (prefs.gridColumns ?: if (tablet) 6 else 5) to (prefs.gridRows ?: if (tablet) 5 else 6)
-                    Row(
-                        Modifier.padding(top = 8.dp).horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        GridOptions.forEach { option ->
-                            FilterChip(
-                                selected = option == current,
-                                onClick = { scope.launch { app.settings.setGrid(option.first, option.second) } },
-                                label = { Text("${option.first} × ${option.second}") },
-                            )
+                if (!isDefaultLauncher) {
+                    item { DefaultLauncherCard { grant(Requirement.DefaultLauncher) } }
+                }
+                item {
+                    Card {
+                        SettingsPage.entries.forEachIndexed { index, entry ->
+                            if (index > 0) HorizontalDivider(Modifier.padding(start = 68.dp))
+                            CategoryRow(entry) { page = entry }
                         }
                     }
                 }
-                HorizontalDivider()
-                Row(
-                    Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Column(Modifier.weight(1f)) {
-                        Text(stringResource(R.string.setting_add_new_apps), style = MaterialTheme.typography.titleMedium)
-                        Text(
-                            stringResource(R.string.setting_add_new_apps_description),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    Spacer(Modifier.width(12.dp))
-                    Switch(
-                        checked = prefs.addNewAppsToHome,
-                        onCheckedChange = { enabled -> scope.launch { app.settings.setAddNewAppsToHome(enabled) } },
-                    )
-                }
-                HorizontalDivider()
-                Row(
-                    Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Column(Modifier.weight(1f)) {
-                        Text(stringResource(R.string.setting_dock_suggestion), style = MaterialTheme.typography.titleMedium)
-                        Text(
-                            stringResource(R.string.setting_dock_suggestion_description),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    Spacer(Modifier.width(12.dp))
-                    Switch(
-                        checked = prefs.dockSuggestion,
-                        onCheckedChange = { enabled -> scope.launch { app.settings.setDockSuggestion(enabled) } },
-                    )
-                }
-                HorizontalDivider()
-                Row(
-                    Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Column(Modifier.weight(1f)) {
-                        Text(stringResource(R.string.notification_dots), style = MaterialTheme.typography.titleMedium)
-                        Text(
-                            stringResource(R.string.notification_dots_description),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    Spacer(Modifier.width(12.dp))
-                    // Access is granted (and taken back) on the system page; the launcher cannot switch it itself.
-                    OutlinedButton(onClick = { runCatching { context.startActivity(app.notifications.accessIntent()) } }) {
-                        Text(stringResource(if (notificationAccess) R.string.notification_dots_on else R.string.notification_dots_allow))
-                    }
-                }
-                HorizontalDivider()
-                SwitchRow(R.string.setting_badge_numbers, R.string.setting_badge_numbers_description, prefs.badgeNumbers) {
-                    scope.launch { app.settings.setBadgeNumbers(it) }
-                }
-                HorizontalDivider()
-                SwitchRow(R.string.setting_themed_icons, R.string.setting_themed_icons_description, prefs.themedIcons) {
-                    scope.launch { app.settings.setThemedIcons(it) }
-                }
-                HorizontalDivider()
-                SwitchRow(R.string.setting_layout_locked, R.string.setting_layout_locked_description, prefs.layoutLocked) {
-                    scope.launch { app.settings.setLayoutLocked(it) }
-                }
-                HorizontalDivider()
-                SwitchRow(R.string.setting_double_tap, R.string.setting_double_tap_description, prefs.doubleTapToLock) { enabled ->
-                    scope.launch { app.settings.setDoubleTapToLock(enabled) }
-                    // Locking needs the accessibility service, which only the user can switch on.
-                    if (enabled && !LockService.isEnabled(context)) runCatching { context.startActivity(LockService.settingsIntent()) }
-                }
-            }
-        }
-        item { HiddenAppsGroup(prefs.hiddenApps) }
-        item { BackupGroup() }
-        item {
-            Group(stringResource(R.string.settings_sources)) {
-                Row(
-                    Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Column(Modifier.weight(1f)) {
-                        Text(stringResource(R.string.setting_results_bottom), style = MaterialTheme.typography.titleMedium)
-                        Text(
-                            stringResource(R.string.setting_results_bottom_description),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    Spacer(Modifier.width(12.dp))
-                    Switch(
-                        checked = prefs.resultsAtBottom,
-                        onCheckedChange = { enabled -> scope.launch { app.settings.setResultsAtBottom(enabled) } },
-                    )
-                }
-                HorizontalDivider()
-                AiAnswersRow(prefs.aiAnswers) { enabled ->
-                    scope.launch { app.settings.setAiAnswers(enabled) }
-                    if (enabled) app.nano.prepare()
-                }
-                HorizontalDivider()
-                SavedMessagesRow(prefs.saveMessages, onToggle = { enabled -> scope.launch { app.settings.setSaveMessages(enabled) } })
-                HorizontalDivider()
-                Row(
-                    Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Column(Modifier.weight(1f)) {
-                        Text(stringResource(R.string.setting_store_results), style = MaterialTheme.typography.titleMedium)
-                        Text(
-                            stringResource(R.string.setting_store_results_description),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    Spacer(Modifier.width(12.dp))
-                    Switch(checked = prefs.storeResults, onCheckedChange = { enabled -> scope.launch { app.settings.setStoreResults(enabled) } })
-                }
-                HorizontalDivider()
-                SourceInfos.forEachIndexed { index, info ->
-                    if (index > 0) HorizontalDivider()
-                    SourceRow(info, status[info.id], onToggle = { enabled ->
-                        scope.launch { app.settings.setSourceEnabled(info.id, enabled) }
-                    }, onGrant = ::grant)
-                }
-                HorizontalDivider()
-                UsageRow(usageAccess) {
-                    context.startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS, Uri.fromParts("package", context.packageName, null)))
-                }
-            }
-        }
-        item {
-            Group(stringResource(R.string.settings_note_folders)) {
-                prefs.noteFolders.sorted().forEach { folder ->
-                    Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp, top = 4.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(painterResource(R.drawable.ic_folder), null, Modifier.size(20.dp))
-                        Spacer(Modifier.width(12.dp))
-                        Text(folderLabel(folder), Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
-                        IconButton(onClick = {
-                            runCatching { context.contentResolver.releasePersistableUriPermission(Uri.parse(folder), Intent.FLAG_GRANT_READ_URI_PERMISSION) }
-                            scope.launch { app.settings.removeNoteFolder(folder) }
-                        }) { Icon(painterResource(R.drawable.ic_close), stringResource(R.string.remove)) }
-                    }
-                    HorizontalDivider()
-                }
-                Column(Modifier.padding(16.dp)) {
-                    Text(stringResource(R.string.note_folders_description), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Spacer(Modifier.size(12.dp))
-                    FilledTonalButton(onClick = { folderPicker.launch(null) }) { Text(stringResource(R.string.note_folders_add)) }
-                }
-            }
-        }
-        item {
-            val progress by produceState<Pair<Int, Int>?>(null, resumeCount, status[ImagesSource.ID]?.itemCount) {
-                value = withContext(Dispatchers.IO) { recognitionProgress(context) }
-            }
-            Group(stringResource(R.string.settings_recognition)) {
-                Column(Modifier.padding(16.dp)) {
-                    val current = progress
+                item {
                     Text(
-                        when {
-                            !ImagesSource.hasAccess(context) -> stringResource(R.string.recognition_no_access)
-                            current == null -> stringResource(R.string.recognition_counting)
-                            else -> stringResource(R.string.recognition_progress, current.first, current.second)
-                        },
-                        style = MaterialTheme.typography.bodyLarge,
+                        stringResource(R.string.update_current, app.updater.currentVersionName),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                        textAlign = TextAlign.Center,
                     )
-                    Spacer(Modifier.size(4.dp))
-                    Text(stringResource(R.string.recognition_description), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                return@LazyColumn
+            }
+
+            item {
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
+                    IconButton(onClick = { page = null }) { Icon(painterResource(R.drawable.ic_chevron_left), stringResource(R.string.settings_back)) }
+                    Spacer(Modifier.width(4.dp))
+                    Text(stringResource(shown.title), style = MaterialTheme.typography.headlineSmall)
+                }
+            }
+            when (shown) {
+                SettingsPage.Home -> {
+                    item {
+                        Group(stringResource(R.string.settings_group_layout)) {
+                            GridRow(prefs) { columns, rows -> scope.launch { app.settings.setGrid(columns, rows) } }
+                            HorizontalDivider()
+                            SwitchRow(R.string.setting_add_new_apps, R.string.setting_add_new_apps_description, prefs.addNewAppsToHome) {
+                                scope.launch { app.settings.setAddNewAppsToHome(it) }
+                            }
+                            HorizontalDivider()
+                            SwitchRow(R.string.setting_dock_suggestion, R.string.setting_dock_suggestion_description, prefs.dockSuggestion) {
+                                scope.launch { app.settings.setDockSuggestion(it) }
+                            }
+                            HorizontalDivider()
+                            SwitchRow(R.string.setting_layout_locked, R.string.setting_layout_locked_description, prefs.layoutLocked) {
+                                scope.launch { app.settings.setLayoutLocked(it) }
+                            }
+                        }
+                    }
+                    item {
+                        Group(stringResource(R.string.settings_group_icons)) {
+                            NotificationDotsRow(notificationAccess) { runCatching { context.startActivity(app.notifications.accessIntent()) } }
+                            HorizontalDivider()
+                            SwitchRow(R.string.setting_badge_numbers, R.string.setting_badge_numbers_description, prefs.badgeNumbers) {
+                                scope.launch { app.settings.setBadgeNumbers(it) }
+                            }
+                            HorizontalDivider()
+                            SwitchRow(R.string.setting_themed_icons, R.string.setting_themed_icons_description, prefs.themedIcons) {
+                                scope.launch { app.settings.setThemedIcons(it) }
+                            }
+                        }
+                    }
+                    item {
+                        Group(stringResource(R.string.settings_group_gestures)) {
+                            SwitchRow(R.string.setting_double_tap, R.string.setting_double_tap_description, prefs.doubleTapToLock) { enabled ->
+                                scope.launch { app.settings.setDoubleTapToLock(enabled) }
+                                // Locking needs the accessibility service, which only the user can switch on.
+                                if (enabled && !LockService.isEnabled(context)) runCatching { context.startActivity(LockService.settingsIntent()) }
+                            }
+                        }
+                    }
+                    item { HiddenAppsGroup(prefs.hiddenApps) }
+                }
+                SettingsPage.Search -> {
+                    item {
+                        Group(stringResource(R.string.settings_group_results)) {
+                            SwitchRow(R.string.setting_results_bottom, R.string.setting_results_bottom_description, prefs.resultsAtBottom) {
+                                scope.launch { app.settings.setResultsAtBottom(it) }
+                            }
+                            HorizontalDivider()
+                            SwitchRow(R.string.setting_store_results, R.string.setting_store_results_description, prefs.storeResults) {
+                                scope.launch { app.settings.setStoreResults(it) }
+                            }
+                        }
+                    }
+                    item {
+                        Group(stringResource(R.string.settings_sources)) {
+                            SourceInfos.forEachIndexed { index, info ->
+                                if (index > 0) HorizontalDivider()
+                                SourceRow(info, status[info.id], onToggle = { enabled ->
+                                    scope.launch { app.settings.setSourceEnabled(info.id, enabled) }
+                                }, onGrant = ::grant)
+                            }
+                            HorizontalDivider()
+                            UsageRow(usageAccess) {
+                                context.startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS, Uri.fromParts("package", context.packageName, null)))
+                            }
+                        }
+                    }
+                    item {
+                        NoteFoldersGroup(
+                            folders = prefs.noteFolders,
+                            onAdd = { folderPicker.launch(null) },
+                            onRemove = { folder ->
+                                runCatching { context.contentResolver.releasePersistableUriPermission(Uri.parse(folder), Intent.FLAG_GRANT_READ_URI_PERMISSION) }
+                                scope.launch { app.settings.removeNoteFolder(folder) }
+                            },
+                        )
+                    }
+                    item { RecognitionGroup(resumeCount, status[ImagesSource.ID]?.itemCount) }
+                }
+                SettingsPage.Assistant -> {
+                    item {
+                        Group(stringResource(R.string.settings_group_nano)) {
+                            AiAnswersRow(prefs.aiAnswers) { enabled ->
+                                scope.launch { app.settings.setAiAnswers(enabled) }
+                                if (enabled) app.nano.prepare()
+                            }
+                            HorizontalDivider()
+                            SwitchRow(
+                                R.string.setting_todo_suggestions,
+                                R.string.setting_todo_suggestions_description,
+                                prefs.todoSuggestions && prefs.aiAnswers,
+                                enabled = prefs.aiAnswers,
+                            ) { enabled ->
+                                scope.launch { app.settings.setTodoSuggestions(enabled) }
+                                if (!enabled) app.todoSuggester.pause()
+                            }
+                        }
+                    }
+                    item {
+                        Group(stringResource(R.string.settings_group_messages)) {
+                            SavedMessagesRow(prefs.saveMessages, onToggle = { enabled -> scope.launch { app.settings.setSaveMessages(enabled) } })
+                        }
+                    }
+                }
+                SettingsPage.Backup -> item { BackupGroup() }
+                SettingsPage.Updates -> item {
+                    val update by app.updater.state.collectAsStateWithLifecycle()
+                    UpdateGroup(
+                        state = update,
+                        currentVersion = app.updater.currentVersionName,
+                        autoUpdate = prefs.autoUpdate,
+                        onAction = app.updater::performAction,
+                        onAutoUpdate = app.updater::setAutoUpdate,
+                    )
+                }
+                SettingsPage.Advanced -> {
+                    item {
+                        Group(stringResource(R.string.settings_measurements)) {
+                            Metric.entries.forEachIndexed { index, metric ->
+                                if (index > 0) HorizontalDivider()
+                                MetricRow(metric, perf[metric])
+                            }
+                            Column(Modifier.padding(16.dp)) {
+                                Text(stringResource(R.string.measurements_description), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Spacer(Modifier.size(12.dp))
+                                OutlinedButton(onClick = app.perf::reset) { Text(stringResource(R.string.measurements_reset)) }
+                            }
+                        }
+                    }
+                    item {
+                        Group(stringResource(R.string.settings_privacy)) {
+                            Column(Modifier.padding(16.dp)) {
+                                Text(stringResource(R.string.privacy_description), style = MaterialTheme.typography.bodyMedium)
+                                Spacer(Modifier.size(12.dp))
+                                OutlinedButton(onClick = app.search::rebuildAll) { Text(stringResource(R.string.rebuild_index)) }
+                            }
+                        }
+                    }
                 }
             }
         }
-        item {
-            Group(stringResource(R.string.settings_measurements)) {
-                Metric.entries.forEachIndexed { index, metric ->
-                    if (index > 0) HorizontalDivider()
-                    MetricRow(metric, perf[metric])
-                }
-                Column(Modifier.padding(16.dp)) {
-                    Text(stringResource(R.string.measurements_description), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Spacer(Modifier.size(12.dp))
-                    OutlinedButton(onClick = app.perf::reset) { Text(stringResource(R.string.measurements_reset)) }
-                }
+    }
+}
+
+/** The settings' categories, each a page of its own. */
+private enum class SettingsPage(val title: Int, val summary: Int, val icon: Int) {
+    Home(R.string.settings_home, R.string.settings_home_summary, R.drawable.ic_pages),
+    Search(R.string.settings_search, R.string.settings_search_summary, R.drawable.ic_search),
+    Assistant(R.string.settings_assistant, R.string.settings_assistant_summary, R.drawable.ic_sparkle),
+    Backup(R.string.settings_backup, R.string.settings_backup_summary, R.drawable.ic_history),
+    Updates(R.string.update_section, R.string.settings_updates_summary, R.drawable.ic_download),
+    Advanced(R.string.settings_advanced, R.string.settings_advanced_summary, R.drawable.ic_info),
+}
+
+@Composable
+private fun CategoryRow(page: SettingsPage, onClick: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            Modifier.size(36.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primaryContainer),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(painterResource(page.icon), null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.onPrimaryContainer)
+        }
+        Spacer(Modifier.width(16.dp))
+        Column(Modifier.weight(1f)) {
+            Text(stringResource(page.title), style = MaterialTheme.typography.titleMedium)
+            Text(stringResource(page.summary), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Icon(painterResource(R.drawable.ic_chevron_right), null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+@Composable
+private fun DefaultLauncherCard(onGrant: () -> Unit) {
+    Card {
+        Column(Modifier.padding(16.dp)) {
+            Text(stringResource(R.string.default_launcher_title), style = MaterialTheme.typography.titleMedium)
+            Spacer(Modifier.size(4.dp))
+            Text(stringResource(R.string.default_launcher_description), style = MaterialTheme.typography.bodyMedium)
+            Spacer(Modifier.size(12.dp))
+            Button(onClick = onGrant) { Text(stringResource(R.string.default_launcher_action)) }
+        }
+    }
+}
+
+@Composable
+private fun GridRow(prefs: LauncherPrefs, onGrid: (columns: Int, rows: Int) -> Unit) {
+    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
+        Text(stringResource(R.string.setting_grid), style = MaterialTheme.typography.titleMedium)
+        Text(stringResource(R.string.setting_grid_description), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        val tablet = LocalConfiguration.current.smallestScreenWidthDp >= 600
+        val current = (prefs.gridColumns ?: if (tablet) 6 else 5) to (prefs.gridRows ?: if (tablet) 5 else 6)
+        Row(Modifier.padding(top = 8.dp).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            GridOptions.forEach { option ->
+                FilterChip(
+                    selected = option == current,
+                    onClick = { onGrid(option.first, option.second) },
+                    label = { Text("${option.first} × ${option.second}") },
+                )
             }
         }
-        item {
-            val update by app.updater.state.collectAsStateWithLifecycle()
-            UpdateGroup(
-                state = update,
-                currentVersion = app.updater.currentVersionName,
-                autoUpdate = prefs.autoUpdate,
-                onAction = app.updater::performAction,
-                onAutoUpdate = app.updater::setAutoUpdate,
+    }
+}
+
+/** Access is granted (and taken back) on the system page; the launcher cannot switch it itself. */
+@Composable
+private fun NotificationDotsRow(granted: Boolean, onOpen: () -> Unit) {
+    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text(stringResource(R.string.notification_dots), style = MaterialTheme.typography.titleMedium)
+            Text(stringResource(R.string.notification_dots_description), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Spacer(Modifier.width(12.dp))
+        OutlinedButton(onClick = onOpen) {
+            Text(stringResource(if (granted) R.string.notification_dots_on else R.string.notification_dots_allow))
+        }
+    }
+}
+
+@Composable
+private fun NoteFoldersGroup(folders: Set<String>, onAdd: () -> Unit, onRemove: (String) -> Unit) {
+    Group(stringResource(R.string.settings_note_folders)) {
+        folders.sorted().forEach { folder ->
+            Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp, top = 4.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                Icon(painterResource(R.drawable.ic_folder), null, Modifier.size(20.dp))
+                Spacer(Modifier.width(12.dp))
+                Text(folderLabel(folder), Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
+                IconButton(onClick = { onRemove(folder) }) { Icon(painterResource(R.drawable.ic_close), stringResource(R.string.remove)) }
+            }
+            HorizontalDivider()
+        }
+        Column(Modifier.padding(16.dp)) {
+            Text(stringResource(R.string.note_folders_description), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.size(12.dp))
+            FilledTonalButton(onClick = onAdd) { Text(stringResource(R.string.note_folders_add)) }
+        }
+    }
+}
+
+/** How many pictures have their text recognised, counted again whenever the page comes back. */
+@Composable
+private fun RecognitionGroup(resumeCount: Int, imageCount: Int?) {
+    val context = LocalContext.current
+    val progress by produceState<Pair<Int, Int>?>(null, resumeCount, imageCount) {
+        value = withContext(Dispatchers.IO) { recognitionProgress(context) }
+    }
+    Group(stringResource(R.string.settings_recognition)) {
+        Column(Modifier.padding(16.dp)) {
+            val current = progress
+            Text(
+                when {
+                    !ImagesSource.hasAccess(context) -> stringResource(R.string.recognition_no_access)
+                    current == null -> stringResource(R.string.recognition_counting)
+                    else -> stringResource(R.string.recognition_progress, current.first, current.second)
+                },
+                style = MaterialTheme.typography.bodyLarge,
             )
-        }
-        item {
-            Group(stringResource(R.string.settings_privacy)) {
-                Column(Modifier.padding(16.dp)) {
-                    Text(stringResource(R.string.privacy_description), style = MaterialTheme.typography.bodyMedium)
-                    Spacer(Modifier.size(12.dp))
-                    OutlinedButton(onClick = app.search::rebuildAll) { Text(stringResource(R.string.rebuild_index)) }
-                }
-            }
+            Spacer(Modifier.size(4.dp))
+            Text(stringResource(R.string.recognition_description), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
@@ -491,10 +570,15 @@ private fun UpdateGroup(
     }
 }
 
+/** A setting that is on or off; the whole row toggles it. */
 @Composable
-private fun SwitchRow(title: Int, description: Int, checked: Boolean, onChange: (Boolean) -> Unit) {
+private fun SwitchRow(title: Int, description: Int, checked: Boolean, enabled: Boolean = true, onChange: (Boolean) -> Unit) {
     Row(
-        Modifier.fillMaxWidth().clickable { onChange(!checked) }.padding(horizontal = 16.dp, vertical = 12.dp),
+        Modifier
+            .fillMaxWidth()
+            .clickable(enabled = enabled) { onChange(!checked) }
+            .alpha(if (enabled) 1f else 0.5f)
+            .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {
@@ -502,7 +586,7 @@ private fun SwitchRow(title: Int, description: Int, checked: Boolean, onChange: 
             Text(stringResource(description), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Spacer(Modifier.width(12.dp))
-        Switch(checked = checked, onCheckedChange = onChange)
+        Switch(checked = checked, onCheckedChange = onChange, enabled = enabled)
     }
 }
 

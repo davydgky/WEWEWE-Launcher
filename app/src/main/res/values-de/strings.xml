@@ -374,4 +374,22 @@
     <string name="organizer_hide">Ausblenden</string>
     <string name="organizer_show">Einblenden</string>
     <string name="organizer_rename_list">Umbenennen</string>
+    <string name="settings_search">Suche</string>
+    <string name="settings_assistant">Gemini Nano &amp; Nachrichten</string>
+    <string name="settings_advanced">Erweitert</string>
+    <string name="settings_back">Zurück</string>
+    <string name="settings_home_summary">Raster, Dock, Symbole, Gesten, ausgeblendete Apps</string>
+    <string name="settings_search_summary">Ergebnisse, Quellen, Notiz-Ordner, Texterkennung</string>
+    <string name="settings_assistant_summary">Antworten, To-do-Vorschläge, gespeicherte Nachrichten</string>
+    <string name="settings_backup_summary">Anordnung und Einstellungen sichern oder wiederherstellen</string>
+    <string name="settings_updates_summary">Version, automatische Updates, Absturzberichte</string>
+    <string name="settings_advanced_summary">Messwerte, Suchindex, Datenschutz</string>
+    <string name="settings_group_layout">Anordnung</string>
+    <string name="settings_group_icons">Symbole &amp; Benachrichtigungen</string>
+    <string name="settings_group_gestures">Gesten</string>
+    <string name="settings_group_results">Ergebnisse</string>
+    <string name="settings_group_nano">Gemini Nano</string>
+    <string name="settings_group_messages">Nachrichten</string>
+    <string name="setting_todo_suggestions">To-do-Vorschläge aus Nachrichten</string>
+    <string name="setting_todo_suggestions_description">Gemini Nano entwirft aus neuen Nachrichten Erinnerungen für die Organizer-Seite; du bestätigst jede selbst. Braucht Antworten von Gemini Nano und gespeicherte Nachrichten.</string>
 </resources>

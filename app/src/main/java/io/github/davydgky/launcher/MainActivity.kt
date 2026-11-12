@@ -89,10 +89,11 @@ class MainActivity : ComponentActivity() {
         // Gemini Nano describes new apps for the search, only while the home screen is in use.
         // In safe mode after a crash loop, no background work that is not needed.
         lifecycleScope.launch {
-            if (launcherApp.settings.prefs.first().aiAnswers && !launcherApp.crashGuard.safeMode) {
+            val prefs = launcherApp.settings.prefs.first()
+            if (prefs.aiAnswers && !launcherApp.crashGuard.safeMode) {
                 launcherApp.appKnowledge.resume()
                 // Reminders drafted from new messages, for the organizer page to suggest.
-                launcherApp.todoSuggester.resume()
+                if (prefs.todoSuggestions) launcherApp.todoSuggester.resume()
             }
         }
     }

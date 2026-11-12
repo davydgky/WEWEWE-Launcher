@@ -375,4 +375,22 @@
     <string name="organizer_hide">Hide</string>
     <string name="organizer_show">Show</string>
     <string name="organizer_rename_list">Rename</string>
+    <string name="settings_search">Search</string>
+    <string name="settings_assistant">Gemini Nano &amp; messages</string>
+    <string name="settings_advanced">Advanced</string>
+    <string name="settings_back">Back</string>
+    <string name="settings_home_summary">Grid, dock, icons, gestures, hidden apps</string>
+    <string name="settings_search_summary">Results, sources, note folders, text recognition</string>
+    <string name="settings_assistant_summary">Answers, to-do suggestions, saved messages</string>
+    <string name="settings_backup_summary">Save or restore your layout and settings</string>
+    <string name="settings_updates_summary">Version, automatic updates, crash reports</string>
+    <string name="settings_advanced_summary">Measurements, search index, privacy</string>
+    <string name="settings_group_layout">Layout</string>
+    <string name="settings_group_icons">Icons &amp; notifications</string>
+    <string name="settings_group_gestures">Gestures</string>
+    <string name="settings_group_results">Results</string>
+    <string name="settings_group_nano">Gemini Nano</string>
+    <string name="settings_group_messages">Messages</string>
+    <string name="setting_todo_suggestions">To-do suggestions from messages</string>
+    <string name="setting_todo_suggestions_description">Gemini Nano drafts reminders from new messages for the organizer page; you confirm each one. Needs answers by Gemini Nano and saved messages.</string>
 </resources>

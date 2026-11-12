@@ -189,9 +189,9 @@ fun OrganizerPage(
     }
 
     // Arranging the page: its parts as cards to drag into another order or hide.
-    var editing by rememberSaveable { mutableStateOf(false) }
-    LaunchedEffect(active) { if (!active) editing = false }
-    androidx.activity.compose.BackHandler(enabled = editing && active) { editing = false }
+    var arranging by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(active) { if (!active) arranging = false }
+    androidx.activity.compose.BackHandler(enabled = arranging && active) { arranging = false }
     var showAddEvent by remember { mutableStateOf(false) }
     var editingTodo by remember { mutableStateOf<Todo?>(null) }
 
@@ -214,19 +214,19 @@ fun OrganizerPage(
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.weight(1f),
                 )
-                if (editing) {
-                    TextButton(onClick = { editing = false }) {
+                if (arranging) {
+                    TextButton(onClick = { arranging = false }) {
                         Text(stringResource(R.string.organizer_done), color = wallpaperTextColor(), fontWeight = FontWeight.SemiBold)
                     }
                 } else {
-                    IconButton(onClick = { editing = true }) {
+                    IconButton(onClick = { arranging = true }) {
                         Icon(painterResource(R.drawable.ic_edit), stringResource(R.string.organizer_edit), tint = wallpaperTextColor())
                     }
                 }
             }
             Spacer(Modifier.height(16.dp))
 
-            if (editing) {
+            if (arranging) {
                 OrganizerEditor(
                     sections = state.sections,
                     hidden = state.hiddenSections,
