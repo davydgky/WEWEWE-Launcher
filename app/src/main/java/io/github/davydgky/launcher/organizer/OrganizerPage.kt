@@ -27,12 +27,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.ChevronLeft
-import androidx.compose.material.icons.filled.ChevronRight
-import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -60,6 +54,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
@@ -228,7 +223,7 @@ private fun PermissionBanner(text: String, onClick: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(text, color = color, fontSize = 14.sp, modifier = Modifier.weight(1f))
-        Icon(Icons.Filled.ChevronRight, null, tint = color)
+        Icon(painterResource(R.drawable.ic_chevron_right), null, tint = color)
     }
 }
 
@@ -251,8 +246,8 @@ private fun MonthCalendar(
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.weight(1f),
             )
-            IconButton(onClick = { onMonthChange(month.minusMonths(1)) }) { Icon(Icons.Filled.ChevronLeft, null, tint = color) }
-            IconButton(onClick = { onMonthChange(month.plusMonths(1)) }) { Icon(Icons.Filled.ChevronRight, null, tint = color) }
+            IconButton(onClick = { onMonthChange(month.minusMonths(1)) }) { Icon(painterResource(R.drawable.ic_chevron_left), null, tint = color) }
+            IconButton(onClick = { onMonthChange(month.plusMonths(1)) }) { Icon(painterResource(R.drawable.ic_chevron_right), null, tint = color) }
         }
         Row(Modifier.fillMaxWidth()) {
             val firstDow = java.time.DayOfWeek.MONDAY
@@ -337,7 +332,7 @@ private fun AgendaSection(
             fontWeight = FontWeight.SemiBold,
             modifier = Modifier.weight(1f),
         )
-        IconButton(onClick = onAddEvent) { Icon(Icons.Filled.Add, stringResource(R.string.organizer_add_event), tint = color) }
+        IconButton(onClick = onAddEvent) { Icon(painterResource(R.drawable.ic_add), stringResource(R.string.organizer_add_event), tint = color) }
     }
     if (events.isEmpty() && todos.isEmpty()) {
         Text(stringResource(R.string.organizer_nothing_today), color = color.copy(alpha = 0.55f), fontSize = 13.sp, modifier = Modifier.padding(top = 4.dp))
@@ -390,7 +385,7 @@ private fun TodoSection(
             }
         }
         item {
-            IconButton(onClick = { newListName = "" }) { Icon(Icons.Filled.Add, stringResource(R.string.organizer_new_list), tint = color) }
+            IconButton(onClick = { newListName = "" }) { Icon(painterResource(R.drawable.ic_add), stringResource(R.string.organizer_new_list), tint = color) }
         }
     }
     Spacer(Modifier.height(12.dp))
@@ -431,7 +426,7 @@ private fun TodoRow(todo: Todo, color: Color, onToggle: () -> Unit, onClick: () 
             contentAlignment = Alignment.Center,
         ) {
             if (todo.done) {
-                Icon(Icons.Filled.Check, null, tint = Color.White, modifier = Modifier.size(14.dp))
+                Icon(painterResource(R.drawable.ic_check), null, tint = Color.White, modifier = Modifier.size(14.dp))
             } else {
                 androidx.compose.foundation.Canvas(Modifier.size(22.dp)) {
                     drawCircle(
@@ -468,7 +463,7 @@ private fun AddTodoRow(color: Color, onAdd: (String) -> Unit) {
     var text by remember { mutableStateOf("") }
     val placeholder = stringResource(R.string.organizer_new_reminder)
     Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-        Icon(Icons.Filled.Add, null, tint = LIST_PALETTE[0], modifier = Modifier.size(22.dp))
+        Icon(painterResource(R.drawable.ic_add), null, tint = LIST_PALETTE[0], modifier = Modifier.size(22.dp))
         Spacer(Modifier.width(12.dp))
         BasicTextField(
             value = text,
@@ -615,7 +610,7 @@ private fun TodoEditSheet(
                     singleLine = true,
                     modifier = Modifier.weight(1f),
                 )
-                IconButton(onClick = onDelete) { Icon(Icons.Filled.Delete, stringResource(R.string.delete)) }
+                IconButton(onClick = onDelete) { Icon(painterResource(R.drawable.ic_trash), stringResource(R.string.delete)) }
             }
             Spacer(Modifier.height(10.dp))
             androidx.compose.material3.OutlinedTextField(
