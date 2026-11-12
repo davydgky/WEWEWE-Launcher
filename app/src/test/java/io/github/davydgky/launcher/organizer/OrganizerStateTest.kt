@@ -41,6 +41,25 @@ class OrganizerStateTest {
     }
 
     @Test
+    fun suggestionsAndHowFarMessagesWereReadAreKept() {
+        val state = OrganizerState.initial("Reminders").copy(
+            suggestions = listOf(
+                TodoSuggestion(5, "Pakete abholen", dueAtMillis = 1_700_000_000_000L, hasTime = true, app = "WhatsApp", sender = "Anna", excerpt = "Kannst du…", messageTime = 1_699_990_000_000L),
+            ),
+            nextId = 6,
+            scannedUntil = 1_699_999_999_000L,
+        )
+        assertEquals(state, OrganizerCodec.decode(OrganizerCodec.encode(state)))
+    }
+
+    @Test
+    fun aFileFromBeforeSuggestionsReadsWithNone() {
+        val decoded = OrganizerCodec.decode("""{"version":1,"nextId":2,"lists":[{"id":1,"name":"Reminders","color":0,"order":0}],"todos":[]}""")
+        assertTrue(decoded.suggestions.isEmpty())
+        assertEquals(0L, decoded.scannedUntil)
+    }
+
+    @Test
     fun aTodoWithoutADueDateHasNone() {
         val decoded = OrganizerCodec.decode(OrganizerCodec.encode(OrganizerState.initial("Reminders")))
         assertTrue(decoded.todos.isEmpty())

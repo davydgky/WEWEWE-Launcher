@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.AtomicFile
 import android.util.Log
 import io.github.davydgky.launcher.R
+import io.github.davydgky.launcher.core.TodoDrafts
 import java.io.File
 import java.io.IOException
 import kotlinx.coroutines.CoroutineScope
@@ -91,6 +92,41 @@ class OrganizerRepository(private val context: Context, private val scope: Corou
 
     fun removeTodo(id: Long) = update { st -> st.copy(todos = st.todos.filter { it.id != id }) }
 
+    /** Messages up to this time have been looked through for suggestions; 0 before the first time. */
+    val scannedUntil: Long get() = state.value?.scannedUntil ?: 0L
+
+    /**
+     * New suggestions from the messages up to [scannedUntil]. One the user already has as a reminder,
+     * or is already suggested, is left out; suggestions older than [SUGGESTION_DAYS] days go.
+     */
+    fun addSuggestions(drafts: List<TodoSuggestion>, scannedUntil: Long) = update { st ->
+        val known = (st.todos.map { it.title } + st.suggestions.map { it.title }).mapTo(HashSet(), TodoDrafts::normalized)
+        val cutoff = System.currentTimeMillis() - SUGGESTION_DAYS * 24 * 60 * 60 * 1000L
+        var nextId = st.nextId
+        val fresh = drafts
+            .filter { TodoDrafts.normalized(it.title).let { key -> key.isNotEmpty() && known.add(key) } }
+            .map { it.copy(id = nextId++) }
+        st.copy(
+            suggestions = (st.suggestions.filter { it.messageTime >= cutoff } + fresh).takeLast(MAX_SUGGESTIONS),
+            nextId = nextId,
+            scannedUntil = maxOf(st.scannedUntil, scannedUntil),
+        )
+    }
+
+    /** The suggestion becomes a reminder in [listId], with where it came from as its note. */
+    fun acceptSuggestion(id: Long, listId: Long): Long? {
+        val suggestion = state.value?.suggestions?.firstOrNull { it.id == id } ?: return null
+        val source = listOf(suggestion.app, suggestion.sender).filter { it.isNotBlank() }.joinToString(" · ")
+        val notes = if (suggestion.excerpt.isBlank()) source else "$source: „${suggestion.excerpt}“"
+        val todo = addTodo(listId, suggestion.title, suggestion.dueAtMillis, suggestion.hasTime, notes)
+        dismissSuggestion(id)
+        return todo
+    }
+
+    fun dismissSuggestion(id: Long) = update { st -> st.copy(suggestions = st.suggestions.filter { it.id != id }) }
+
+    fun dismissAllSuggestions() = update { st -> st.copy(suggestions = emptyList()) }
+
     private fun scheduleSave() {
         saveJob?.cancel()
         saveJob = scope.launch {
@@ -119,5 +155,7 @@ class OrganizerRepository(private val context: Context, private val scope: Corou
     companion object {
         private const val TAG = "OrganizerRepository"
         const val LIST_COLORS = 6
+        private const val SUGGESTION_DAYS = 14L
+        private const val MAX_SUGGESTIONS = 30
     }
 }

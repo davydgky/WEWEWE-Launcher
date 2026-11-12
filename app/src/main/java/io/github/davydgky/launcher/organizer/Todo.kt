@@ -24,8 +24,30 @@ data class Todo(
     val order: Int = 0,
 )
 
+/**
+ * A reminder Gemini Nano drafted from a message, waiting for the user to take it into a list or not.
+ * [app], [sender] and [excerpt] say where it came from.
+ */
+data class TodoSuggestion(
+    val id: Long,
+    val title: String,
+    val dueAtMillis: Long? = null,
+    val hasTime: Boolean = false,
+    val app: String = "",
+    val sender: String = "",
+    val excerpt: String = "",
+    val messageTime: Long = 0L,
+)
+
 /** Everything the organizer page keeps of its own (the calendar itself stays in the system provider). */
-data class OrganizerState(val lists: List<TodoList> = emptyList(), val todos: List<Todo> = emptyList(), val nextId: Long = 1L) {
+data class OrganizerState(
+    val lists: List<TodoList> = emptyList(),
+    val todos: List<Todo> = emptyList(),
+    val nextId: Long = 1L,
+    val suggestions: List<TodoSuggestion> = emptyList(),
+    /** Messages up to this time have been looked through for suggestions. */
+    val scannedUntil: Long = 0L,
+) {
 
     fun list(id: Long): TodoList? = lists.firstOrNull { it.id == id }
     fun todosOf(listId: Long): List<Todo> = todos.filter { it.listId == listId }.sortedWith(TODO_ORDER)
@@ -78,6 +100,23 @@ object OrganizerCodec {
                 )
             }
         })
+        put("suggestions", JSONArray().apply {
+            state.suggestions.forEach { s ->
+                put(
+                    JSONObject().apply {
+                        put("id", s.id)
+                        put("title", s.title)
+                        if (s.dueAtMillis != null) put("due", s.dueAtMillis)
+                        put("hasTime", s.hasTime)
+                        put("app", s.app)
+                        put("sender", s.sender)
+                        put("excerpt", s.excerpt)
+                        put("messageTime", s.messageTime)
+                    },
+                )
+            }
+        })
+        put("scannedUntil", state.scannedUntil)
     }.toString()
 
     fun decode(text: String): OrganizerState {
@@ -105,6 +144,28 @@ object OrganizerCodec {
                 )
             }
         }.orEmpty()
-        return OrganizerState(lists, todos, root.optLong("nextId", (todos.maxOfOrNull { it.id } ?: 0L) + 1))
+        val suggestions = root.optJSONArray("suggestions")?.let { arr ->
+            (0 until arr.length()).map { i ->
+                val o = arr.getJSONObject(i)
+                TodoSuggestion(
+                    id = o.getLong("id"),
+                    title = o.getString("title"),
+                    dueAtMillis = if (o.has("due")) o.getLong("due") else null,
+                    hasTime = o.optBoolean("hasTime"),
+                    app = o.optString("app"),
+                    sender = o.optString("sender"),
+                    excerpt = o.optString("excerpt"),
+                    messageTime = o.optLong("messageTime"),
+                )
+            }
+        }.orEmpty()
+        val highestId = maxOf(todos.maxOfOrNull { it.id } ?: 0L, suggestions.maxOfOrNull { it.id } ?: 0L)
+        return OrganizerState(
+            lists = lists,
+            todos = todos,
+            nextId = root.optLong("nextId", highestId + 1),
+            suggestions = suggestions,
+            scannedUntil = root.optLong("scannedUntil"),
+        )
     }
 }

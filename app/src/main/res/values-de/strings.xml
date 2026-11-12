@@ -362,4 +362,8 @@
     <string name="organizer_scale_month">Monat</string>
     <string name="organizer_scale_year">Jahr</string>
     <string name="organizer_week_number">KW %1$d</string>
+    <string name="organizer_suggestions">Vorschläge von Gemini Nano</string>
+    <string name="organizer_accept">Zu Erinnerungen hinzufügen</string>
+    <string name="organizer_dismiss">Verwerfen</string>
+    <string name="organizer_dismiss_all">Alle verwerfen</string>
 </resources>

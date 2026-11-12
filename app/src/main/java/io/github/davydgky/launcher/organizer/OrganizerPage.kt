@@ -230,6 +230,16 @@ fun OrganizerPage(repository: OrganizerRepository, modifier: Modifier = Modifier
                 onEditTodo = { editingTodo = it },
             )
 
+            if (state.suggestions.isNotEmpty()) {
+                Spacer(Modifier.height(26.dp))
+                SuggestionsSection(
+                    suggestions = state.suggestions,
+                    onAccept = { repository.acceptSuggestion(it.id, selectedTab) },
+                    onDismiss = { repository.dismissSuggestion(it.id) },
+                    onDismissAll = repository::dismissAllSuggestions,
+                )
+            }
+
             Spacer(Modifier.height(26.dp))
             TodoSection(
                 state = state,
@@ -348,6 +358,63 @@ private fun AgendaSection(
             }
         }
         todos.forEach { todo -> TodoRow(todo, color, onToggle = { onToggleTodo(todo.id) }, onClick = { onEditTodo(todo) }) }
+    }
+}
+
+/**
+ * Reminders Gemini Nano drafted from messages, newest first: each says where it came from, and goes
+ * into the list shown below with the check mark, or away with the cross.
+ */
+@Composable
+private fun SuggestionsSection(
+    suggestions: List<TodoSuggestion>,
+    onAccept: (TodoSuggestion) -> Unit,
+    onDismiss: (TodoSuggestion) -> Unit,
+    onDismissAll: () -> Unit,
+) {
+    val color = wallpaperTextColor()
+    val dateFormat = rememberDateFormat("dMMM")
+    val timeFormat = rememberTimeFormat()
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Icon(painterResource(R.drawable.ic_sparkle), null, tint = color, modifier = Modifier.size(18.dp))
+        Spacer(Modifier.width(8.dp))
+        Text(stringResource(R.string.organizer_suggestions), color = color, fontSize = 17.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+        if (suggestions.size > 1) {
+            TextButton(onClick = onDismissAll) { Text(stringResource(R.string.organizer_dismiss_all), color = color.copy(alpha = 0.7f), fontSize = 13.sp) }
+        }
+    }
+    Spacer(Modifier.height(4.dp))
+    Column(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(color.copy(alpha = CARD_ALPHA)).padding(vertical = 4.dp),
+    ) {
+        suggestions.asReversed().forEach { suggestion ->
+            Row(Modifier.fillMaxWidth().padding(start = 14.dp, end = 4.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(suggestion.title, color = color, fontSize = 15.sp)
+                    val due = suggestion.dueAtMillis?.let { millis ->
+                        val day = dateFormat.format(Date(millis))
+                        if (suggestion.hasTime) "$day, ${timeFormat.format(Date(millis))}" else day
+                    }
+                    val source = listOfNotNull(suggestion.app.ifBlank { null }, suggestion.sender.ifBlank { null }, due).joinToString(" · ")
+                    if (source.isNotEmpty()) Text(source, color = color.copy(alpha = 0.55f), fontSize = 12.sp)
+                    if (suggestion.excerpt.isNotBlank()) {
+                        Text(
+                            "„${suggestion.excerpt}“",
+                            color = color.copy(alpha = 0.45f),
+                            fontSize = 12.sp,
+                            maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+                IconButton(onClick = { onAccept(suggestion) }) {
+                    Icon(painterResource(R.drawable.ic_check), stringResource(R.string.organizer_accept), tint = LIST_PALETTE[0])
+                }
+                IconButton(onClick = { onDismiss(suggestion) }) {
+                    Icon(painterResource(R.drawable.ic_close), stringResource(R.string.organizer_dismiss), tint = color.copy(alpha = 0.6f))
+                }
+            }
+        }
     }
 }
 

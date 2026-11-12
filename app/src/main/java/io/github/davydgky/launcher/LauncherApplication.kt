@@ -11,6 +11,7 @@ import io.github.davydgky.launcher.data.LaunchLog
 import io.github.davydgky.launcher.data.LauncherSettings
 import io.github.davydgky.launcher.home.WorkspaceRepository
 import io.github.davydgky.launcher.organizer.OrganizerRepository
+import io.github.davydgky.launcher.organizer.TodoSuggester
 import io.github.davydgky.launcher.index.IndexStore
 import io.github.davydgky.launcher.messages.Messages
 import io.github.davydgky.launcher.notifications.Notifications
@@ -55,6 +56,7 @@ class LauncherApplication : Application() {
     val appKnowledge: AppKnowledge by lazy { AppKnowledge(this, nano, apps, appScope) }
     val playStore: PlayStore by lazy { PlayStore(this, nano) }
     val messages: Messages by lazy { Messages(this, settings, appScope) }
+    val todoSuggester: TodoSuggester by lazy { TodoSuggester(nano, messages, organizer, appScope) }
     val perf = PerfStats()
     val crashGuard: CrashGuard by lazy { CrashGuard(filesDir) }
 
