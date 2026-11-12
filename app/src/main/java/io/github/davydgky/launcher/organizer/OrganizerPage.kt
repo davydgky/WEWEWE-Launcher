@@ -20,7 +20,10 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.windowInsetsTopHeight
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -72,6 +75,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.davydgky.launcher.R
+import io.github.davydgky.launcher.ui.glass.BehindStatusBar
 import io.github.davydgky.launcher.ui.wallpaperTextColor
 import java.time.Instant
 import java.time.LocalDate
@@ -180,60 +184,63 @@ fun OrganizerPage(repository: OrganizerRepository, modifier: Modifier = Modifier
     var showAddEvent by remember { mutableStateOf(false) }
     var editingTodo by remember { mutableStateOf<Todo?>(null) }
 
-    Column(
-        modifier
-            .fillMaxSize()
-            // With the keyboard up the page ends above it, so the field being typed in scrolls into view.
-            .imePadding()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 16.dp),
-    ) {
-        Spacer(Modifier.height(12.dp))
-        Text(
-            stringResource(R.string.organizer_title),
-            color = wallpaperTextColor(),
-            fontSize = 26.sp,
-            fontWeight = FontWeight.Bold,
-        )
-        Spacer(Modifier.height(16.dp))
-
-        if (!hasReadAccess) {
-            PermissionBanner(stringResource(R.string.organizer_connect_calendar)) { readPermission.launch(Manifest.permission.READ_CALENDAR) }
+    // With the keyboard up the page ends above it, so the field being typed in scrolls into view. At the
+    // top it runs up behind the status bar, blurred there so the clock stays readable.
+    BehindStatusBar(modifier.fillMaxSize().imePadding()) {
+        Column(
+            Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp),
+        ) {
+            Spacer(Modifier.windowInsetsTopHeight(WindowInsets.statusBars))
             Spacer(Modifier.height(12.dp))
+            Text(
+                stringResource(R.string.organizer_title),
+                color = wallpaperTextColor(),
+                fontSize = 26.sp,
+                fontWeight = FontWeight.Bold,
+            )
+            Spacer(Modifier.height(16.dp))
+
+            if (!hasReadAccess) {
+                PermissionBanner(stringResource(R.string.organizer_connect_calendar)) { readPermission.launch(Manifest.permission.READ_CALENDAR) }
+                Spacer(Modifier.height(12.dp))
+            }
+
+            CalendarCard(
+                scale = scale,
+                selectedDate = selectedDate,
+                eventsByDay = eventsByDay,
+                todoDays = todoDays,
+                onScaleChange = { scale = it },
+                onSelectDate = { selectedDate = it },
+            )
+
+            Spacer(Modifier.height(18.dp))
+            AgendaSection(
+                date = selectedDate,
+                events = eventsByDay[selectedDate].orEmpty(),
+                todos = state.todos.filter { it.dueAtMillis?.toLocalDate() == selectedDate },
+                onAddEvent = {
+                    if (!hasWriteAccess) writePermission.launch(Manifest.permission.WRITE_CALENDAR)
+                    showAddEvent = true
+                },
+                onToggleTodo = repository::toggleDone,
+                onEditTodo = { editingTodo = it },
+            )
+
+            Spacer(Modifier.height(26.dp))
+            TodoSection(
+                state = state,
+                repository = repository,
+                selectedTab = selectedTab,
+                onSelectTab = { selectedTab = it },
+                onEditTodo = { editingTodo = it },
+            )
+            // The page reaches the bottom edge; its end scrolls up above the page dots and navigation bar.
+            Spacer(Modifier.height(24.dp + bottomSpace))
         }
-
-        CalendarCard(
-            scale = scale,
-            selectedDate = selectedDate,
-            eventsByDay = eventsByDay,
-            todoDays = todoDays,
-            onScaleChange = { scale = it },
-            onSelectDate = { selectedDate = it },
-        )
-
-        Spacer(Modifier.height(18.dp))
-        AgendaSection(
-            date = selectedDate,
-            events = eventsByDay[selectedDate].orEmpty(),
-            todos = state.todos.filter { it.dueAtMillis?.toLocalDate() == selectedDate },
-            onAddEvent = {
-                if (!hasWriteAccess) writePermission.launch(Manifest.permission.WRITE_CALENDAR)
-                showAddEvent = true
-            },
-            onToggleTodo = repository::toggleDone,
-            onEditTodo = { editingTodo = it },
-        )
-
-        Spacer(Modifier.height(26.dp))
-        TodoSection(
-            state = state,
-            repository = repository,
-            selectedTab = selectedTab,
-            onSelectTab = { selectedTab = it },
-            onEditTodo = { editingTodo = it },
-        )
-        // The page reaches the bottom edge; its end scrolls up above the page dots and navigation bar.
-        Spacer(Modifier.height(24.dp + bottomSpace))
     }
 
     if (showAddEvent) {

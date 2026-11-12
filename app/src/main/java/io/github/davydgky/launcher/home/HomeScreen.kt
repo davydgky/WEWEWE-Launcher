@@ -44,6 +44,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -136,6 +137,7 @@ import io.github.davydgky.launcher.search.ShortcutTarget
 import io.github.davydgky.launcher.settings.SettingsActivity
 import io.github.davydgky.launcher.ui.AppIconImage
 import io.github.davydgky.launcher.ui.LocalLightWallpaper
+import io.github.davydgky.launcher.ui.glass.BehindStatusBar
 import io.github.davydgky.launcher.ui.ResultIcon
 import io.github.davydgky.launcher.ui.ScreenBounds
 import io.github.davydgky.launcher.ui.wallpaperTextColor
@@ -205,9 +207,8 @@ fun HomeScreen(
                     },
                 )
             }
-            // The organizer and the App Library reach down to the bottom edge, behind the navigation bar;
-            // the home pages, the page dots and the dock keep clear of it themselves.
-            .statusBarsPadding(),
+            // The organizer and the App Library reach to the top and bottom edges, behind the status and
+            // navigation bars; the home pages, the page dots and the dock keep clear of them themselves.
     ) {
         val density = LocalDensity.current
         val navBarHeight = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
@@ -237,7 +238,7 @@ fun HomeScreen(
                 when {
                     page < offset -> OrganizerPage(context.launcherApp.organizer, bottomSpace = sidePageBottom)
                     page < homePages + offset -> {
-                        Box(Modifier.navigationBarsPadding().padding(bottom = INDICATOR_HEIGHT + barsHeightDp)) {
+                        Box(Modifier.statusBarsPadding().navigationBarsPadding().padding(bottom = INDICATOR_HEIGHT + barsHeightDp)) {
                             WorkspacePage(page - offset, workspace, apps, shortcuts, controller)
                         }
                     }
@@ -1593,31 +1594,35 @@ fun MenuItem(label: Int, icon: Int, onClick: () -> Unit) {
 @Composable
 private fun AppLibraryPage(groups: List<LibraryGroup>, workspace: Workspace, controller: HomeController, bottomSpace: Dp) {
     val color = wallpaperTextColor()
-    LazyColumn(
-        Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 10.dp, bottom = 10.dp + bottomSpace),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
-        item("search") {
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .height(40.dp)
-                    .clip(RoundedCornerShape(20.dp))
-                    .background(libraryFill())
-                    .clickable(onClick = controller.openSearch)
-                    .padding(horizontal = 14.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Icon(painterResource(R.drawable.ic_search), null, Modifier.size(16.dp), tint = color)
-                Spacer(Modifier.width(8.dp))
-                Text(stringResource(R.string.library_search), color = color.copy(alpha = 0.8f), fontSize = 15.sp)
+    val statusBar = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    // Reaches up behind the status bar, blurred there so the clock stays readable.
+    BehindStatusBar(Modifier.fillMaxSize()) {
+        LazyColumn(
+            Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 10.dp + statusBar, bottom = 10.dp + bottomSpace),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            item("search") {
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(40.dp)
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(libraryFill())
+                        .clickable(onClick = controller.openSearch)
+                        .padding(horizontal = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(painterResource(R.drawable.ic_search), null, Modifier.size(16.dp), tint = color)
+                    Spacer(Modifier.width(8.dp))
+                    Text(stringResource(R.string.library_search), color = color.copy(alpha = 0.8f), fontSize = 15.sp)
+                }
             }
-        }
-        items(groups.chunked(2), key = { row -> row.joinToString { it.title.toString() } }) { row ->
-            Row(horizontalArrangement = Arrangement.spacedBy(18.dp)) {
-                row.forEach { group -> LibraryBox(group, workspace, controller, Modifier.weight(1f)) }
-                if (row.size == 1) Spacer(Modifier.weight(1f))
+            items(groups.chunked(2), key = { row -> row.joinToString { it.title.toString() } }) { row ->
+                Row(horizontalArrangement = Arrangement.spacedBy(18.dp)) {
+                    row.forEach { group -> LibraryBox(group, workspace, controller, Modifier.weight(1f)) }
+                    if (row.size == 1) Spacer(Modifier.weight(1f))
+                }
             }
         }
     }
