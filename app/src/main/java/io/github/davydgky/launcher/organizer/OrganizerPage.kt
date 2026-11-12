@@ -53,6 +53,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -80,6 +81,11 @@ private fun Long.toLocalDate(): LocalDate = Instant.ofEpochMilli(this).atZone(zo
 
 // Material3's DatePicker always works in UTC days, regardless of the device's zone.
 private fun LocalDate.toUtcMidnightMillis(): Long = atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
+
+// Reading java.util.Locale.getDefault() directly would not recompose if the user changes the
+// system language while the app is open; this reads it from the (observable) configuration instead.
+@Composable
+private fun currentLocale(): Locale = LocalConfiguration.current.locales[0]
 
 private val LIST_PALETTE = listOf(
     Color(0xFF0A84FF), Color(0xFFFF9F0A), Color(0xFF30D158), Color(0xFFFF375F), Color(0xFFBF5AF2), Color(0xFF64D2FF),
@@ -240,7 +246,7 @@ private fun MonthCalendar(
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(color.copy(alpha = 0.08f)).padding(14.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text(
-                month.month.getDisplayName(TextStyle.FULL, Locale.getDefault()).replaceFirstChar { it.uppercase() } + " ${month.year}",
+                month.month.getDisplayName(TextStyle.FULL, currentLocale()).replaceFirstChar { it.uppercase() } + " ${month.year}",
                 color = color,
                 fontSize = 17.sp,
                 fontWeight = FontWeight.SemiBold,
@@ -255,7 +261,7 @@ private fun MonthCalendar(
                 val dow = firstDow.plus(i.toLong())
                 Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
                     Text(
-                        dow.getDisplayName(TextStyle.SHORT, Locale.getDefault()).take(2),
+                        dow.getDisplayName(TextStyle.SHORT, currentLocale()).take(2),
                         color = color.copy(alpha = 0.55f),
                         fontSize = 11.sp,
                     )
@@ -326,7 +332,7 @@ private fun AgendaSection(
     val color = wallpaperTextColor()
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text(
-            date.format(java.time.format.DateTimeFormatter.ofPattern("EEEE, d. MMMM", Locale.getDefault())).replaceFirstChar { it.uppercase() },
+            date.format(java.time.format.DateTimeFormatter.ofPattern("EEEE, d. MMMM", currentLocale())).replaceFirstChar { it.uppercase() },
             color = color,
             fontSize = 16.sp,
             fontWeight = FontWeight.SemiBold,
@@ -448,9 +454,9 @@ private fun TodoRow(todo: Todo, color: Color, onToggle: () -> Unit, onClick: () 
             if (showDate && todo.dueAtMillis != null) {
                 val d = todo.dueAtMillis.toLocalDate()
                 val fmt = if (todo.hasTime) {
-                    d.format(java.time.format.DateTimeFormatter.ofPattern("d. MMM, HH:mm", Locale.getDefault()))
+                    d.format(java.time.format.DateTimeFormatter.ofPattern("d. MMM, HH:mm", currentLocale()))
                 } else {
-                    d.format(java.time.format.DateTimeFormatter.ofPattern("d. MMM", Locale.getDefault()))
+                    d.format(java.time.format.DateTimeFormatter.ofPattern("d. MMM", currentLocale()))
                 }
                 Text(fmt, color = color.copy(alpha = 0.5f), fontSize = 12.sp)
             }
@@ -524,7 +530,7 @@ private fun DueDatePicker(
         Spacer(Modifier.height(8.dp))
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             TextButton(onClick = { showDatePicker = true }) {
-                Text(date?.format(java.time.format.DateTimeFormatter.ofPattern("d. MMMM yyyy", Locale.getDefault())) ?: stringResource(R.string.organizer_pick_date))
+                Text(date?.format(java.time.format.DateTimeFormatter.ofPattern("d. MMMM yyyy", currentLocale())) ?: stringResource(R.string.organizer_pick_date))
             }
             Spacer(Modifier.weight(1f))
             if (date != null) TextButton(onClick = { onDateChange(null) }) { Text(stringResource(R.string.organizer_no_date)) }
