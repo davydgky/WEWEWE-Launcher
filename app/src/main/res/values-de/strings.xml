@@ -354,7 +354,12 @@
     <string name="organizer_no_date">Kein Datum</string>
     <string name="organizer_set_time">Uhrzeit festlegen</string>
     <string name="delete">Löschen</string>
-    <string name="organizer_previous_month">Vorheriger Monat</string>
-    <string name="organizer_next_month">Nächster Monat</string>
+    <string name="organizer_previous">Zurück</string>
+    <string name="organizer_next">Weiter</string>
     <string name="organizer_event_not_saved">Der Termin konnte in keinem Kalender gespeichert werden</string>
+    <string name="organizer_scale_day">Tag</string>
+    <string name="organizer_scale_week">Woche</string>
+    <string name="organizer_scale_month">Monat</string>
+    <string name="organizer_scale_year">Jahr</string>
+    <string name="organizer_week_number">KW %1$d</string>
 </resources>

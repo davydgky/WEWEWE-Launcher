@@ -17,10 +17,10 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -76,11 +76,8 @@ import io.github.davydgky.launcher.ui.wallpaperTextColor
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalTime
-import java.time.YearMonth
 import java.time.ZoneId
 import java.time.ZoneOffset
-import java.time.format.TextStyle
-import java.time.temporal.WeekFields
 import java.util.Date
 import java.util.Locale
 import kotlinx.coroutines.Dispatchers
@@ -89,8 +86,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 // Read on every use: the user can change the time zone while the launcher keeps running.
-private val zone: ZoneId get() = ZoneId.systemDefault()
-private fun LocalDate.startOfDayMillis(): Long = atStartOfDay(zone).toInstant().toEpochMilli()
+internal val zone: ZoneId get() = ZoneId.systemDefault()
+internal fun LocalDate.startOfDayMillis(): Long = atStartOfDay(zone).toInstant().toEpochMilli()
 private fun Long.toLocalDate(): LocalDate = Instant.ofEpochMilli(this).atZone(zone).toLocalDate()
 
 // Material3's DatePicker always works in UTC days, regardless of the device's zone.
@@ -99,28 +96,28 @@ private fun LocalDate.toUtcMidnightMillis(): Long = atStartOfDay(ZoneOffset.UTC)
 // Reading java.util.Locale.getDefault() directly would not recompose if the user changes the
 // system language while the app is open; this reads it from the (observable) configuration instead.
 @Composable
-private fun currentLocale(): Locale = LocalConfiguration.current.locales[0]
+internal fun currentLocale(): Locale = LocalConfiguration.current.locales[0]
 
 /**
  * A date format in the user's language from an ICU skeleton ("dMMM" → "12. Nov." in German, "Nov 12" in
  * English), rather than a fixed pattern that only reads right in one language.
  */
 @Composable
-private fun rememberDateFormat(skeleton: String): android.icu.text.DateFormat {
+internal fun rememberDateFormat(skeleton: String): android.icu.text.DateFormat {
     val locale = currentLocale()
     return remember(skeleton, locale) { android.icu.text.DateFormat.getInstanceForSkeleton(skeleton, locale) }
 }
 
 /** Times as the user set them up: 24-hour or with AM/PM. */
 @Composable
-private fun rememberTimeFormat(): java.text.DateFormat {
+internal fun rememberTimeFormat(): java.text.DateFormat {
     val context = LocalContext.current
     val locale = currentLocale()
     return remember(locale) { android.text.format.DateFormat.getTimeFormat(context) }
 }
 
-private fun LocalDate.toDate(): Date = Date(startOfDayMillis())
-private fun String.capitalized(locale: Locale): String = replaceFirstChar { it.titlecase(locale) }
+internal fun LocalDate.toDate(): Date = Date(startOfDayMillis())
+internal fun String.capitalized(locale: Locale): String = replaceFirstChar { it.titlecase(locale) }
 
 private val LIST_PALETTE = listOf(
     Color(0xFF0A84FF), Color(0xFFFF9F0A), Color(0xFF30D158), Color(0xFFFF375F), Color(0xFFBF5AF2), Color(0xFF64D2FF),
@@ -141,7 +138,8 @@ fun OrganizerPage(repository: OrganizerRepository, modifier: Modifier = Modifier
     val readPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { hasReadAccess = it }
     val writePermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { hasWriteAccess = it }
 
-    var month by rememberSaveable { mutableStateOf(YearMonth.now()) }
+    // A week by default: the reminders below stay in view. Pinching or the tabs show more or less.
+    var scale by rememberSaveable { mutableStateOf(CalendarScale.Week) }
     var selectedDate by rememberSaveable { mutableStateOf(LocalDate.now()) }
 
     // Bumped whenever the Calendar Provider changes (a sync from Google, an event added here), to read again.
@@ -157,9 +155,8 @@ fun OrganizerPage(repository: OrganizerRepository, modifier: Modifier = Modifier
         onDispose { context.contentResolver.unregisterContentObserver(observer) }
     }
 
-    val windowStart = month.minusMonths(1).atDay(1)
-    val windowEnd = month.plusMonths(1).atEndOfMonth()
-    val events by produceState(emptyList<CalendarEvent>(), month, hasReadAccess, calendarVersion) {
+    val (windowStart, windowEnd) = calendarWindow(scale, selectedDate)
+    val events by produceState(emptyList<CalendarEvent>(), windowStart, windowEnd, hasReadAccess, calendarVersion) {
         // A sync reports many changes in a row; a new one restarts this, so it reads once they settle.
         if (calendarVersion > 0) delay(300)
         value = withContext(Dispatchers.IO) {
@@ -186,6 +183,8 @@ fun OrganizerPage(repository: OrganizerRepository, modifier: Modifier = Modifier
     Column(
         modifier
             .fillMaxSize()
+            // With the keyboard up the page ends above it, so the field being typed in scrolls into view.
+            .imePadding()
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 16.dp),
     ) {
@@ -203,16 +202,12 @@ fun OrganizerPage(repository: OrganizerRepository, modifier: Modifier = Modifier
             Spacer(Modifier.height(12.dp))
         }
 
-        MonthCalendar(
-            month = month,
+        CalendarCard(
+            scale = scale,
             selectedDate = selectedDate,
-            eventDays = eventsByDay.keys,
+            eventsByDay = eventsByDay,
             todoDays = todoDays,
-            onMonthChange = {
-                // The agenda below follows: today in the current month, else the month's first day.
-                month = it
-                selectedDate = if (it == YearMonth.now()) LocalDate.now() else it.atDay(1)
-            },
+            onScaleChange = { scale = it },
             onSelectDate = { selectedDate = it },
         )
 
@@ -237,8 +232,8 @@ fun OrganizerPage(repository: OrganizerRepository, modifier: Modifier = Modifier
             onSelectTab = { selectedTab = it },
             onEditTodo = { editingTodo = it },
         )
-        // Room for the search button and dock, which stay over the bottom of this page.
-        Spacer(Modifier.height(32.dp + bottomSpace))
+        // The page reaches the bottom edge; its end scrolls up above the page dots and navigation bar.
+        Spacer(Modifier.height(24.dp + bottomSpace))
     }
 
     if (showAddEvent) {
@@ -292,107 +287,13 @@ private fun PermissionBanner(text: String, onClick: () -> Unit) {
         Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(14.dp))
-            .background(color.copy(alpha = 0.14f))
+            .background(color.copy(alpha = 0.09f))
             .clickable(onClick = onClick)
             .padding(14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(text, color = color, fontSize = 14.sp, modifier = Modifier.weight(1f))
         Icon(painterResource(R.drawable.ic_chevron_right), null, tint = color)
-    }
-}
-
-@Composable
-private fun MonthCalendar(
-    month: YearMonth,
-    selectedDate: LocalDate,
-    eventDays: Set<LocalDate>,
-    todoDays: Set<LocalDate>,
-    onMonthChange: (YearMonth) -> Unit,
-    onSelectDate: (LocalDate) -> Unit,
-) {
-    val color = wallpaperTextColor()
-    val locale = currentLocale()
-    val monthFormat = rememberDateFormat("MMMMy")
-    // Sunday in the US, Monday in Germany: the week starts where the user's region starts it.
-    val firstDow = remember(locale) { WeekFields.of(locale).firstDayOfWeek }
-    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(color.copy(alpha = 0.08f)).padding(14.dp)) {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                monthFormat.format(month.atDay(1).toDate()).capitalized(locale),
-                color = color,
-                fontSize = 17.sp,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.weight(1f),
-            )
-            IconButton(onClick = { onMonthChange(month.minusMonths(1)) }) {
-                Icon(painterResource(R.drawable.ic_chevron_left), stringResource(R.string.organizer_previous_month), tint = color)
-            }
-            IconButton(onClick = { onMonthChange(month.plusMonths(1)) }) {
-                Icon(painterResource(R.drawable.ic_chevron_right), stringResource(R.string.organizer_next_month), tint = color)
-            }
-        }
-        Row(Modifier.fillMaxWidth()) {
-            repeat(7) { i ->
-                val dow = firstDow.plus(i.toLong())
-                Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
-                    Text(
-                        dow.getDisplayName(TextStyle.SHORT, locale).take(2),
-                        color = color.copy(alpha = 0.55f),
-                        fontSize = 11.sp,
-                    )
-                }
-            }
-        }
-        Spacer(Modifier.height(4.dp))
-        val firstOfMonth = month.atDay(1)
-        val leading = (firstOfMonth.dayOfWeek.value - firstDow.value + 7) % 7
-        val totalCells = leading + month.lengthOfMonth()
-        val rows = (totalCells + 6) / 7
-        val today = LocalDate.now()
-        for (row in 0 until rows) {
-            Row(Modifier.fillMaxWidth()) {
-                for (col in 0 until 7) {
-                    val cellIndex = row * 7 + col
-                    val dayNum = cellIndex - leading + 1
-                    Box(Modifier.weight(1f).aspectRatio(1f), contentAlignment = Alignment.Center) {
-                        if (dayNum in 1..month.lengthOfMonth()) {
-                            val date = month.atDay(dayNum)
-                            val isSelected = date == selectedDate
-                            val isToday = date == today
-                            Box(
-                                Modifier
-                                    .size(32.dp)
-                                    .clip(CircleShape)
-                                    .background(if (isSelected) color.copy(alpha = 0.9f) else Color.Transparent)
-                                    .clickable(onClickLabel = date.toString()) { onSelectDate(date) },
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Text(
-                                        dayNum.toString(),
-                                        color = when {
-                                            isSelected -> if (wallpaperTextColor() == Color.White) Color.Black else Color.White
-                                            isToday -> color
-                                            else -> color.copy(alpha = 0.85f)
-                                        },
-                                        fontWeight = if (isToday || isSelected) FontWeight.Bold else FontWeight.Normal,
-                                        fontSize = 14.sp,
-                                    )
-                                }
-                            }
-                            Row(
-                                Modifier.align(Alignment.BottomCenter).padding(bottom = 1.dp),
-                                horizontalArrangement = Arrangement.spacedBy(2.dp),
-                            ) {
-                                if (date in eventDays) Box(Modifier.size(3.dp).clip(CircleShape).background(color.copy(alpha = 0.8f)))
-                                if (date in todoDays) Box(Modifier.size(3.dp).clip(CircleShape).background(LIST_PALETTE[0]))
-                            }
-                        }
-                    }
-                }
-            }
-        }
     }
 }
 
@@ -462,7 +363,7 @@ private fun TodoSection(
             Row(
                 Modifier
                     .clip(RoundedCornerShape(50))
-                    .background(if (selected) LIST_PALETTE[list.colorIndex % LIST_PALETTE.size] else color.copy(alpha = 0.12f))
+                    .background(if (selected) LIST_PALETTE[list.colorIndex % LIST_PALETTE.size] else color.copy(alpha = 0.08f))
                     .clickable { onSelectTab(list.id) }
                     .padding(horizontal = 14.dp, vertical = 8.dp),
             ) {

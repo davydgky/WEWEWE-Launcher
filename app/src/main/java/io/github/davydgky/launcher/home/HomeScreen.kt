@@ -41,6 +41,9 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -194,26 +197,35 @@ fun HomeScreen(
                         { if (!onItem && !controller.editMode && !LockService.lock()) controller.lockUnavailable() }
                     } else null,
                     onLongPress = {
-                        if (!onItem && !controller.editMode) {
+                        // On the organizer a long press is meant for its text, not for arranging the home screen.
+                        if (!onItem && !controller.editMode && !controller.onOrganizer) {
                             haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                             controller.startEditing()
                         }
                     },
                 )
             }
-            .statusBarsPadding()
-            .navigationBarsPadding(),
+            // The organizer and the App Library reach down to the bottom edge, behind the navigation bar;
+            // the home pages, the page dots and the dock keep clear of it themselves.
+            .statusBarsPadding(),
     ) {
         val density = LocalDensity.current
+        val navBarHeight = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
         // Search button and dock; the App Library has the screen down to the page dots without them.
         var barsHeight by remember { mutableIntStateOf(0) }
         val barsHeightDp = with(density) { barsHeight.toDp() }
-        // 0 on the last home page, 1 halfway to the App Library: the dock is gone before it arrives.
+        // 0 on a home page, 1 halfway to the App Library or to the organizer: the search button and dock
+        // are gone before either arrives.
         val offset = HomeController.GRID_OFFSET
-        val libraryProgress = {
-            ((pagerState.currentPage + pagerState.currentPageOffsetFraction - offset - (homePages - 1)) * 2f).coerceIn(0f, 1f)
+        val sideProgress = {
+            val position = pagerState.currentPage + pagerState.currentPageOffsetFraction
+            val towardsLibrary = (position - offset - (homePages - 1)) * 2f
+            val towardsOrganizer = (offset - position) * 2f
+            maxOf(towardsLibrary, towardsOrganizer).coerceIn(0f, 1f)
         }
-        val onLibrary = pagerState.currentPage >= homePages + offset
+        val onSidePage = pagerState.currentPage >= homePages + offset || pagerState.currentPage < offset
+        // What the organizer and the App Library leave free at their end, so it scrolls up above the dots.
+        val sidePageBottom = INDICATOR_HEIGHT + navBarHeight
         Box(Modifier.weight(1f).fillMaxWidth()) {
             HorizontalPager(
                 state = pagerState,
@@ -223,42 +235,33 @@ fun HomeScreen(
                 beyondViewportPageCount = homePages,
             ) { page ->
                 when {
-                    page < offset -> {
-                        Box(Modifier.padding(bottom = INDICATOR_HEIGHT)) {
-                            // The search button and dock stay over this page: its end scrolls up above them.
-                            OrganizerPage(context.launcherApp.organizer, bottomSpace = barsHeightDp)
-                        }
-                    }
+                    page < offset -> OrganizerPage(context.launcherApp.organizer, bottomSpace = sidePageBottom)
                     page < homePages + offset -> {
-                        Box(Modifier.padding(bottom = INDICATOR_HEIGHT + barsHeightDp)) {
+                        Box(Modifier.navigationBarsPadding().padding(bottom = INDICATOR_HEIGHT + barsHeightDp)) {
                             WorkspacePage(page - offset, workspace, apps, shortcuts, controller)
                         }
                     }
-                    else -> {
-                        Box(Modifier.padding(bottom = INDICATOR_HEIGHT)) {
-                            AppLibraryPage(library, workspace, controller)
-                        }
-                    }
+                    else -> AppLibraryPage(library, workspace, controller, bottomSpace = sidePageBottom)
                 }
             }
-            Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth()) {
+            Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().navigationBarsPadding()) {
                 UndoPill(controller.repository)
                 // The dots move down into the dock's place as it fades out.
-                Box(Modifier.graphicsLayer { translationY = libraryProgress() * barsHeight }) {
+                Box(Modifier.graphicsLayer { translationY = sideProgress() * barsHeight }) {
                     PageIndicator(homePages, pagerState, onEditTap = { controller.pagesOverviewOpen = true }.takeIf { controller.editMode })
                 }
                 Column(
                     Modifier
                         .fillMaxWidth()
-                        .onSizeChanged { if (!onLibrary) barsHeight = it.height }
+                        .onSizeChanged { if (!onSidePage) barsHeight = it.height }
                         .graphicsLayer {
-                            val p = libraryProgress()
+                            val p = sideProgress()
                             alpha = 1f - p
                             translationY = p * size.height * 0.4f
                         },
                 ) {
-                    if (onLibrary && barsHeight > 0) {
-                        // Hidden on the App Library: same room, but nothing there catches a touch.
+                    if (onSidePage && barsHeight > 0) {
+                        // Hidden on the App Library and the organizer: same room, but nothing there catches a touch.
                         Spacer(Modifier.height(barsHeightDp))
                     } else {
                         if (controller.editMode) EditBar(controller) else SearchButton(controller.openSearch)
@@ -743,6 +746,11 @@ private class Scatter(val dx: Float, val dy: Float, val rotation: Float, val sca
 
 /** Icon size on the pages: as on the dock, smaller when the grid has many columns. */
 private val LocalIconSize = staticCompositionLocalOf { ICON_SIZE }
+
+/** The App Library's boxes: lighter than a folder on the home screen, the wallpaper shows through more. */
+@Composable
+private fun libraryFill(): Color =
+    if (LocalLightWallpaper.current) Color.White.copy(alpha = 0.26f) else Color.White.copy(alpha = 0.11f)
 
 @Composable
 private fun folderFill(): Color =
@@ -1583,11 +1591,11 @@ fun MenuItem(label: Int, icon: Int, onClick: () -> Unit) {
 
 /** Like iOS: a search field on top, then boxes of apps by category. */
 @Composable
-private fun AppLibraryPage(groups: List<LibraryGroup>, workspace: Workspace, controller: HomeController) {
+private fun AppLibraryPage(groups: List<LibraryGroup>, workspace: Workspace, controller: HomeController, bottomSpace: Dp) {
     val color = wallpaperTextColor()
     LazyColumn(
         Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(horizontal = 18.dp, vertical = 10.dp),
+        contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 10.dp, bottom = 10.dp + bottomSpace),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         item("search") {
@@ -1596,7 +1604,7 @@ private fun AppLibraryPage(groups: List<LibraryGroup>, workspace: Workspace, con
                     .fillMaxWidth()
                     .height(40.dp)
                     .clip(RoundedCornerShape(20.dp))
-                    .background(folderFill())
+                    .background(libraryFill())
                     .clickable(onClick = controller.openSearch)
                     .padding(horizontal = 14.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -1624,7 +1632,7 @@ private fun LibraryBox(group: LibraryGroup, workspace: Workspace, controller: Ho
                 .fillMaxWidth()
                 .aspectRatio(1f)
                 .clip(RoundedCornerShape(28.dp))
-                .background(folderFill())
+                .background(libraryFill())
                 .clickable { controller.openCategory = group }
                 .padding(8.dp),
         ) {

@@ -351,7 +351,7 @@ class HomeController(
         val p = state.pointer
         val appKey = state.source.draggedApp
         // The dock is hidden on the App Library.
-        if (!onLibrary && dockBounds.contains(p)) {
+        if (!onLibrary && !onOrganizer && dockBounds.contains(p)) {
             if (appKey == null) return null
             val inDock = state.source is DragSource.Dock
             if (!inDock && dockSize >= Workspace.DOCK_SIZE) return null

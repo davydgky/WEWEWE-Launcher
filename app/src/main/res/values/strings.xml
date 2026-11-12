@@ -355,7 +355,12 @@
     <string name="organizer_no_date">No date</string>
     <string name="organizer_set_time">Set a time</string>
     <string name="delete">Delete</string>
-    <string name="organizer_previous_month">Previous month</string>
-    <string name="organizer_next_month">Next month</string>
+    <string name="organizer_previous">Previous</string>
+    <string name="organizer_next">Next</string>
     <string name="organizer_event_not_saved">The event could not be saved to a calendar</string>
+    <string name="organizer_scale_day">Day</string>
+    <string name="organizer_scale_week">Week</string>
+    <string name="organizer_scale_month">Month</string>
+    <string name="organizer_scale_year">Year</string>
+    <string name="organizer_week_number">Week %1$d</string>
 </resources>
