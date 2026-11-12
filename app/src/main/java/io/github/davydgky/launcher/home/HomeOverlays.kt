@@ -343,7 +343,7 @@ private fun WidgetPreview(info: AppWidgetProviderInfo, controller: HomeControlle
             .clickable {
                 controller.widgetPickerOpen = false
                 controller.widgetPickerPackage = null
-                controller.addWidget(info, span.w, span.h, controller.pager.currentPage.coerceAtMost(controller.homePages - 1))
+                controller.addWidget(info, span.w, span.h, controller.currentHomePage)
             }
             .padding(12.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -401,7 +401,7 @@ fun PagesOverlay(controller: HomeController, workspace: Workspace, apps: Map<Str
                                     modifier = Modifier.weight(1f),
                                     onOpen = {
                                         close()
-                                        scope.launch { controller.pager.animateScrollToPage(page) }
+                                        scope.launch { controller.pager.animateScrollToPage(page + HomeController.GRID_OFFSET) }
                                     },
                                     onRemove = { confirm = page },
                                 )

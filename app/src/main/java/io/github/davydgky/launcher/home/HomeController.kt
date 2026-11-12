@@ -174,7 +174,7 @@ class HomeController(
     /** Grid area of each page and of the dock, in root coordinates. */
     val pageBounds = HashMap<Int, Rect>()
     var dockBounds = Rect.Zero
-    val gridBounds: Rect get() = pageBounds[pager.currentPage] ?: pageBounds.values.firstOrNull() ?: Rect.Zero
+    val gridBounds: Rect get() = pageBounds[pager.currentPage - GRID_OFFSET] ?: pageBounds.values.firstOrNull() ?: Rect.Zero
     var density = 1f
     var screenWidth = 0f
     var columns = 4
@@ -182,18 +182,21 @@ class HomeController(
     var homePages = 1
     var dockSize = 0
 
-    /** The home page on screen, or the last one while the App Library shows. */
+    /** The home page on screen, or the nearest one while the App Library or the organizer shows. */
     val currentHomePage: Int
-        get() = if (::pager.isInitialized) pager.currentPage.coerceIn(0, (homePages - 1).coerceAtLeast(0)) else 0
+        get() = if (::pager.isInitialized) (pager.currentPage - GRID_OFFSET).coerceIn(0, (homePages - 1).coerceAtLeast(0)) else 0
 
     /** Swipe up on the home screen: the App Library, as the app drawer on Pixel phones. */
     fun showLibrary() {
         if (!::pager.isInitialized) return
-        scope.launch { pager.animateScrollToPage(homePages) }
+        scope.launch { pager.animateScrollToPage(homePages + GRID_OFFSET) }
     }
 
     /** The App Library is showing (the page after the last home page). */
-    val onLibrary: Boolean get() = ::pager.isInitialized && pager.currentPage >= homePages
+    val onLibrary: Boolean get() = ::pager.isInitialized && pager.currentPage >= homePages + GRID_OFFSET
+
+    /** The organizer page, to the left of the home pages, is showing. */
+    val onOrganizer: Boolean get() = ::pager.isInitialized && pager.currentPage < GRID_OFFSET
 
     val cellWidth: Float get() = gridBounds.width / columns
     val cellHeight: Float get() = gridBounds.height / rows
@@ -357,8 +360,8 @@ class HomeController(
             return DropTarget.Dock(index.coerceIn(0, slots - 1))
         }
         if (!gridBounds.contains(p) || cellWidth <= 0f) return null
-        val page = pager.currentPage
-        if (page >= homePages) return null
+        val page = pager.currentPage - GRID_OFFSET
+        if (page < 0 || page >= homePages) return null
         val col = floor((p.x - gridBounds.left) / cellWidth).toInt().coerceIn(0, columns - 1)
         val row = floor((p.y - gridBounds.top) / cellHeight).toInt().coerceIn(0, rows - 1)
         // What is under the finger as the screen shows it: elements that made room count where they are now.
@@ -403,7 +406,7 @@ class HomeController(
                 val current = drag ?: break
                 val direction = edgeDirection(current.pointer)
                 if (direction == 0) break
-                val next = (pager.currentPage + direction).coerceIn(0, homePages - 1)
+                val next = ((pager.currentPage - GRID_OFFSET) + direction).coerceIn(0, homePages - 1) + GRID_OFFSET
                 if (next == pager.currentPage) break
                 pager.animateScrollToPage(next)
                 // The finger did not move, but the cell under it is a new one.
@@ -421,11 +424,16 @@ class HomeController(
         }
     }
 
-    private companion object {
-        const val TAG = "HomeController"
-        const val EDGE_DELAY_MS = 650L
-        const val REORDER_DELAY_MS = 250L
-        const val REST_SLOP_DP = 10f
+    companion object {
+        /**
+         * The pager carries the organizer page before the home pages and the App Library after the last
+         * one: a grid page `g` sits at pager page `g + GRID_OFFSET`.
+         */
+        const val GRID_OFFSET = 1
+        private const val TAG = "HomeController"
+        private const val EDGE_DELAY_MS = 650L
+        private const val REORDER_DELAY_MS = 250L
+        private const val REST_SLOP_DP = 10f
     }
 }
 

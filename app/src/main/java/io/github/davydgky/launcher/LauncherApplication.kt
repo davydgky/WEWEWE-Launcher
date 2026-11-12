@@ -10,6 +10,7 @@ import io.github.davydgky.launcher.crash.CrashGuard
 import io.github.davydgky.launcher.data.LaunchLog
 import io.github.davydgky.launcher.data.LauncherSettings
 import io.github.davydgky.launcher.home.WorkspaceRepository
+import io.github.davydgky.launcher.organizer.OrganizerRepository
 import io.github.davydgky.launcher.index.IndexStore
 import io.github.davydgky.launcher.messages.Messages
 import io.github.davydgky.launcher.notifications.Notifications
@@ -46,6 +47,7 @@ class LauncherApplication : Application() {
     val suggestions: Suggestions by lazy { Suggestions(apps, usage, launchLog, appScope) }
     val widgets: WidgetHost by lazy { WidgetHost(this) }
     val workspace: WorkspaceRepository by lazy { WorkspaceRepository(this, apps, settings, usage, widgets, appScope) }
+    val organizer: OrganizerRepository by lazy { OrganizerRepository(this, appScope) }
     val updater: AppUpdater by lazy { AppUpdater(this, settings, appScope) }
     val torch: Torch by lazy { Torch(this) }
     val notifications: Notifications by lazy { Notifications(this) }
@@ -66,6 +68,7 @@ class LauncherApplication : Application() {
         appKnowledge.start()
         search.start()
         workspace.start()
+        organizer.start()
     }
 }
 

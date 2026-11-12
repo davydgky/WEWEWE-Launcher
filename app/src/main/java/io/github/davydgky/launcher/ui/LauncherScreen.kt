@@ -172,7 +172,7 @@ fun LauncherScreen(
                 .fillMaxSize()
                 // The root fills the window, so its positions are window coordinates.
                 .searchGesture(state, distancePx, topInset, swipeUpPx, onSwipeUp = controller::showLibrary, scrollsAt = controller::widgetScrollsAt) {
-                    !controller.isEditing && !controller.onLibrary
+                    !controller.isEditing && !controller.onLibrary && !controller.onOrganizer
                 }
                 .homeDragTracker(controller),
         ) {

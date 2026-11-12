@@ -332,4 +332,26 @@
     <string name="onboarding_privacy">Play-Store-Treffer schicken deine Suchwörter an Google Play, Fragen und persönliche Treffer nie. Jede Quelle lässt sich in den Einstellungen abschalten.</string>
     <string name="onboarding_done">Los geht\'s</string>
     <string name="onboarding_settings">Einstellungen</string>
+
+    <!-- Organizer-Seite -->
+    <string name="organizer_title">Organizer</string>
+    <string name="organizer_default_list">Erinnerungen</string>
+    <string name="organizer_connect_calendar">Kalenderzugriff erlauben, um Termine hier zu sehen</string>
+    <string name="organizer_allow_write">Zugriff erlauben, um Termine in deinen Kalender zu übertragen</string>
+    <string name="organizer_add_event">Termin hinzufügen</string>
+    <string name="organizer_nothing_today">Nichts geplant</string>
+    <string name="organizer_tasks">Aufgaben</string>
+    <string name="organizer_new_list">Neue Liste</string>
+    <string name="organizer_new_reminder">Neue Erinnerung</string>
+    <string name="organizer_create">Erstellen</string>
+    <string name="organizer_save">Speichern</string>
+    <string name="organizer_title_field">Titel</string>
+    <string name="organizer_notes_field">Notizen</string>
+    <string name="organizer_today">Heute</string>
+    <string name="organizer_tomorrow">Morgen</string>
+    <string name="organizer_next_week">Nächste Woche</string>
+    <string name="organizer_pick_date">Datum wählen</string>
+    <string name="organizer_no_date">Kein Datum</string>
+    <string name="organizer_set_time">Uhrzeit festlegen</string>
+    <string name="delete">Löschen</string>
 </resources>

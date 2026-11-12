@@ -333,4 +333,26 @@
     <string name="onboarding_privacy">Play Store results send your search words to Google Play; questions and personal results never do. Each source can be switched off in the settings.</string>
     <string name="onboarding_done">Get started</string>
     <string name="onboarding_settings">Settings</string>
+
+    <!-- Organizer page -->
+    <string name="organizer_title">Organizer</string>
+    <string name="organizer_default_list">Reminders</string>
+    <string name="organizer_connect_calendar">Connect your calendar to see events here</string>
+    <string name="organizer_allow_write">Allow adding events to write this to your calendar</string>
+    <string name="organizer_add_event">Add event</string>
+    <string name="organizer_nothing_today">Nothing planned</string>
+    <string name="organizer_tasks">Tasks</string>
+    <string name="organizer_new_list">New list</string>
+    <string name="organizer_new_reminder">New reminder</string>
+    <string name="organizer_create">Create</string>
+    <string name="organizer_save">Save</string>
+    <string name="organizer_title_field">Title</string>
+    <string name="organizer_notes_field">Notes</string>
+    <string name="organizer_today">Today</string>
+    <string name="organizer_tomorrow">Tomorrow</string>
+    <string name="organizer_next_week">Next week</string>
+    <string name="organizer_pick_date">Pick a date</string>
+    <string name="organizer_no_date">No date</string>
+    <string name="organizer_set_time">Set a time</string>
+    <string name="delete">Delete</string>
 </resources>

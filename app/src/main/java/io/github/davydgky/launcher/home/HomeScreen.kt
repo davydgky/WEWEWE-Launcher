@@ -126,6 +126,7 @@ import io.github.davydgky.launcher.core.SearchItem
 import io.github.davydgky.launcher.core.SourceKind
 import io.github.davydgky.launcher.gestures.LockService
 import io.github.davydgky.launcher.launcherApp
+import io.github.davydgky.launcher.organizer.OrganizerPage
 import io.github.davydgky.launcher.notifications.Notifications
 import io.github.davydgky.launcher.search.AppTarget
 import io.github.davydgky.launcher.search.ShortcutTarget
@@ -172,9 +173,10 @@ fun HomeScreen(
     controller.folderName = { keys -> folderName(context, keys.mapNotNull(apps::get)) }
     controller.smartFolderName = { keys -> context.launcherApp.nano.folderName(keys.mapNotNull(apps::get).map { it.label }) }
 
-    val pagerState = rememberPagerState { homePages + 1 }
+    // Page 0 is the organizer, left of the first home page; the App Library follows the last one.
+    val pagerState = rememberPagerState(initialPage = HomeController.GRID_OFFSET) { homePages + 1 + HomeController.GRID_OFFSET }
     controller.pager = pagerState
-    LaunchedEffect(resetSignal) { if (resetSignal > 0) pagerState.animateScrollToPage(0) }
+    LaunchedEffect(resetSignal) { if (resetSignal > 0) pagerState.animateScrollToPage(HomeController.GRID_OFFSET) }
     val haptics = LocalHapticFeedback.current
 
     Column(
@@ -207,10 +209,11 @@ fun HomeScreen(
         var barsHeight by remember { mutableIntStateOf(0) }
         val barsHeightDp = with(density) { barsHeight.toDp() }
         // 0 on the last home page, 1 halfway to the App Library: the dock is gone before it arrives.
+        val offset = HomeController.GRID_OFFSET
         val libraryProgress = {
-            ((pagerState.currentPage + pagerState.currentPageOffsetFraction - (homePages - 1)) * 2f).coerceIn(0f, 1f)
+            ((pagerState.currentPage + pagerState.currentPageOffsetFraction - offset - (homePages - 1)) * 2f).coerceIn(0f, 1f)
         }
-        val onLibrary = pagerState.currentPage >= homePages
+        val onLibrary = pagerState.currentPage >= homePages + offset
         Box(Modifier.weight(1f).fillMaxWidth()) {
             HorizontalPager(
                 state = pagerState,
@@ -219,13 +222,21 @@ fun HomeScreen(
                 // Keeps every page alive, so an element dragged across pages keeps its gesture.
                 beyondViewportPageCount = homePages,
             ) { page ->
-                if (page < homePages) {
-                    Box(Modifier.padding(bottom = INDICATOR_HEIGHT + barsHeightDp)) {
-                        WorkspacePage(page, workspace, apps, shortcuts, controller)
+                when {
+                    page < offset -> {
+                        Box(Modifier.padding(bottom = INDICATOR_HEIGHT)) {
+                            OrganizerPage(context.launcherApp.organizer)
+                        }
                     }
-                } else {
-                    Box(Modifier.padding(bottom = INDICATOR_HEIGHT)) {
-                        AppLibraryPage(library, workspace, controller)
+                    page < homePages + offset -> {
+                        Box(Modifier.padding(bottom = INDICATOR_HEIGHT + barsHeightDp)) {
+                            WorkspacePage(page - offset, workspace, apps, shortcuts, controller)
+                        }
+                    }
+                    else -> {
+                        Box(Modifier.padding(bottom = INDICATOR_HEIGHT)) {
+                            AppLibraryPage(library, workspace, controller)
+                        }
                     }
                 }
             }
@@ -995,6 +1006,7 @@ private fun PageIndicator(homePages: Int, pager: PagerState, onEditTap: (() -> U
     val color = wallpaperTextColor()
     val scope = rememberCoroutineScope()
     val haptics = LocalHapticFeedback.current
+    val offset = HomeController.GRID_OFFSET
     val current = pager.currentPage
     val count = homePages + 1
     var scrubbing by remember { mutableStateOf(false) }
@@ -1020,13 +1032,13 @@ private fun PageIndicator(homePages: Int, pager: PagerState, onEditTap: (() -> U
                             return@awaitEachGesture
                         }
                         scrubbing = true
-                        var shown = pager.currentPage
+                        var shown = (pager.currentPage - offset).coerceIn(0, homePages)
                         fun select(x: Float) {
-                            val page = floor((x - start) / slot).toInt().coerceIn(0, count - 1)
-                            if (page == shown) return
-                            shown = page
+                            val dot = floor((x - start) / slot).toInt().coerceIn(0, count - 1)
+                            if (dot == shown) return
+                            shown = dot
                             haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                            scope.launch { pager.scrollToPage(page) }
+                            scope.launch { pager.scrollToPage(dot + offset) }
                         }
                         select(down.position.x)
                         try {
@@ -1050,7 +1062,7 @@ private fun PageIndicator(homePages: Int, pager: PagerState, onEditTap: (() -> U
                         Modifier
                             .size(7.dp)
                             .clip(CircleShape)
-                            .background(color.copy(alpha = if (page == current) 0.95f else 0.35f)),
+                            .background(color.copy(alpha = if (page + offset == current) 0.95f else 0.35f)),
                     )
                 }
             }
@@ -1060,7 +1072,7 @@ private fun PageIndicator(homePages: Int, pager: PagerState, onEditTap: (() -> U
                     repeat(2) {
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                             repeat(2) {
-                                Box(Modifier.size(3.dp).background(color.copy(alpha = if (current >= homePages) 0.95f else 0.35f)))
+                                Box(Modifier.size(3.dp).background(color.copy(alpha = if (current >= homePages + offset) 0.95f else 0.35f)))
                             }
                         }
                     }

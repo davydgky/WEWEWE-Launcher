@@ -22,6 +22,8 @@
         android:name="android.hardware.telephony"
         android:required="false" />
     <uses-permission android:name="android.permission.READ_CALENDAR" />
+    <!-- Lets the organizer page add events to the user's own calendar (e.g. Google Calendar sync). -->
+    <uses-permission android:name="android.permission.WRITE_CALENDAR" />
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
     <uses-permission android:name="android.permission.READ_MEDIA_VISUAL_USER_SELECTED" />
     <!-- Documents of other apps are only visible with "all files access" (on-device file search). -->
