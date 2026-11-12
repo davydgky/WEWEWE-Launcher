@@ -355,4 +355,7 @@
     <string name="organizer_no_date">No date</string>
     <string name="organizer_set_time">Set a time</string>
     <string name="delete">Delete</string>
+    <string name="organizer_previous_month">Previous month</string>
+    <string name="organizer_next_month">Next month</string>
+    <string name="organizer_event_not_saved">The event could not be saved to a calendar</string>
 </resources>

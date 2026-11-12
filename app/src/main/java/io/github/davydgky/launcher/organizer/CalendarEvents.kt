@@ -9,6 +9,11 @@ import android.provider.CalendarContract
 import android.provider.CalendarContract.Calendars
 import android.provider.CalendarContract.Events
 import android.provider.CalendarContract.Instances
+import android.util.Log
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
+import java.time.ZoneOffset
 import java.util.TimeZone
 
 /** One occurrence of a calendar event on a day, read from the system Calendar Provider. */
@@ -19,7 +24,26 @@ data class CalendarEvent(
     val title: String,
     val allDay: Boolean,
     val color: Int,
-)
+) {
+    /**
+     * The days between [from] and [to] (inclusive) this occurrence touches. The Calendar Provider keeps
+     * all-day events in UTC days (midnight UTC to midnight UTC), so those are read in UTC, timed ones in
+     * [zone]. The end is exclusive: an event that ends at midnight does not reach into the next day.
+     */
+    fun days(from: LocalDate, to: LocalDate, zone: ZoneId = ZoneId.systemDefault()): List<LocalDate> {
+        val z = if (allDay) ZoneOffset.UTC else zone
+        val first = Instant.ofEpochMilli(begin).atZone(z).toLocalDate()
+        val last = Instant.ofEpochMilli(maxOf(begin, end - 1)).atZone(z).toLocalDate()
+        var day = if (first.isBefore(from)) from else first
+        val until = if (last.isAfter(to)) to else last
+        val days = ArrayList<LocalDate>()
+        while (!day.isAfter(until)) {
+            days += day
+            day = day.plusDays(1)
+        }
+        return days
+    }
+}
 
 /** A calendar the user can write new events into (their Google account's own calendar, typically). */
 data class WritableCalendar(val id: Long, val accountName: String, val displayName: String, val color: Int)
@@ -73,7 +97,10 @@ object CalendarEvents {
         return calendars
     }
 
-    /** Writes a new event into [calendarId]; returns its id, or null if it could not be written. */
+    /**
+     * Writes a new event into [calendarId]; returns its id, or null if it could not be written. An all-day
+     * event must start and end at midnight UTC, as the Calendar Provider stores those.
+     */
     fun insertEvent(context: Context, calendarId: Long, title: String, beginMillis: Long, endMillis: Long, allDay: Boolean): Long? {
         if (!hasWriteAccess(context)) return null
         val values = ContentValues().apply {
@@ -81,15 +108,12 @@ object CalendarEvents {
             put(Events.TITLE, title)
             put(Events.DTSTART, beginMillis)
             put(Events.ALL_DAY, if (allDay) 1 else 0)
-            if (allDay) {
-                put(Events.DTEND, endMillis)
-                put(Events.EVENT_TIMEZONE, "UTC")
-            } else {
-                put(Events.DTEND, endMillis)
-                put(Events.EVENT_TIMEZONE, TimeZone.getDefault().id)
-            }
+            put(Events.DTEND, endMillis)
+            put(Events.EVENT_TIMEZONE, if (allDay) "UTC" else TimeZone.getDefault().id)
         }
-        val uri = context.contentResolver.insert(Events.CONTENT_URI, values) ?: return null
+        val uri = runCatching { context.contentResolver.insert(Events.CONTENT_URI, values) }
+            .onFailure { Log.w(TAG, "Cannot write the event", it) }
+            .getOrNull() ?: return null
         return ContentUris.parseId(uri)
     }
 
@@ -98,4 +122,6 @@ object CalendarEvents {
         val uri = ContentUris.withAppendedId(Events.CONTENT_URI, eventId)
         return context.contentResolver.delete(uri, null, null) > 0
     }
+
+    private const val TAG = "CalendarEvents"
 }

@@ -3,6 +3,11 @@
 package io.github.davydgky.launcher.organizer
 
 import android.Manifest
+import android.database.ContentObserver
+import android.os.Handler
+import android.os.Looper
+import android.provider.CalendarContract
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -41,11 +46,14 @@ import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -59,6 +67,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -71,11 +80,16 @@ import java.time.YearMonth
 import java.time.ZoneId
 import java.time.ZoneOffset
 import java.time.format.TextStyle
+import java.time.temporal.WeekFields
+import java.util.Date
 import java.util.Locale
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-private val zone = ZoneId.systemDefault()
+// Read on every use: the user can change the time zone while the launcher keeps running.
+private val zone: ZoneId get() = ZoneId.systemDefault()
 private fun LocalDate.startOfDayMillis(): Long = atStartOfDay(zone).toInstant().toEpochMilli()
 private fun Long.toLocalDate(): LocalDate = Instant.ofEpochMilli(this).atZone(zone).toLocalDate()
 
@@ -87,6 +101,27 @@ private fun LocalDate.toUtcMidnightMillis(): Long = atStartOfDay(ZoneOffset.UTC)
 @Composable
 private fun currentLocale(): Locale = LocalConfiguration.current.locales[0]
 
+/**
+ * A date format in the user's language from an ICU skeleton ("dMMM" → "12. Nov." in German, "Nov 12" in
+ * English), rather than a fixed pattern that only reads right in one language.
+ */
+@Composable
+private fun rememberDateFormat(skeleton: String): android.icu.text.DateFormat {
+    val locale = currentLocale()
+    return remember(skeleton, locale) { android.icu.text.DateFormat.getInstanceForSkeleton(skeleton, locale) }
+}
+
+/** Times as the user set them up: 24-hour or with AM/PM. */
+@Composable
+private fun rememberTimeFormat(): java.text.DateFormat {
+    val context = LocalContext.current
+    val locale = currentLocale()
+    return remember(locale) { android.text.format.DateFormat.getTimeFormat(context) }
+}
+
+private fun LocalDate.toDate(): Date = Date(startOfDayMillis())
+private fun String.capitalized(locale: Locale): String = replaceFirstChar { it.titlecase(locale) }
+
 private val LIST_PALETTE = listOf(
     Color(0xFF0A84FF), Color(0xFFFF9F0A), Color(0xFF30D158), Color(0xFFFF375F), Color(0xFFBF5AF2), Color(0xFF64D2FF),
 )
@@ -97,8 +132,9 @@ private val LIST_PALETTE = listOf(
  * tab per list. A reminder due on a day shows there in the calendar too.
  */
 @Composable
-fun OrganizerPage(repository: OrganizerRepository, modifier: Modifier = Modifier) {
+fun OrganizerPage(repository: OrganizerRepository, modifier: Modifier = Modifier, bottomSpace: Dp = 0.dp) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val organizer by repository.organizer.collectAsStateWithLifecycle()
     var hasReadAccess by rememberSaveable { mutableStateOf(CalendarEvents.hasReadAccess(context)) }
     var hasWriteAccess by rememberSaveable { mutableStateOf(CalendarEvents.hasWriteAccess(context)) }
@@ -108,14 +144,34 @@ fun OrganizerPage(repository: OrganizerRepository, modifier: Modifier = Modifier
     var month by rememberSaveable { mutableStateOf(YearMonth.now()) }
     var selectedDate by rememberSaveable { mutableStateOf(LocalDate.now()) }
 
-    val events by produceState(emptyList<CalendarEvent>(), month, hasReadAccess) {
+    // Bumped whenever the Calendar Provider changes (a sync from Google, an event added here), to read again.
+    var calendarVersion by remember { mutableIntStateOf(0) }
+    DisposableEffect(hasReadAccess) {
+        if (!hasReadAccess) return@DisposableEffect onDispose {}
+        val observer = object : ContentObserver(Handler(Looper.getMainLooper())) {
+            override fun onChange(selfChange: Boolean) {
+                calendarVersion++
+            }
+        }
+        context.contentResolver.registerContentObserver(CalendarContract.CONTENT_URI, true, observer)
+        onDispose { context.contentResolver.unregisterContentObserver(observer) }
+    }
+
+    val windowStart = month.minusMonths(1).atDay(1)
+    val windowEnd = month.plusMonths(1).atEndOfMonth()
+    val events by produceState(emptyList<CalendarEvent>(), month, hasReadAccess, calendarVersion) {
+        // A sync reports many changes in a row; a new one restarts this, so it reads once they settle.
+        if (calendarVersion > 0) delay(300)
         value = withContext(Dispatchers.IO) {
-            val from = month.minusMonths(1).atDay(1).startOfDayMillis()
-            val to = month.plusMonths(1).atEndOfMonth().plusDays(1).startOfDayMillis()
-            CalendarEvents.between(context, from, to)
+            CalendarEvents.between(context, windowStart.startOfDayMillis(), windowEnd.plusDays(1).startOfDayMillis())
         }
     }
-    val eventDays = remember(events) { events.mapTo(HashSet()) { it.begin.toLocalDate() } }
+    // An event shows on every day it covers, and an all-day one on its own (UTC) day in every time zone.
+    val eventsByDay = remember(events, windowStart, windowEnd) {
+        val byDay = HashMap<LocalDate, MutableList<CalendarEvent>>()
+        events.forEach { event -> event.days(windowStart, windowEnd).forEach { byDay.getOrPut(it) { ArrayList() } += event } }
+        byDay
+    }
 
     val state = organizer ?: return
     var selectedTab by rememberSaveable { mutableStateOf(state.lists.firstOrNull()?.id ?: 1L) }
@@ -150,16 +206,20 @@ fun OrganizerPage(repository: OrganizerRepository, modifier: Modifier = Modifier
         MonthCalendar(
             month = month,
             selectedDate = selectedDate,
-            eventDays = eventDays,
+            eventDays = eventsByDay.keys,
             todoDays = todoDays,
-            onMonthChange = { month = it },
+            onMonthChange = {
+                // The agenda below follows: today in the current month, else the month's first day.
+                month = it
+                selectedDate = if (it == YearMonth.now()) LocalDate.now() else it.atDay(1)
+            },
             onSelectDate = { selectedDate = it },
         )
 
         Spacer(Modifier.height(18.dp))
         AgendaSection(
             date = selectedDate,
-            events = events.filter { it.begin.toLocalDate() == selectedDate },
+            events = eventsByDay[selectedDate].orEmpty(),
             todos = state.todos.filter { it.dueAtMillis?.toLocalDate() == selectedDate },
             onAddEvent = {
                 if (!hasWriteAccess) writePermission.launch(Manifest.permission.WRITE_CALENDAR)
@@ -177,7 +237,8 @@ fun OrganizerPage(repository: OrganizerRepository, modifier: Modifier = Modifier
             onSelectTab = { selectedTab = it },
             onEditTodo = { editingTodo = it },
         )
-        Spacer(Modifier.height(32.dp))
+        // Room for the search button and dock, which stay over the bottom of this page.
+        Spacer(Modifier.height(32.dp + bottomSpace))
     }
 
     if (showAddEvent) {
@@ -187,13 +248,21 @@ fun OrganizerPage(repository: OrganizerRepository, modifier: Modifier = Modifier
             onRequestWriteAccess = { writePermission.launch(Manifest.permission.WRITE_CALENDAR) },
             onDismiss = { showAddEvent = false },
             onSave = { title, date, time ->
-                val calendar = CalendarEvents.writableCalendars(context).firstOrNull()
-                if (calendar != null) {
-                    val begin = date.atStartOfDay(zone).let { if (time != null) it.with(time) else it }.toInstant().toEpochMilli()
-                    val end = begin + if (time != null) 60 * 60 * 1000L else 24 * 60 * 60 * 1000L
-                    CalendarEvents.insertEvent(context, calendar.id, title, begin, end, allDay = time == null)
-                }
                 showAddEvent = false
+                scope.launch {
+                    val saved = withContext(Dispatchers.IO) {
+                        val calendar = CalendarEvents.writableCalendars(context).firstOrNull() ?: return@withContext false
+                        val id = if (time != null) {
+                            val begin = date.atTime(time).atZone(zone).toInstant().toEpochMilli()
+                            CalendarEvents.insertEvent(context, calendar.id, title, begin, begin + 60 * 60 * 1000L, allDay = false)
+                        } else {
+                            // All-day events run from midnight UTC to the next midnight UTC in the provider.
+                            CalendarEvents.insertEvent(context, calendar.id, title, date.toUtcMidnightMillis(), date.plusDays(1).toUtcMidnightMillis(), allDay = true)
+                        }
+                        id != null
+                    }
+                    if (saved) calendarVersion++ else Toast.makeText(context, R.string.organizer_event_not_saved, Toast.LENGTH_SHORT).show()
+                }
             },
         )
     }
@@ -243,25 +312,32 @@ private fun MonthCalendar(
     onSelectDate: (LocalDate) -> Unit,
 ) {
     val color = wallpaperTextColor()
+    val locale = currentLocale()
+    val monthFormat = rememberDateFormat("MMMMy")
+    // Sunday in the US, Monday in Germany: the week starts where the user's region starts it.
+    val firstDow = remember(locale) { WeekFields.of(locale).firstDayOfWeek }
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(color.copy(alpha = 0.08f)).padding(14.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text(
-                month.month.getDisplayName(TextStyle.FULL, currentLocale()).replaceFirstChar { it.uppercase() } + " ${month.year}",
+                monthFormat.format(month.atDay(1).toDate()).capitalized(locale),
                 color = color,
                 fontSize = 17.sp,
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.weight(1f),
             )
-            IconButton(onClick = { onMonthChange(month.minusMonths(1)) }) { Icon(painterResource(R.drawable.ic_chevron_left), null, tint = color) }
-            IconButton(onClick = { onMonthChange(month.plusMonths(1)) }) { Icon(painterResource(R.drawable.ic_chevron_right), null, tint = color) }
+            IconButton(onClick = { onMonthChange(month.minusMonths(1)) }) {
+                Icon(painterResource(R.drawable.ic_chevron_left), stringResource(R.string.organizer_previous_month), tint = color)
+            }
+            IconButton(onClick = { onMonthChange(month.plusMonths(1)) }) {
+                Icon(painterResource(R.drawable.ic_chevron_right), stringResource(R.string.organizer_next_month), tint = color)
+            }
         }
         Row(Modifier.fillMaxWidth()) {
-            val firstDow = java.time.DayOfWeek.MONDAY
             repeat(7) { i ->
                 val dow = firstDow.plus(i.toLong())
                 Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
                     Text(
-                        dow.getDisplayName(TextStyle.SHORT, currentLocale()).take(2),
+                        dow.getDisplayName(TextStyle.SHORT, locale).take(2),
                         color = color.copy(alpha = 0.55f),
                         fontSize = 11.sp,
                     )
@@ -270,7 +346,7 @@ private fun MonthCalendar(
         }
         Spacer(Modifier.height(4.dp))
         val firstOfMonth = month.atDay(1)
-        val leading = (firstOfMonth.dayOfWeek.value + 6) % 7 // Monday = 0
+        val leading = (firstOfMonth.dayOfWeek.value - firstDow.value + 7) % 7
         val totalCells = leading + month.lengthOfMonth()
         val rows = (totalCells + 6) / 7
         val today = LocalDate.now()
@@ -330,9 +406,12 @@ private fun AgendaSection(
     onEditTodo: (Todo) -> Unit,
 ) {
     val color = wallpaperTextColor()
+    val locale = currentLocale()
+    val dayFormat = rememberDateFormat("EEEEdMMMM")
+    val timeFormat = rememberTimeFormat()
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text(
-            date.format(java.time.format.DateTimeFormatter.ofPattern("EEEE, d. MMMM", currentLocale())).replaceFirstChar { it.uppercase() },
+            dayFormat.format(date.toDate()).capitalized(locale),
             color = color,
             fontSize = 16.sp,
             fontWeight = FontWeight.SemiBold,
@@ -352,7 +431,7 @@ private fun AgendaSection(
                     Text(event.title.ifBlank { stringResource(R.string.event_untitled) }, color = color, fontSize = 14.sp)
                     if (!event.allDay) {
                         Text(
-                            java.text.DateFormat.getTimeInstance(java.text.DateFormat.SHORT).format(java.util.Date(event.begin)),
+                            timeFormat.format(Date(event.begin)),
                             color = color.copy(alpha = 0.6f),
                             fontSize = 12.sp,
                         )
@@ -452,13 +531,10 @@ private fun TodoRow(todo: Todo, color: Color, onToggle: () -> Unit, onClick: () 
                 textDecoration = if (todo.done) TextDecoration.LineThrough else null,
             )
             if (showDate && todo.dueAtMillis != null) {
-                val d = todo.dueAtMillis.toLocalDate()
-                val fmt = if (todo.hasTime) {
-                    d.format(java.time.format.DateTimeFormatter.ofPattern("d. MMM, HH:mm", currentLocale()))
-                } else {
-                    d.format(java.time.format.DateTimeFormatter.ofPattern("d. MMM", currentLocale()))
-                }
-                Text(fmt, color = color.copy(alpha = 0.5f), fontSize = 12.sp)
+                val due = Date(todo.dueAtMillis)
+                val dateText = rememberDateFormat("dMMM").format(due)
+                val text = if (todo.hasTime) "$dateText, ${rememberTimeFormat().format(due)}" else dateText
+                Text(text, color = color.copy(alpha = 0.5f), fontSize = 12.sp)
             }
         }
     }
@@ -517,7 +593,11 @@ private fun DueDatePicker(
     onDateChange: (LocalDate?) -> Unit,
     onHasTimeChange: (Boolean) -> Unit,
     onTimeChange: (LocalTime) -> Unit,
+    allowNoDate: Boolean = true,
 ) {
+    val context = LocalContext.current
+    val dateFormat = rememberDateFormat("dMMMMy")
+    val timeFormat = rememberTimeFormat()
     var showDatePicker by remember { mutableStateOf(false) }
     var showTimePicker by remember { mutableStateOf(false) }
     val today = LocalDate.now()
@@ -530,10 +610,10 @@ private fun DueDatePicker(
         Spacer(Modifier.height(8.dp))
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             TextButton(onClick = { showDatePicker = true }) {
-                Text(date?.format(java.time.format.DateTimeFormatter.ofPattern("d. MMMM yyyy", currentLocale())) ?: stringResource(R.string.organizer_pick_date))
+                Text(date?.let { dateFormat.format(it.toDate()) } ?: stringResource(R.string.organizer_pick_date))
             }
             Spacer(Modifier.weight(1f))
-            if (date != null) TextButton(onClick = { onDateChange(null) }) { Text(stringResource(R.string.organizer_no_date)) }
+            if (date != null && allowNoDate) TextButton(onClick = { onDateChange(null) }) { Text(stringResource(R.string.organizer_no_date)) }
         }
         if (date != null) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -542,7 +622,7 @@ private fun DueDatePicker(
             }
             if (hasTime) {
                 TextButton(onClick = { showTimePicker = true }) {
-                    Text(time.format(java.time.format.DateTimeFormatter.ofPattern("HH:mm")))
+                    Text(timeFormat.format(Date(date.atTime(time).atZone(zone).toInstant().toEpochMilli())))
                 }
             }
         }
@@ -555,13 +635,17 @@ private fun DueDatePicker(
                 TextButton(onClick = {
                     state.selectedDateMillis?.let { onDateChange(Instant.ofEpochMilli(it).atZone(ZoneOffset.UTC).toLocalDate()) }
                     showDatePicker = false
-                }) { Text(stringResource(R.string.organizer_create)) }
+                }) { Text(stringResource(android.R.string.ok)) }
             },
             dismissButton = { TextButton(onClick = { showDatePicker = false }) { Text(stringResource(R.string.cancel)) } },
         ) { DatePicker(state = state) }
     }
     if (showTimePicker) {
-        val state = rememberTimePickerState(initialHour = time.hour, initialMinute = time.minute, is24Hour = true)
+        val state = rememberTimePickerState(
+            initialHour = time.hour,
+            initialMinute = time.minute,
+            is24Hour = android.text.format.DateFormat.is24HourFormat(context),
+        )
         androidx.compose.material3.AlertDialog(
             onDismissRequest = { showTimePicker = false },
             text = { TimePicker(state = state) },
@@ -569,7 +653,7 @@ private fun DueDatePicker(
                 TextButton(onClick = {
                     onTimeChange(LocalTime.of(state.hour, state.minute))
                     showTimePicker = false
-                }) { Text(stringResource(R.string.organizer_create)) }
+                }) { Text(stringResource(android.R.string.ok)) }
             },
             dismissButton = { TextButton(onClick = { showTimePicker = false }) { Text(stringResource(R.string.cancel)) } },
         )
@@ -640,9 +724,9 @@ private fun TodoEditSheet(
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                 TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
                 Spacer(Modifier.width(8.dp))
-                TextButton(onClick = {
+                TextButton(enabled = title.isNotBlank(), onClick = {
                     val due = date?.let { d -> if (hasTime) d.atTime(time).atZone(zone).toInstant().toEpochMilli() else d.startOfDayMillis() }
-                    onSave(title, notes, listId, due, hasTime && date != null)
+                    onSave(title.trim(), notes, listId, due, hasTime && date != null)
                 }) { Text(stringResource(R.string.organizer_save)) }
             }
         }
@@ -682,6 +766,7 @@ private fun AddEventSheet(
             DueDatePicker(
                 date = date, hasTime = hasTime, time = time,
                 onDateChange = { date = it ?: date }, onHasTimeChange = { hasTime = it }, onTimeChange = { time = it },
+                allowNoDate = false,
             )
             Spacer(Modifier.height(20.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {

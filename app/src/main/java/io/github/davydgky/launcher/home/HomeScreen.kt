@@ -225,7 +225,8 @@ fun HomeScreen(
                 when {
                     page < offset -> {
                         Box(Modifier.padding(bottom = INDICATOR_HEIGHT)) {
-                            OrganizerPage(context.launcherApp.organizer)
+                            // The search button and dock stay over this page: its end scrolls up above them.
+                            OrganizerPage(context.launcherApp.organizer, bottomSpace = barsHeightDp)
                         }
                     }
                     page < homePages + offset -> {
