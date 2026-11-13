@@ -1,5 +1,6 @@
 package io.github.davydgky.launcher.organizer
 
+import io.github.davydgky.launcher.ui.glass.pageFillAlpha
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -155,7 +156,7 @@ internal fun CalendarCard(
         Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(20.dp))
-            .background(color.copy(alpha = CARD_ALPHA))
+            .background(color.copy(alpha = pageFillAlpha(CARD_ALPHA)))
             .pinchSteps(
                 onZoomIn = { currentOnScaleChange(currentScale.zoomedIn()) },
                 onZoomOut = { currentOnScaleChange(currentScale.zoomedOut()) },
@@ -211,7 +212,7 @@ internal const val CARD_ALPHA = 0.05f
 @Composable
 private fun ScaleTabs(scale: CalendarScale, color: Color, onScaleChange: (CalendarScale) -> Unit) {
     Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(50)).background(color.copy(alpha = 0.06f)).padding(2.dp),
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(50)).background(color.copy(alpha = pageFillAlpha(0.06f))).padding(2.dp),
     ) {
         CalendarScale.entries.forEach { entry ->
             val selected = entry == scale
@@ -219,7 +220,7 @@ private fun ScaleTabs(scale: CalendarScale, color: Color, onScaleChange: (Calend
                 Modifier
                     .weight(1f)
                     .clip(RoundedCornerShape(50))
-                    .background(if (selected) color.copy(alpha = 0.16f) else Color.Transparent)
+                    .background(if (selected) color.copy(alpha = pageFillAlpha(0.16f)) else Color.Transparent)
                     .clickable { onScaleChange(entry) }
                     .padding(vertical = 6.dp),
                 contentAlignment = Alignment.Center,

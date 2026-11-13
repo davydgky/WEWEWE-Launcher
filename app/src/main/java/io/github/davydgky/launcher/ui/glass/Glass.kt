@@ -35,7 +35,55 @@ data class GlassColors(
     val hairline: Color,
     /** Tint over the blurred home screen behind the search. */
     val scrim: Color,
+    /** How strong the glass is drawn, as the user set it. */
+    val style: GlassStyle = GlassStyle(),
 )
+
+/**
+ * The user's Liquid Glass settings, each a factor on the launcher's own look (1 = as designed):
+ * [blur] of what lies behind, [tint] (how opaque surfaces and the dimming behind panels are),
+ * [refraction] of the lens at the edges, the [highlight] rim, [pageFill] of the boxes and cards on the
+ * organizer and the App Library, and [statusBarBlur] under the status bar on those pages (0 = off).
+ */
+@Immutable
+data class GlassStyle(
+    val blur: Float = 1f,
+    val tint: Float = 1f,
+    val refraction: Float = 1f,
+    val highlight: Boolean = true,
+    val pageFill: Float = 1f,
+    val statusBarBlur: Float = 1f,
+) {
+    companion object {
+        /** Plain translucent surfaces: no blur, no lens, no rim, a little more opaque to stay readable. */
+        val Off = GlassStyle(blur = 0f, tint = 1.4f, refraction = 0f, highlight = false, pageFill = 1f, statusBarBlur = 0f)
+        val Subtle = GlassStyle(blur = 0.6f, tint = 0.8f, refraction = 0.4f, highlight = true, pageFill = 0.7f, statusBarBlur = 0.5f)
+        val Default = GlassStyle()
+        val Strong = GlassStyle(blur = 1.6f, tint = 1.2f, refraction = 1.6f, highlight = true, pageFill = 1.6f, statusBarBlur = 1.4f)
+
+        const val MAX_FACTOR = 2f
+        const val MAX_PAGE_FILL = 3f
+    }
+}
+
+/** The Liquid Glass settings as saved. */
+fun io.github.davydgky.launcher.data.LauncherPrefs.glassStyle() = GlassStyle(
+    blur = glassBlur,
+    tint = glassTint,
+    refraction = glassRefraction,
+    highlight = glassHighlight,
+    pageFill = glassPageFill,
+    statusBarBlur = glassStatusBar,
+)
+
+/** The Liquid Glass settings in effect; the launcher provides the user's, everything else gets the defaults. */
+val LocalGlassStyle = staticCompositionLocalOf { GlassStyle() }
+
+/** [base] alpha of a box or card on the organizer or the App Library, with the user's fill applied. */
+@Composable
+fun pageFillAlpha(base: Float): Float = (base * LocalGlassStyle.current.pageFill).coerceIn(0f, 1f)
+
+private fun Color.timesAlpha(factor: Float) = copy(alpha = (alpha * factor).coerceIn(0f, 1f))
 
 val LightGlass = GlassColors(
     surface = Color.White.copy(alpha = 0.62f),
@@ -58,7 +106,10 @@ val DarkGlass = GlassColors(
 val LocalGlassColors = staticCompositionLocalOf { DarkGlass }
 
 @Composable
-fun glassColors(): GlassColors = if (isSystemInDarkTheme()) DarkGlass else LightGlass
+fun glassColors(style: GlassStyle = LocalGlassStyle.current): GlassColors {
+    val base = if (isSystemInDarkTheme()) DarkGlass else LightGlass
+    return base.copy(surface = base.surface.timesAlpha(style.tint), scrim = base.scrim.timesAlpha(style.tint), style = style)
+}
 
 /**
  * A Liquid Glass surface sampling [backdrop]: vibrancy, light blur and lens refraction at the edges,
@@ -75,11 +126,12 @@ fun Modifier.glass(
     shape = { shape },
     effects = {
         vibrancy()
-        blur(8.dp.toPx())
-        val height = refraction.toPx().coerceAtMost(size.minDimension / 2f)
-        lens(refractionHeight = height, refractionAmount = height * 2f, depthEffect = true)
+        val radius = 8.dp.toPx() * colors.style.blur
+        if (radius > 0f) blur(radius)
+        val height = (refraction.toPx() * colors.style.refraction).coerceAtMost(size.minDimension / 2f)
+        if (height > 0f) lens(refractionHeight = height, refractionAmount = height * 2f, depthEffect = true)
     },
-    highlight = { Highlight.Default },
+    highlight = if (colors.style.highlight) { { Highlight.Default } } else null,
     shadow = { Shadow.Default.copy(alpha = 0.6f) },
     exportedBackdrop = exportedBackdrop,
     onDrawSurface = { drawRect(colors.surface) },
@@ -109,7 +161,10 @@ fun Modifier.frostedBackdrop(
     .drawBackdrop(
         backdrop = backdrop,
         shape = { RectangleShape },
-        effects = { blur(32.dp.toPx()) },
+        effects = {
+            val radius = 32.dp.toPx() * colors.style.blur
+            if (radius > 0f) blur(radius)
+        },
         highlight = null,
         shadow = null,
         exportedBackdrop = exportedBackdrop,

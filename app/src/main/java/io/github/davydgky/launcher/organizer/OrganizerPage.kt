@@ -2,6 +2,7 @@
 
 package io.github.davydgky.launcher.organizer
 
+import io.github.davydgky.launcher.ui.glass.pageFillAlpha
 import android.Manifest
 import android.database.ContentObserver
 import android.os.Handler
@@ -337,7 +338,7 @@ private fun PermissionBanner(text: String, onClick: () -> Unit) {
         Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(14.dp))
-            .background(color.copy(alpha = 0.09f))
+            .background(color.copy(alpha = pageFillAlpha(0.09f)))
             .clickable(onClick = onClick)
             .padding(14.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -418,7 +419,7 @@ private fun SuggestionsSection(
     }
     Spacer(Modifier.height(4.dp))
     Column(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(color.copy(alpha = CARD_ALPHA)).padding(vertical = 4.dp),
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(color.copy(alpha = pageFillAlpha(CARD_ALPHA))).padding(vertical = 4.dp),
     ) {
         suggestions.asReversed().forEach { suggestion ->
             Row(Modifier.fillMaxWidth().padding(start = 14.dp, end = 4.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -474,7 +475,7 @@ private fun TodoSection(
                 Row(
                     Modifier
                         .clip(RoundedCornerShape(50))
-                        .background(if (selected) LIST_PALETTE[list.colorIndex % LIST_PALETTE.size] else color.copy(alpha = 0.08f))
+                        .background(if (selected) LIST_PALETTE[list.colorIndex % LIST_PALETTE.size] else color.copy(alpha = pageFillAlpha(0.08f)))
                         .combinedClickable(onClick = { onSelectTab(list.id) }, onLongClick = { menuList = list })
                         .padding(horizontal = 14.dp, vertical = 8.dp),
                 ) {

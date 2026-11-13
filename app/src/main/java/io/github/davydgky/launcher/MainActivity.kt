@@ -13,16 +13,21 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
+import io.github.davydgky.launcher.data.LauncherPrefs
 import io.github.davydgky.launcher.search.ResultActions
 import io.github.davydgky.launcher.search.SearchViewModel
 import io.github.davydgky.launcher.ui.ImeController
 import io.github.davydgky.launcher.ui.LauncherScreen
 import io.github.davydgky.launcher.ui.LauncherTheme
 import io.github.davydgky.launcher.ui.LocalLightWallpaper
+import io.github.davydgky.launcher.ui.glass.LocalGlassStyle
+import io.github.davydgky.launcher.ui.glass.glassStyle
 import io.github.davydgky.launcher.widgets.WidgetAdder
 import kotlin.math.ceil
 import kotlinx.coroutines.Dispatchers
@@ -40,6 +45,7 @@ class MainActivity : ComponentActivity() {
     private var searchActive = false
     private lateinit var widgetAdder: WidgetAdder
     private var wallpaperBlur = -1
+    private var wallpaperBlurScale = 1f
     private val wallpaperManager by lazy { WallpaperManager.getInstance(this) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -56,7 +62,11 @@ class MainActivity : ComponentActivity() {
         wallpaperManager.addOnColorsChangedListener(wallpaperListener, Handler(Looper.getMainLooper()))
 
         setContent {
-            CompositionLocalProvider(LocalLightWallpaper provides lightWallpaper) {
+            val prefs by launcherApp.settings.prefs.collectAsStateWithLifecycle(initialValue = LauncherPrefs())
+            val glass = prefs.glassStyle()
+            // The system blurs the wallpaper behind the search; it follows the blur setting too.
+            SideEffect { wallpaperBlurScale = glass.blur }
+            CompositionLocalProvider(LocalLightWallpaper provides lightWallpaper, LocalGlassStyle provides glass) {
                 LauncherTheme {
                     LauncherScreen(
                         viewModel = viewModel,
@@ -123,7 +133,7 @@ class MainActivity : ComponentActivity() {
     private fun blurWallpaper(progress: Float) {
         if (!windowManager.isCrossWindowBlurEnabled) return
         val step = ceil(progress.coerceIn(0f, 1f) * BLUR_STEPS)
-        val radius = (step / BLUR_STEPS * MAX_WALLPAPER_BLUR_DP * resources.displayMetrics.density).toInt()
+        val radius = (step / BLUR_STEPS * MAX_WALLPAPER_BLUR_DP * wallpaperBlurScale * resources.displayMetrics.density).toInt()
         if (radius == wallpaperBlur) return
         wallpaperBlur = radius
         window.setBackgroundBlurRadius(radius)

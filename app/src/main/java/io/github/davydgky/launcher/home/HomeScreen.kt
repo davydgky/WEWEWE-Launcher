@@ -2,6 +2,7 @@
 
 package io.github.davydgky.launcher.home
 
+import io.github.davydgky.launcher.ui.glass.pageFillAlpha
 import android.content.Context
 import android.content.Intent
 import android.graphics.Rect
@@ -751,7 +752,7 @@ private val LocalIconSize = staticCompositionLocalOf { ICON_SIZE }
 /** The App Library's boxes: lighter than a folder on the home screen, the wallpaper shows through more. */
 @Composable
 private fun libraryFill(): Color =
-    if (LocalLightWallpaper.current) Color.White.copy(alpha = 0.26f) else Color.White.copy(alpha = 0.11f)
+    Color.White.copy(alpha = pageFillAlpha(if (LocalLightWallpaper.current) 0.26f else 0.11f))
 
 @Composable
 private fun folderFill(): Color =

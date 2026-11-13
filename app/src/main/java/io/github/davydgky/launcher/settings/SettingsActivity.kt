@@ -104,6 +104,7 @@ import io.github.davydgky.launcher.sources.Velo
 import io.github.davydgky.launcher.sources.VeloSource
 import io.github.davydgky.launcher.ui.AppIconImage
 import io.github.davydgky.launcher.ui.LauncherTheme
+import io.github.davydgky.launcher.ui.glass.glassStyle
 import io.github.davydgky.launcher.update.UpdateState
 import java.time.LocalDate
 import kotlin.math.roundToInt
@@ -112,8 +113,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * The launcher's settings: an overview of categories (home screen, search, Gemini Nano and messages,
- * backup, updates, advanced), each opening a page of its own.
+ * The launcher's settings: an overview of categories (home screen, Liquid Glass, search, Gemini Nano
+ * and messages, backup, updates, advanced), each opening a page of its own.
  */
 class SettingsActivity : ComponentActivity() {
 
@@ -367,6 +368,13 @@ private fun SettingsScreen(activity: ComponentActivity) {
                         }
                     }
                 }
+                SettingsPage.Glass -> item {
+                    GlassSettings(prefs.glassStyle()) { style ->
+                        scope.launch {
+                            app.settings.setGlass(style.blur, style.tint, style.refraction, style.highlight, style.pageFill, style.statusBarBlur)
+                        }
+                    }
+                }
                 SettingsPage.Backup -> item { BackupGroup() }
                 SettingsPage.Updates -> item {
                     val update by app.updater.state.collectAsStateWithLifecycle()
@@ -410,6 +418,7 @@ private fun SettingsScreen(activity: ComponentActivity) {
 /** The settings' categories, each a page of its own. */
 private enum class SettingsPage(val title: Int, val summary: Int, val icon: Int) {
     Home(R.string.settings_home, R.string.settings_home_summary, R.drawable.ic_pages),
+    Glass(R.string.settings_glass, R.string.settings_glass_summary, R.drawable.ic_image),
     Search(R.string.settings_search, R.string.settings_search_summary, R.drawable.ic_search),
     Assistant(R.string.settings_assistant, R.string.settings_assistant_summary, R.drawable.ic_sparkle),
     Backup(R.string.settings_backup, R.string.settings_backup_summary, R.drawable.ic_history),
@@ -810,7 +819,7 @@ private fun StatusText(text: String) {
 }
 
 @Composable
-private fun Group(title: String, content: @Composable () -> Unit) {
+internal fun Group(title: String, content: @Composable () -> Unit) {
     Column {
         Text(title, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(start = 4.dp, bottom = 8.dp))
         Card(content)
@@ -818,7 +827,7 @@ private fun Group(title: String, content: @Composable () -> Unit) {
 }
 
 @Composable
-private fun Card(content: @Composable () -> Unit) {
+internal fun Card(content: @Composable () -> Unit) {
     Surface(shape = RoundedCornerShape(20.dp), color = MaterialTheme.colorScheme.surfaceContainer, modifier = Modifier.fillMaxWidth()) {
         Column { content() }
     }

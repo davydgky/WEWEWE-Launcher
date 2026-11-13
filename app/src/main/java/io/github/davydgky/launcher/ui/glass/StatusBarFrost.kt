@@ -39,9 +39,16 @@ private val FADE = 20.dp
  */
 @Composable
 fun BehindStatusBar(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
+    val strength = LocalGlassStyle.current.statusBarBlur
+    // Switched off in the settings: the page simply runs up behind the bar.
+    if (strength <= 0f) {
+        Box(modifier) { content() }
+        return
+    }
     val backdrop = rememberLayerBackdrop()
     val statusBar = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-    val tint = if (LocalLightWallpaper.current) Color.White.copy(alpha = 0.32f) else Color.Black.copy(alpha = 0.22f)
+    val tintAlpha = ((if (LocalLightWallpaper.current) 0.32f else 0.22f) * strength).coerceIn(0f, 1f)
+    val tint = if (LocalLightWallpaper.current) Color.White.copy(alpha = tintAlpha) else Color.Black.copy(alpha = tintAlpha)
     Box(modifier) {
         Box(
             Modifier
@@ -66,7 +73,7 @@ fun BehindStatusBar(modifier: Modifier = Modifier, content: @Composable () -> Un
                 .drawBackdrop(
                     backdrop = backdrop,
                     shape = { RectangleShape },
-                    effects = { blur(14.dp.toPx()) },
+                    effects = { blur(14.dp.toPx() * strength) },
                     highlight = null,
                     shadow = null,
                     onDrawSurface = { drawRect(tint) },

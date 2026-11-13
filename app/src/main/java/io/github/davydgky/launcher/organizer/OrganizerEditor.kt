@@ -1,5 +1,6 @@
 package io.github.davydgky.launcher.organizer
 
+import io.github.davydgky.launcher.ui.glass.pageFillAlpha
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
@@ -87,7 +88,7 @@ internal fun OrganizerEditor(
                         .fillMaxWidth()
                         .height(CARD_HEIGHT)
                         .clip(RoundedCornerShape(16.dp))
-                        .background(color.copy(alpha = if (isDragged) 0.16f else 0.08f))
+                        .background(color.copy(alpha = pageFillAlpha(if (isDragged) 0.16f else 0.08f)))
                         .pointerInput(section) {
                             detectVerticalDragGestures(
                                 onDragStart = {

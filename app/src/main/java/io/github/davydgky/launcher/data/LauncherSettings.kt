@@ -5,6 +5,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
+import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
@@ -60,6 +61,13 @@ data class LauncherPrefs(
     val doubleTapToLock: Boolean = false,
     /** The first-start introduction was shown. */
     val onboarded: Boolean = false,
+    /** Liquid Glass as the user set it; factors on the launcher's own look, 1 = as designed. */
+    val glassBlur: Float = 1f,
+    val glassTint: Float = 1f,
+    val glassRefraction: Float = 1f,
+    val glassHighlight: Boolean = true,
+    val glassPageFill: Float = 1f,
+    val glassStatusBar: Float = 1f,
 )
 
 class LauncherSettings(private val dataStore: DataStore<Preferences>) {
@@ -94,6 +102,12 @@ class LauncherSettings(private val dataStore: DataStore<Preferences>) {
                 themedIcons = prefs[ThemedIconsKey] ?: false,
                 doubleTapToLock = prefs[DoubleTapToLockKey] ?: false,
                 onboarded = prefs[OnboardedKey] ?: false,
+                glassBlur = prefs[GlassBlurKey] ?: 1f,
+                glassTint = prefs[GlassTintKey] ?: 1f,
+                glassRefraction = prefs[GlassRefractionKey] ?: 1f,
+                glassHighlight = prefs[GlassHighlightKey] ?: true,
+                glassPageFill = prefs[GlassPageFillKey] ?: 1f,
+                glassStatusBar = prefs[GlassStatusBarKey] ?: 1f,
             )
         }
         .distinctUntilChanged()
@@ -203,6 +217,17 @@ class LauncherSettings(private val dataStore: DataStore<Preferences>) {
         dataStore.edit { it[DoubleTapToLockKey] = enabled }
     }
 
+    suspend fun setGlass(blur: Float, tint: Float, refraction: Float, highlight: Boolean, pageFill: Float, statusBar: Float) {
+        dataStore.edit {
+            it[GlassBlurKey] = blur
+            it[GlassTintKey] = tint
+            it[GlassRefractionKey] = refraction
+            it[GlassHighlightKey] = highlight
+            it[GlassPageFillKey] = pageFill
+            it[GlassStatusBarKey] = statusBar
+        }
+    }
+
     suspend fun setOnboarded() {
         dataStore.edit { it[OnboardedKey] = true }
     }
@@ -228,6 +253,12 @@ class LauncherSettings(private val dataStore: DataStore<Preferences>) {
             put("hiddenApps", p.hiddenApps.toList())
             put("disabledSources", p.disabledSources.toList())
             put("appLabels", p.appLabels)
+            put("glassBlur", p.glassBlur.toDouble())
+            put("glassTint", p.glassTint.toDouble())
+            put("glassRefraction", p.glassRefraction.toDouble())
+            put("glassHighlight", p.glassHighlight)
+            put("glassPageFill", p.glassPageFill.toDouble())
+            put("glassStatusBar", p.glassStatusBar.toDouble())
         }
     }
 
@@ -250,6 +281,12 @@ class LauncherSettings(private val dataStore: DataStore<Preferences>) {
             (values["doubleTapToLock"] as? Boolean)?.let { prefs[DoubleTapToLockKey] = it }
             (values["hiddenApps"] as? List<*>)?.let { list -> prefs[HiddenAppsKey] = list.filterIsInstance<String>().toSet() }
             (values["disabledSources"] as? List<*>)?.let { list -> prefs[DisabledSourcesKey] = list.filterIsInstance<String>().toSet() }
+            (values["glassBlur"] as? Number)?.let { prefs[GlassBlurKey] = it.toFloat() }
+            (values["glassTint"] as? Number)?.let { prefs[GlassTintKey] = it.toFloat() }
+            (values["glassRefraction"] as? Number)?.let { prefs[GlassRefractionKey] = it.toFloat() }
+            (values["glassHighlight"] as? Boolean)?.let { prefs[GlassHighlightKey] = it }
+            (values["glassPageFill"] as? Number)?.let { prefs[GlassPageFillKey] = it.toFloat() }
+            (values["glassStatusBar"] as? Number)?.let { prefs[GlassStatusBarKey] = it.toFloat() }
             (values["appLabels"] as? Map<*, *>)?.let { map ->
                 prefs[AppLabelsKey] = map.mapNotNull { (k, v) -> if (k is String && v is String) "$k\t$v" else null }.toSet()
             }
@@ -285,6 +322,12 @@ class LauncherSettings(private val dataStore: DataStore<Preferences>) {
         val ThemedIconsKey = booleanPreferencesKey("themed_icons")
         val DoubleTapToLockKey = booleanPreferencesKey("double_tap_to_lock")
         val OnboardedKey = booleanPreferencesKey("onboarded")
+        val GlassBlurKey = floatPreferencesKey("glass_blur")
+        val GlassTintKey = floatPreferencesKey("glass_tint")
+        val GlassRefractionKey = floatPreferencesKey("glass_refraction")
+        val GlassHighlightKey = booleanPreferencesKey("glass_highlight")
+        val GlassPageFillKey = floatPreferencesKey("glass_page_fill")
+        val GlassStatusBarKey = floatPreferencesKey("glass_status_bar")
         const val MAX_RECENT = 6
         val LastUpdateCheckKey = longPreferencesKey("last_update_check")
     }
