@@ -45,6 +45,7 @@ import io.github.davydgky.launcher.R
 import io.github.davydgky.launcher.ui.glass.GlassStyle
 import io.github.davydgky.launcher.ui.glass.glass
 import io.github.davydgky.launcher.ui.glass.glassColors
+import io.github.davydgky.launcher.ui.glass.pageGlass
 import kotlin.math.roundToInt
 
 /**
@@ -167,8 +168,7 @@ private fun GlassPreview(style: GlassStyle) {
                 .align(Alignment.TopEnd)
                 .padding(top = 96.dp, end = 16.dp)
                 .size(64.dp)
-                .clip(RoundedCornerShape(18.dp))
-                .background(Color.White.copy(alpha = (0.11f * style.pageFill).coerceIn(0f, 1f))),
+                .pageGlass(RoundedCornerShape(18.dp), Color.White, 0.11f, style),
         )
         Box(
             Modifier

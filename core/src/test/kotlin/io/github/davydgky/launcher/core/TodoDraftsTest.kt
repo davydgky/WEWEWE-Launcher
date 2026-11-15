@@ -60,6 +60,32 @@ class TodoDraftsTest {
     }
 
     @Test
+    fun chatterCodesAndAdvertisingAreNotWorthAsking() {
+        assertFalse(TodoDrafts.worthAsking("Hahaha das war echt ein lustiger Abend gestern"))
+        assertFalse(TodoDrafts.worthAsking("Guten Morgen, wie geht es dir heute so?"))
+        assertFalse(TodoDrafts.worthAsking("Wo bist du gerade unterwegs?"))
+        assertFalse(TodoDrafts.worthAsking("Dein Bestätigungscode lautet 482913. Bitte nicht weitergeben."))
+        assertFalse(TodoDrafts.worthAsking("Nur heute 20 % Rabatt auf alles, jetzt bestellen!"))
+    }
+
+    @Test
+    fun asksPromisesAndAppointmentsAreWorthAsking() {
+        assertTrue(TodoDrafts.worthAsking("Ruf bitte Oma an, sie hat Geburtstag"))
+        assertTrue(TodoDrafts.worthAsking("Ich überweise dir das Geld heute Abend"))
+        assertTrue(TodoDrafts.worthAsking("Der Zahnarzt hat noch was frei am Freitag"))
+        assertTrue(TodoDrafts.worthAsking("Wir sehen uns um 18:30 vor dem Kino"))
+        assertTrue(TodoDrafts.worthAsking("Übermorgen ist die Abgabe der Hausarbeit"))
+        assertTrue(TodoDrafts.worthAsking("Can you pick up the kids at five?"))
+    }
+
+    @Test
+    fun oneTaskPerMessage() {
+        val reply = "1 | Pakete abholen | - | -\n1 | Zur Post gehen | - | -\n2 | Mama zurückrufen | - | -"
+        val drafts = TodoDrafts.parse(reply, count = 2)
+        assertEquals(listOf("Pakete abholen", "Mama zurückrufen"), drafts.map { it.title })
+    }
+
+    @Test
     fun theInputIsNumberedFromOne() {
         val messages = listOf(
             MessageText("a", "WhatsApp", "Anna", "Anna", "Kannst du\ndie Pakete abholen?", 1_762_884_120_000L),

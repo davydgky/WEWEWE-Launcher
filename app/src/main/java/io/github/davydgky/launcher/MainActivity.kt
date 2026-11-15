@@ -46,6 +46,8 @@ class MainActivity : ComponentActivity() {
     private lateinit var widgetAdder: WidgetAdder
     private var wallpaperBlur = -1
     private var wallpaperBlurScale = 1f
+    private var searchProgress = 0f
+    private var sidePageProgress = 0f
     private val wallpaperManager by lazy { WallpaperManager.getInstance(this) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -64,8 +66,13 @@ class MainActivity : ComponentActivity() {
         setContent {
             val prefs by launcherApp.settings.prefs.collectAsStateWithLifecycle(initialValue = LauncherPrefs())
             val glass = prefs.glassStyle()
-            // The system blurs the wallpaper behind the search; it follows the blur setting too.
-            SideEffect { wallpaperBlurScale = glass.blur }
+            // The system blurs the wallpaper behind the search and the side pages; it follows the blur setting too.
+            SideEffect {
+                if (wallpaperBlurScale != glass.blur) {
+                    wallpaperBlurScale = glass.blur
+                    blurWallpaper()
+                }
+            }
             CompositionLocalProvider(LocalLightWallpaper provides lightWallpaper, LocalGlassStyle provides glass) {
                 LauncherTheme {
                     LauncherScreen(
@@ -78,7 +85,8 @@ class MainActivity : ComponentActivity() {
                             searchActive = active
                             updateSystemBars()
                         },
-                        onSearchProgress = ::blurWallpaper,
+                        onSearchProgress = { searchProgress = it; blurWallpaper() },
+                        onSidePageProgress = { sidePageProgress = it; blurWallpaper() },
                     )
                 }
             }
@@ -127,13 +135,15 @@ class MainActivity : ComponentActivity() {
     }
 
     /**
-     * Blurs the wallpaper behind the search with the system's cross-window blur. Every new radius makes
-     * the window lay itself out again, so it changes in a few steps only, not on every frame.
+     * Blurs the wallpaper with the system's cross-window blur: behind the search, and less behind the
+     * organizer and the App Library, both scaled by the blur setting. Every new radius makes the window
+     * lay itself out again, so it changes in a few steps only, not on every frame.
      */
-    private fun blurWallpaper(progress: Float) {
+    private fun blurWallpaper() {
         if (!windowManager.isCrossWindowBlurEnabled) return
-        val step = ceil(progress.coerceIn(0f, 1f) * BLUR_STEPS)
-        val radius = (step / BLUR_STEPS * MAX_WALLPAPER_BLUR_DP * wallpaperBlurScale * resources.displayMetrics.density).toInt()
+        val search = ceil(searchProgress.coerceIn(0f, 1f) * BLUR_STEPS) / BLUR_STEPS * MAX_WALLPAPER_BLUR_DP
+        val sidePage = ceil(sidePageProgress.coerceIn(0f, 1f) * BLUR_STEPS) / BLUR_STEPS * SIDE_PAGE_WALLPAPER_BLUR_DP
+        val radius = (maxOf(search, sidePage) * wallpaperBlurScale * resources.displayMetrics.density).toInt()
         if (radius == wallpaperBlur) return
         wallpaperBlur = radius
         window.setBackgroundBlurRadius(radius)
@@ -173,6 +183,7 @@ class MainActivity : ComponentActivity() {
 
     private companion object {
         const val MAX_WALLPAPER_BLUR_DP = 30f
+        const val SIDE_PAGE_WALLPAPER_BLUR_DP = 14f
         const val BLUR_STEPS = 4f
     }
 }

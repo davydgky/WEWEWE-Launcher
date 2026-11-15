@@ -2,7 +2,7 @@
 
 package io.github.davydgky.launcher.home
 
-import io.github.davydgky.launcher.ui.glass.pageFillAlpha
+import io.github.davydgky.launcher.ui.glass.pageGlass
 import android.content.Context
 import android.content.Intent
 import android.graphics.Rect
@@ -91,6 +91,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -99,6 +100,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
@@ -165,6 +167,7 @@ fun HomeScreen(
     resetSignal: Int,
     dockSuggestion: AppTarget?,
     modifier: Modifier = Modifier,
+    onSidePageProgress: (Float) -> Unit = {},
 ) {
     val context = LocalContext.current
     val dragging = controller.drag != null
@@ -226,6 +229,11 @@ fun HomeScreen(
             maxOf(towardsLibrary, towardsOrganizer).coerceIn(0f, 1f)
         }
         val onSidePage = pagerState.currentPage >= homePages + offset || pagerState.currentPage < offset
+        // The wallpaper turns blurred behind the organizer and the App Library, as behind glass.
+        val currentOnSidePageProgress by rememberUpdatedState(onSidePageProgress)
+        LaunchedEffect(pagerState, homePages) {
+            snapshotFlow { sideProgress() }.collect { currentOnSidePageProgress(it) }
+        }
         // What the organizer and the App Library leave free at their end, so it scrolls up above the dots.
         val sidePageBottom = INDICATOR_HEIGHT + navBarHeight
         Box(Modifier.weight(1f).fillMaxWidth()) {
@@ -751,8 +759,8 @@ private val LocalIconSize = staticCompositionLocalOf { ICON_SIZE }
 
 /** The App Library's boxes: lighter than a folder on the home screen, the wallpaper shows through more. */
 @Composable
-private fun libraryFill(): Color =
-    Color.White.copy(alpha = pageFillAlpha(if (LocalLightWallpaper.current) 0.26f else 0.11f))
+private fun Modifier.libraryGlass(shape: Shape): Modifier =
+    pageGlass(shape, Color.White, if (LocalLightWallpaper.current) 0.26f else 0.11f)
 
 @Composable
 private fun folderFill(): Color =
@@ -1608,8 +1616,7 @@ private fun AppLibraryPage(groups: List<LibraryGroup>, workspace: Workspace, con
                     Modifier
                         .fillMaxWidth()
                         .height(40.dp)
-                        .clip(RoundedCornerShape(20.dp))
-                        .background(libraryFill())
+                        .libraryGlass(RoundedCornerShape(20.dp))
                         .clickable(onClick = controller.openSearch)
                         .padding(horizontal = 14.dp),
                     verticalAlignment = Alignment.CenterVertically,
@@ -1637,8 +1644,7 @@ private fun LibraryBox(group: LibraryGroup, workspace: Workspace, controller: Ho
             Modifier
                 .fillMaxWidth()
                 .aspectRatio(1f)
-                .clip(RoundedCornerShape(28.dp))
-                .background(libraryFill())
+                .libraryGlass(RoundedCornerShape(28.dp))
                 .clickable { controller.openCategory = group }
                 .padding(8.dp),
         ) {

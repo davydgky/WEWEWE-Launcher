@@ -1,6 +1,7 @@
 package io.github.davydgky.launcher.organizer
 
 import io.github.davydgky.launcher.ui.glass.pageFillAlpha
+import io.github.davydgky.launcher.ui.glass.pageGlass
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -155,8 +156,7 @@ internal fun CalendarCard(
     Column(
         Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(20.dp))
-            .background(color.copy(alpha = pageFillAlpha(CARD_ALPHA)))
+            .pageGlass(RoundedCornerShape(20.dp), color, CARD_ALPHA)
             .pinchSteps(
                 onZoomIn = { currentOnScaleChange(currentScale.zoomedIn()) },
                 onZoomOut = { currentOnScaleChange(currentScale.zoomedOut()) },

@@ -74,6 +74,7 @@ fun LauncherScreen(
     addWidget: (AppWidgetProviderInfo, Int, Int, Int) -> Unit,
     onSearchActive: (Boolean) -> Unit,
     onSearchProgress: (Float) -> Unit,
+    onSidePageProgress: (Float) -> Unit = {},
 ) {
     val context = LocalContext.current
     val app = context.launcherApp
@@ -198,7 +199,7 @@ fun LauncherScreen(
                         },
                     ),
             ) {
-                workspace?.let { ws -> HomeScreen(ws, apps, shortcuts, library, controller, homeReset, dockSuggestion) }
+                workspace?.let { ws -> HomeScreen(ws, apps, shortcuts, library, controller, homeReset, dockSuggestion, onSidePageProgress = onSidePageProgress) }
             }
             if (state.isActive) {
                 Box(

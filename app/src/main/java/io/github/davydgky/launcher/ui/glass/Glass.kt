@@ -1,12 +1,17 @@
 package io.github.davydgky.launcher.ui.glass
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -44,6 +49,7 @@ data class GlassColors(
  * [blur] of what lies behind, [tint] (how opaque surfaces and the dimming behind panels are),
  * [refraction] of the lens at the edges, the [highlight] rim, [pageFill] of the boxes and cards on the
  * organizer and the App Library, and [statusBarBlur] under the status bar on those pages (0 = off).
+ * Blur, tint and the rim apply to those pages too; refraction does not, there is nothing to refract.
  */
 @Immutable
 data class GlassStyle(
@@ -79,9 +85,33 @@ fun io.github.davydgky.launcher.data.LauncherPrefs.glassStyle() = GlassStyle(
 /** The Liquid Glass settings in effect; the launcher provides the user's, everything else gets the defaults. */
 val LocalGlassStyle = staticCompositionLocalOf { GlassStyle() }
 
-/** [base] alpha of a box or card on the organizer or the App Library, with the user's fill applied. */
+/**
+ * [base] alpha of a box or card on the organizer or the App Library, with the user's fill and tint
+ * applied (with "Off" the tint is higher: no blur behind them, so they are a little more opaque).
+ */
 @Composable
-fun pageFillAlpha(base: Float): Float = (base * LocalGlassStyle.current.pageFill).coerceIn(0f, 1f)
+fun pageFillAlpha(base: Float, style: GlassStyle = LocalGlassStyle.current): Float =
+    (base * style.pageFill * style.tint).coerceIn(0f, 1f)
+
+/**
+ * A box or card on the organizer or the App Library: [color] at [base] alpha with the user's fill and
+ * tint, and the highlight rim when it is on. These pages lie over the wallpaper, which is another window,
+ * so they cannot refract it; the blur behind them is the system's blur of the wallpaper, which follows
+ * the blur setting (see MainActivity).
+ */
+@Composable
+fun Modifier.pageGlass(shape: Shape, color: Color, base: Float, style: GlassStyle = LocalGlassStyle.current): Modifier {
+    val fill = color.copy(alpha = pageFillAlpha(base, style))
+    val rimmed = if (style.highlight && style.pageFill > 0f) {
+        val strength = style.pageFill.coerceIn(0.5f, 1.5f)
+        border(
+            1.dp,
+            Brush.verticalGradient(listOf(Color.White.copy(alpha = 0.30f * strength), Color.White.copy(alpha = 0.05f * strength))),
+            shape,
+        )
+    } else this
+    return rimmed.clip(shape).background(fill)
+}
 
 private fun Color.timesAlpha(factor: Float) = copy(alpha = (alpha * factor).coerceIn(0f, 1f))
 

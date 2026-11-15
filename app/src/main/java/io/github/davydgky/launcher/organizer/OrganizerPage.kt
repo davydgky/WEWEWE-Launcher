@@ -3,6 +3,7 @@
 package io.github.davydgky.launcher.organizer
 
 import io.github.davydgky.launcher.ui.glass.pageFillAlpha
+import io.github.davydgky.launcher.ui.glass.pageGlass
 import android.Manifest
 import android.database.ContentObserver
 import android.os.Handler
@@ -337,8 +338,7 @@ private fun PermissionBanner(text: String, onClick: () -> Unit) {
     Row(
         Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
-            .background(color.copy(alpha = pageFillAlpha(0.09f)))
+            .pageGlass(RoundedCornerShape(14.dp), color, 0.09f)
             .clickable(onClick = onClick)
             .padding(14.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -419,7 +419,7 @@ private fun SuggestionsSection(
     }
     Spacer(Modifier.height(4.dp))
     Column(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(color.copy(alpha = pageFillAlpha(CARD_ALPHA))).padding(vertical = 4.dp),
+        Modifier.fillMaxWidth().pageGlass(RoundedCornerShape(16.dp), color, CARD_ALPHA).padding(vertical = 4.dp),
     ) {
         suggestions.asReversed().forEach { suggestion ->
             Row(Modifier.fillMaxWidth().padding(start = 14.dp, end = 4.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {

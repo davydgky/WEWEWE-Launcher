@@ -403,13 +403,13 @@
     <string name="glass_group_glass">Glasflächen</string>
     <string name="glass_group_pages">Organizer &amp; App-Galerie</string>
     <string name="glass_blur">Unschärfe</string>
-    <string name="glass_blur_description">Wie verschwommen der Startbildschirm hinter Suche, Ordnern und Fenstern ist.</string>
+    <string name="glass_blur_description">Wie verschwommen der Startbildschirm hinter Suche, Ordnern und Fenstern ist – und das Hintergrundbild hinter Organizer und App-Galerie.</string>
     <string name="glass_tint">Tönung</string>
-    <string name="glass_tint_description">Wie deckend das Glas und die Abdunklung dahinter sind.</string>
+    <string name="glass_tint_description">Wie deckend das Glas, die Abdunklung dahinter und die Kästen und Karten sind.</string>
     <string name="glass_refraction">Lichtbrechung</string>
-    <string name="glass_refraction_description">Der Linseneffekt an den Rändern des Glases.</string>
+    <string name="glass_refraction_description">Der Linseneffekt an den Rändern von Suche, Ordnern und Fenstern.</string>
     <string name="glass_highlight">Glanzkante</string>
-    <string name="glass_highlight_description">Ein heller Rand um Glasflächen.</string>
+    <string name="glass_highlight_description">Ein heller Rand um Glasflächen, Kästen und Karten.</string>
     <string name="glass_page_fill">Kästen und Karten</string>
     <string name="glass_page_fill_description">Wie deutlich die Kästen der App-Galerie und die Karten im Organizer sind.</string>
     <string name="glass_status_bar">Unschärfe unter der Statusleiste</string>
