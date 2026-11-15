@@ -24,6 +24,7 @@ import com.kyant.backdrop.effects.vibrancy
 import com.kyant.backdrop.highlight.Highlight
 import com.kyant.backdrop.shadow.Shadow
 import com.kyant.shapes.RoundedRectangularShape
+import io.github.davydgky.launcher.ui.LocalLightWallpaper
 
 /**
  * Colours of glass surfaces, taken from Velo. Content colours are chosen for the glass itself, not for
@@ -84,6 +85,31 @@ fun io.github.davydgky.launcher.data.LauncherPrefs.glassStyle() = GlassStyle(
 
 /** The Liquid Glass settings in effect; the launcher provides the user's, everything else gets the defaults. */
 val LocalGlassStyle = staticCompositionLocalOf { GlassStyle() }
+
+/**
+ * Whether the system blurs the wallpaper behind the launcher's window. Many phones do not support it, and
+ * Android turns it off in battery saver; then the wallpaper stays sharp whatever the blur setting says.
+ */
+val LocalWallpaperBlur = staticCompositionLocalOf { false }
+
+/**
+ * The dimming over the wallpaper behind the organizer and the App Library, so their text stays readable
+ * on any wallpaper. Lighter where the system blurs the wallpaper, stronger where it stays sharp; scaled by
+ * the tint.
+ */
+@Composable
+fun sidePageScrim(): Color {
+    val style = LocalGlassStyle.current
+    val light = LocalLightWallpaper.current
+    val blurred = LocalWallpaperBlur.current && style.blur > 0f
+    val base = when {
+        light && blurred -> 0.30f
+        light -> 0.55f
+        blurred -> 0.25f
+        else -> 0.50f
+    }
+    return (if (light) Color.White else Color.Black).copy(alpha = (base * style.tint).coerceIn(0f, 0.9f))
+}
 
 /**
  * [base] alpha of a box or card on the organizer or the App Library, with the user's fill and tint

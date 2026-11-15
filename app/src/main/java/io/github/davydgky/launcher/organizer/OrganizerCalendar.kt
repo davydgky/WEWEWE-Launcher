@@ -207,7 +207,7 @@ internal fun CalendarCard(
     }
 }
 
-internal const val CARD_ALPHA = 0.05f
+internal const val CARD_ALPHA = 0.08f
 
 @Composable
 private fun ScaleTabs(scale: CalendarScale, color: Color, onScaleChange: (CalendarScale) -> Unit) {

@@ -3,6 +3,7 @@
 package io.github.davydgky.launcher.home
 
 import io.github.davydgky.launcher.ui.glass.pageGlass
+import io.github.davydgky.launcher.ui.glass.sidePageScrim
 import android.content.Context
 import android.content.Intent
 import android.graphics.Rect
@@ -96,6 +97,7 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
@@ -187,10 +189,24 @@ fun HomeScreen(
     controller.pager = pagerState
     LaunchedEffect(resetSignal) { if (resetSignal > 0) pagerState.animateScrollToPage(HomeController.GRID_OFFSET) }
     val haptics = LocalHapticFeedback.current
+    // 0 on a home page, 1 halfway to the App Library or to the organizer: the search button and dock
+    // are gone before either arrives.
+    val sideProgress = {
+        val position = pagerState.currentPage + pagerState.currentPageOffsetFraction
+        val towardsLibrary = (position - HomeController.GRID_OFFSET - (homePages - 1)) * 2f
+        val towardsOrganizer = (HomeController.GRID_OFFSET - position) * 2f
+        maxOf(towardsLibrary, towardsOrganizer).coerceIn(0f, 1f)
+    }
+    val sidePageScrim = sidePageScrim()
 
     Column(
         modifier
             .fillMaxSize()
+            // The wallpaper dimmed behind the organizer and the App Library, so their text stays readable.
+            .drawBehind {
+                val p = sideProgress()
+                if (p > 0f) drawRect(sidePageScrim, alpha = p)
+            }
             .onGloballyPositioned { controller.screenWidth = it.size.width.toFloat() }
             .pointerInput(controller.doubleTapToLock) {
                 // Apps, folders and widgets have their own long press; only the background starts editing.
@@ -219,15 +235,7 @@ fun HomeScreen(
         // Search button and dock; the App Library has the screen down to the page dots without them.
         var barsHeight by remember { mutableIntStateOf(0) }
         val barsHeightDp = with(density) { barsHeight.toDp() }
-        // 0 on a home page, 1 halfway to the App Library or to the organizer: the search button and dock
-        // are gone before either arrives.
         val offset = HomeController.GRID_OFFSET
-        val sideProgress = {
-            val position = pagerState.currentPage + pagerState.currentPageOffsetFraction
-            val towardsLibrary = (position - offset - (homePages - 1)) * 2f
-            val towardsOrganizer = (offset - position) * 2f
-            maxOf(towardsLibrary, towardsOrganizer).coerceIn(0f, 1f)
-        }
         val onSidePage = pagerState.currentPage >= homePages + offset || pagerState.currentPage < offset
         // The wallpaper turns blurred behind the organizer and the App Library, as behind glass.
         val currentOnSidePageProgress by rememberUpdatedState(onSidePageProgress)

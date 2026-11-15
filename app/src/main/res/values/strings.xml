@@ -405,8 +405,9 @@
     <string name="glass_group_pages">Organizer &amp; App Library</string>
     <string name="glass_blur">Blur</string>
     <string name="glass_blur_description">How blurred the home screen is behind the search, folders and panels, and the wallpaper behind the organizer and App Library.</string>
+    <string name="glass_blur_unavailable">Your phone is not showing the blur behind the launcher right now (not supported by the maker, battery saver, or turned off in the developer options). The organizer and App Library are dimmed more instead.</string>
     <string name="glass_tint">Tint</string>
-    <string name="glass_tint_description">How opaque the glass, the dimming behind it and the boxes and cards are.</string>
+    <string name="glass_tint_description">How opaque the glass, the dimming behind it and the boxes and cards are, also behind the organizer and App Library.</string>
     <string name="glass_refraction">Refraction</string>
     <string name="glass_refraction_description">The lens effect at the edges of the search, folders and panels.</string>
     <string name="glass_highlight">Highlight rim</string>

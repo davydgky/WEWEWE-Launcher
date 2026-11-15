@@ -1,5 +1,6 @@
 package io.github.davydgky.launcher.settings
 
+import android.view.WindowManager
 import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -34,6 +35,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -59,6 +61,9 @@ internal fun GlassSettings(saved: GlassStyle, onSave: (GlassStyle) -> Unit) {
         style = next
         onSave(next)
     }
+    val context = LocalContext.current
+    // Without the system's blur the wallpaper stays sharp whatever the slider says; the launcher dims more.
+    val wallpaperBlur = remember { context.getSystemService(WindowManager::class.java).isCrossWindowBlurEnabled }
     Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
         GlassPreview(style)
         Group(stringResource(R.string.glass_presets)) {
@@ -79,6 +84,14 @@ internal fun GlassSettings(saved: GlassStyle, onSave: (GlassStyle) -> Unit) {
         Group(stringResource(R.string.glass_group_glass)) {
             FactorSlider(R.string.glass_blur, R.string.glass_blur_description, style.blur, GlassStyle.MAX_FACTOR, offAtZero = true,
                 onChange = { style = style.copy(blur = it) }, onDone = { onSave(style) })
+            if (!wallpaperBlur) {
+                Text(
+                    stringResource(R.string.glass_blur_unavailable),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
+                )
+            }
             HorizontalDivider()
             FactorSlider(R.string.glass_tint, R.string.glass_tint_description, style.tint, GlassStyle.MAX_FACTOR,
                 onChange = { style = style.copy(tint = it) }, onDone = { onSave(style) })

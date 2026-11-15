@@ -27,8 +27,10 @@ import io.github.davydgky.launcher.ui.LauncherScreen
 import io.github.davydgky.launcher.ui.LauncherTheme
 import io.github.davydgky.launcher.ui.LocalLightWallpaper
 import io.github.davydgky.launcher.ui.glass.LocalGlassStyle
+import io.github.davydgky.launcher.ui.glass.LocalWallpaperBlur
 import io.github.davydgky.launcher.ui.glass.glassStyle
 import io.github.davydgky.launcher.widgets.WidgetAdder
+import java.util.function.Consumer
 import kotlin.math.ceil
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -42,6 +44,13 @@ class MainActivity : ComponentActivity() {
     private val viewModel: SearchViewModel by viewModels()
     private val homePressed = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     private var lightWallpaper by mutableStateOf(false)
+    private var wallpaperBlurAvailable by mutableStateOf(false)
+    private val blurAvailability = Consumer<Boolean> { enabled ->
+        wallpaperBlurAvailable = enabled
+        // Turned back on (battery saver off): blur again what should be blurred.
+        wallpaperBlur = -1
+        blurWallpaper()
+    }
     private var searchActive = false
     private lateinit var widgetAdder: WidgetAdder
     private var wallpaperBlur = -1
@@ -62,6 +71,8 @@ class MainActivity : ComponentActivity() {
             updateWallpaperColors(withContext(Dispatchers.IO) { wallpaperManager.getWallpaperColors(WallpaperManager.FLAG_SYSTEM) })
         }
         wallpaperManager.addOnColorsChangedListener(wallpaperListener, Handler(Looper.getMainLooper()))
+        // Reports at once, and again whenever the system turns its blur on or off.
+        windowManager.addCrossWindowBlurEnabledListener(mainExecutor, blurAvailability)
 
         setContent {
             val prefs by launcherApp.settings.prefs.collectAsStateWithLifecycle(initialValue = LauncherPrefs())
@@ -73,7 +84,7 @@ class MainActivity : ComponentActivity() {
                     blurWallpaper()
                 }
             }
-            CompositionLocalProvider(LocalLightWallpaper provides lightWallpaper, LocalGlassStyle provides glass) {
+            CompositionLocalProvider(LocalLightWallpaper provides lightWallpaper, LocalGlassStyle provides glass, LocalWallpaperBlur provides wallpaperBlurAvailable) {
                 LauncherTheme {
                     LauncherScreen(
                         viewModel = viewModel,
@@ -157,6 +168,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onDestroy() {
         wallpaperManager.removeOnColorsChangedListener(wallpaperListener)
+        windowManager.removeCrossWindowBlurEnabledListener(blurAvailability)
         super.onDestroy()
     }
 

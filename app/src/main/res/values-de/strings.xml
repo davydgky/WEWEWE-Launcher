@@ -404,8 +404,9 @@
     <string name="glass_group_pages">Organizer &amp; App-Galerie</string>
     <string name="glass_blur">Unschärfe</string>
     <string name="glass_blur_description">Wie verschwommen der Startbildschirm hinter Suche, Ordnern und Fenstern ist – und das Hintergrundbild hinter Organizer und App-Galerie.</string>
+    <string name="glass_blur_unavailable">Dein Handy blendet die Unschärfe hinter dem Launcher gerade nicht ein (vom Hersteller nicht unterstützt, im Energiesparmodus oder in den Entwickleroptionen ausgeschaltet). Hinter Organizer und App-Galerie wird deshalb stärker abgedunkelt.</string>
     <string name="glass_tint">Tönung</string>
-    <string name="glass_tint_description">Wie deckend das Glas, die Abdunklung dahinter und die Kästen und Karten sind.</string>
+    <string name="glass_tint_description">Wie deckend das Glas, die Abdunklung dahinter und die Kästen und Karten sind – auch hinter Organizer und App-Galerie.</string>
     <string name="glass_refraction">Lichtbrechung</string>
     <string name="glass_refraction_description">Der Linseneffekt an den Rändern von Suche, Ordnern und Fenstern.</string>
     <string name="glass_highlight">Glanzkante</string>
