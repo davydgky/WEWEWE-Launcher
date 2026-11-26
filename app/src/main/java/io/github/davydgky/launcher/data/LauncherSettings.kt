@@ -68,6 +68,14 @@ data class LauncherPrefs(
     val glassHighlight: Boolean = true,
     val glassPageFill: Float = 1f,
     val glassStatusBar: Float = 1f,
+    /** The Dynamic Island around the camera (needs the accessibility service). */
+    val islandEnabled: Boolean = true,
+    /** Arriving notifications widen the island for a few seconds. */
+    val islandNotifications: Boolean = true,
+    /** Charging, the ringer and headphones show briefly in the island. */
+    val islandSystemEvents: Boolean = true,
+    /** With nothing to show, a small ring around the camera marks where the island is. */
+    val islandIdleVisible: Boolean = true,
 )
 
 class LauncherSettings(private val dataStore: DataStore<Preferences>) {
@@ -108,6 +116,10 @@ class LauncherSettings(private val dataStore: DataStore<Preferences>) {
                 glassHighlight = prefs[GlassHighlightKey] ?: true,
                 glassPageFill = prefs[GlassPageFillKey] ?: 1f,
                 glassStatusBar = prefs[GlassStatusBarKey] ?: 1f,
+                islandEnabled = prefs[IslandEnabledKey] ?: true,
+                islandNotifications = prefs[IslandNotificationsKey] ?: true,
+                islandSystemEvents = prefs[IslandSystemEventsKey] ?: true,
+                islandIdleVisible = prefs[IslandIdleVisibleKey] ?: true,
             )
         }
         .distinctUntilChanged()
@@ -213,6 +225,15 @@ class LauncherSettings(private val dataStore: DataStore<Preferences>) {
         dataStore.edit { it[ThemedIconsKey] = enabled }
     }
 
+    suspend fun setIsland(enabled: Boolean? = null, notifications: Boolean? = null, systemEvents: Boolean? = null, idleVisible: Boolean? = null) {
+        dataStore.edit {
+            enabled?.let { v -> it[IslandEnabledKey] = v }
+            notifications?.let { v -> it[IslandNotificationsKey] = v }
+            systemEvents?.let { v -> it[IslandSystemEventsKey] = v }
+            idleVisible?.let { v -> it[IslandIdleVisibleKey] = v }
+        }
+    }
+
     suspend fun setDoubleTapToLock(enabled: Boolean) {
         dataStore.edit { it[DoubleTapToLockKey] = enabled }
     }
@@ -259,6 +280,10 @@ class LauncherSettings(private val dataStore: DataStore<Preferences>) {
             put("glassHighlight", p.glassHighlight)
             put("glassPageFill", p.glassPageFill.toDouble())
             put("glassStatusBar", p.glassStatusBar.toDouble())
+            put("islandEnabled", p.islandEnabled)
+            put("islandNotifications", p.islandNotifications)
+            put("islandSystemEvents", p.islandSystemEvents)
+            put("islandIdleVisible", p.islandIdleVisible)
         }
     }
 
@@ -287,6 +312,10 @@ class LauncherSettings(private val dataStore: DataStore<Preferences>) {
             (values["glassHighlight"] as? Boolean)?.let { prefs[GlassHighlightKey] = it }
             (values["glassPageFill"] as? Number)?.let { prefs[GlassPageFillKey] = it.toFloat() }
             (values["glassStatusBar"] as? Number)?.let { prefs[GlassStatusBarKey] = it.toFloat() }
+            (values["islandEnabled"] as? Boolean)?.let { prefs[IslandEnabledKey] = it }
+            (values["islandNotifications"] as? Boolean)?.let { prefs[IslandNotificationsKey] = it }
+            (values["islandSystemEvents"] as? Boolean)?.let { prefs[IslandSystemEventsKey] = it }
+            (values["islandIdleVisible"] as? Boolean)?.let { prefs[IslandIdleVisibleKey] = it }
             (values["appLabels"] as? Map<*, *>)?.let { map ->
                 prefs[AppLabelsKey] = map.mapNotNull { (k, v) -> if (k is String && v is String) "$k\t$v" else null }.toSet()
             }
@@ -328,6 +357,10 @@ class LauncherSettings(private val dataStore: DataStore<Preferences>) {
         val GlassHighlightKey = booleanPreferencesKey("glass_highlight")
         val GlassPageFillKey = floatPreferencesKey("glass_page_fill")
         val GlassStatusBarKey = floatPreferencesKey("glass_status_bar")
+        val IslandEnabledKey = booleanPreferencesKey("island_enabled")
+        val IslandNotificationsKey = booleanPreferencesKey("island_notifications")
+        val IslandSystemEventsKey = booleanPreferencesKey("island_system_events")
+        val IslandIdleVisibleKey = booleanPreferencesKey("island_idle_visible")
         const val MAX_RECENT = 6
         val LastUpdateCheckKey = longPreferencesKey("last_update_check")
     }

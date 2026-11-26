@@ -142,7 +142,10 @@
             </intent-filter>
         </service>
 
-        <!-- Double tap to turn the screen off; off until the user switches it on in the accessibility settings. -->
+        <!--
+            Double tap to turn the screen off, and the Dynamic Island over the status bar; off until the user
+            switches it on in the accessibility settings.
+        -->
         <service
             android:name=".gestures.LockService"
             android:exported="false"
@@ -177,6 +180,99 @@
             android:resizeableActivity="true"
             android:taskAffinity="io.github.davydgky.launcher.bubble"
             android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+
+        <!--
+            The search on its own, over any app: from the Dynamic Island, as the digital assistant (swipe
+            from a bottom corner or hold the power button), from the Quick Settings tile and the widget.
+            So the search also works when the Pixel Launcher stays the home screen.
+        -->
+        <activity
+            android:name=".ui.SearchActivity"
+            android:excludeFromRecents="true"
+            android:exported="true"
+            android:label="@string/search_activity_label"
+            android:launchMode="singleTask"
+            android:taskAffinity="io.github.davydgky.launcher.search"
+            android:theme="@style/Theme.Launcher.Overlay"
+            android:windowSoftInputMode="adjustResize|stateAlwaysHidden">
+            <intent-filter>
+                <action android:name="android.intent.action.ASSIST" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+            <meta-data android:name="com.android.systemui.action_assist_icon" android:resource="@drawable/ic_search" />
+        </activity>
+
+        <!-- Text read from the screen by the island, to select and copy. -->
+        <activity
+            android:name=".island.ScreenTextActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:taskAffinity="io.github.davydgky.launcher.island"
+            android:theme="@style/Theme.Settings" />
+
+        <!-- A quick note from the island, saved as a reminder in the organizer. -->
+        <activity
+            android:name=".island.QuickNoteActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:taskAffinity="io.github.davydgky.launcher.island"
+            android:theme="@style/Theme.Launcher.Overlay"
+            android:windowSoftInputMode="adjustResize|stateAlwaysVisible" />
+
+        <!-- "Share" from any app: into the island's tray, or as a link without tracking to the clipboard. -->
+        <activity
+            android:name=".island.ShareActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:noHistory="true"
+            android:taskAffinity="io.github.davydgky.launcher.share"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+        <activity-alias
+            android:name=".island.ShareToTray"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher"
+            android:label="@string/share_tray_label"
+            android:targetActivity=".island.ShareActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name=".island.CleanLink"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher"
+            android:label="@string/share_clean_link_label"
+            android:targetActivity=".island.ShareActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+        </activity-alias>
+
+        <service
+            android:name=".island.SearchTileService"
+            android:exported="true"
+            android:icon="@drawable/ic_search"
+            android:label="@string/tile_search_label"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+            <meta-data android:name="android.service.quicksettings.TOGGLEABLE_TILE" android:value="false" />
+        </service>
+
+        <receiver
+            android:name=".island.SearchWidgetProvider"
+            android:exported="true"
+            android:label="@string/widget_search_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_search_info" />
+        </receiver>
 
         <service
             android:name=".index.ContentIndexJob"

@@ -9,6 +9,16 @@
         <item name="android:windowSplashScreenBackground">@android:color/transparent</item>
     </style>
 
+    <!-- Over another app: transparent, no window animation of its own (the content animates itself). -->
+    <style name="Theme.Launcher.Overlay" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowAnimationStyle">@null</item>
+        <item name="android:windowSplashScreenBackground">@android:color/transparent</item>
+        <item name="android:backgroundDimEnabled">false</item>
+    </style>
+
     <style name="Theme.Settings" parent="android:Theme.Material.Light.NoActionBar">
         <item name="android:windowBackground">@color/settings_background</item>
     </style>

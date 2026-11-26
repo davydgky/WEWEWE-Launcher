@@ -368,6 +368,7 @@ private fun SettingsScreen(activity: ComponentActivity) {
                         }
                     }
                 }
+                SettingsPage.Island -> islandSettings(prefs, notificationAccess, resumeCount)
                 SettingsPage.Glass -> item {
                     GlassSettings(prefs.glassStyle()) { style ->
                         scope.launch {
@@ -417,6 +418,7 @@ private fun SettingsScreen(activity: ComponentActivity) {
 
 /** The settings' categories, each a page of its own. */
 private enum class SettingsPage(val title: Int, val summary: Int, val icon: Int) {
+    Island(R.string.settings_island, R.string.settings_island_summary, R.drawable.ic_island),
     Home(R.string.settings_home, R.string.settings_home_summary, R.drawable.ic_pages),
     Glass(R.string.settings_glass, R.string.settings_glass_summary, R.drawable.ic_image),
     Search(R.string.settings_search, R.string.settings_search_summary, R.drawable.ic_search),
@@ -581,7 +583,7 @@ private fun UpdateGroup(
 
 /** A setting that is on or off; the whole row toggles it. */
 @Composable
-private fun SwitchRow(title: Int, description: Int, checked: Boolean, enabled: Boolean = true, onChange: (Boolean) -> Unit) {
+internal fun SwitchRow(title: Int, description: Int, checked: Boolean, enabled: Boolean = true, onChange: (Boolean) -> Unit) {
     Row(
         Modifier
             .fillMaxWidth()

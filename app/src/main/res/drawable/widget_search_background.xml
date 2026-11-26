@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A pill in the wallpaper's colours, like the Pixel Launcher's own search bar. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="@android:color/system_accent2_50" />
+    <corners android:radius="999dp" />
+</shape>

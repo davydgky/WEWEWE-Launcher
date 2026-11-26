@@ -118,6 +118,56 @@ Welche Quelle Android unter welcher Bedingung erlaubt und warum die Architektur 
   einem Tipp erteilen, Notiz-Ordner verwalten, Fortschritt der Texterkennung, Messwerte, Index neu aufbauen.
 - Deutsch und Englisch, Hell- und Dunkelmodus, Material-You-Farben.
 
+## Dynamic Island
+
+Eine Island um die Frontkamera, wie beim iPhone, die über jeder App liegt, auch wenn der Pixel Launcher
+der Startbildschirm bleibt. Sie ist schwarz wie die Kamera, wird breiter, wenn etwas läuft, und öffnet
+sich mit einem Tippen oder wenn man sie nach unten zieht.
+
+- **Neben der Kamera**: Musik (Cover links, Balken in der Farbe des Covers rechts), Timer und Stoppuhr
+  der Uhr-App mit Countdown, Anrufe mit Dauer, Navigation, Downloads und Fortschritt, Live Updates
+  jeder App (Android 16), ein Termin in den nächsten 15 Minuten, Taschenlampe an, Wach bleiben an.
+  Läuft zweierlei, sitzt das Zweite als kleine Blase daneben. Was wichtiger ist, entscheidet
+  `IslandPicker` (Anrufe vor Navigation vor Timern vor Musik vor Fortschritt).
+- **Kurz eingeblendet**: neue Benachrichtigungen mit Bild des Absenders (Antippen öffnet sie, nach oben
+  schieben blendet sie aus, auf dem Sperrbildschirm nur die App), Laden mit Akkustand, Akku schwach,
+  Lautlos/Vibrieren/Klingeln, verbundene Kopfhörer.
+- **Geöffnet**: Uhrzeit und Akku (die Island deckt die Statusleiste ab), Musik mit Cover, Fortschritt
+  und Tasten, alle laufenden Aktivitäten, der nächste Termin, die Ablage, Schalter (Taschenlampe, Wach
+  bleiben, Nicht stören, Bildschirmtext, Notiz, Sperren) und die Suche.
+- **Gesten**: Tippen öffnet. Nach unten ziehen öffnet unter dem Finger, weiter ziehen und loslassen
+  öffnet die Spotlight-Suche. Halten öffnet, was läuft (Musik-App, Timer), ohne Inhalt die Suche. Nach
+  oben schieben oder daneben tippen schließt.
+- **Bildschirmtext**: ein Bildschirmfoto ohne die Island, mit dem ML-Kit-Modell der Fotosuche auf dem
+  Gerät gelesen; der Text lässt sich markieren, kopieren oder suchen.
+- **Ablage**: „Teilen“ → „In die Island“ legt Text und Links ab (Links ohne Tracking-Parameter). Dazu
+  „Link ohne Tracking kopieren“ als eigenes Teilen-Ziel (`UrlCleaner`: `utm_*`, `fbclid`, `si` bei
+  YouTube und Spotify …).
+- **Notiz**: eine Zeile, die als Erinnerung in der ersten Liste des Organizers landet.
+
+Technisch ist die Island ein `TYPE_ACCESSIBILITY_OVERLAY`, die einzige Fensterart, die eine App über
+die Statusleiste legen darf. Sie hängt am vorhandenen Bedienungshilfen-Dienst (`LockService`, jetzt
+„WEWEWE: Dynamic Island und Sperren“), der weiterhin keine Ereignisse empfängt und keine Fensterinhalte
+liest. Das Fenster ist nur so groß wie die Island, damit ein Wischen neben der Kamera weiter die
+Benachrichtigungsleiste öffnet. Position und Größe kommen aus der Display-Aussparung; sitzt die Kamera
+in einer Ecke, sitzt die Island in der Mitte der Statusleiste. Im Querformat und bei Vollbild-Apps
+verschwindet sie. Musik kommt aus den Media-Sessions, alles andere aus den Benachrichtigungen (der
+Zugriff, den die Benachrichtigungspunkte schon nutzen). Nichts davon wird gespeichert außer der Ablage
+(`files/shelf.json`).
+
+### Ohne WEWEWE als Startbildschirm
+
+Island und Suche brauchen den Launcher nicht. Die Suche läuft dann als eigenes Fenster über der
+aktuellen App (`SearchActivity`, der Hintergrund wird vom System weichgezeichnet) und öffnet sich über:
+
+- die Island (nach unten ziehen oder die Suchleiste darin),
+- **Wischen aus einer unteren Ecke** oder die Ein-Taste, wenn WEWEWE als digitaler Assistent gewählt ist
+  (`ACTION_ASSIST`),
+- die **Kachel** „WEWEWE-Suche“ in den Schnelleinstellungen,
+- das **Suchleisten-Widget** für den Pixel Launcher oder jeden anderen Startbildschirm.
+
+Alles einzurichten unter *Einstellungen › Dynamic Island*.
+
 ## Zeitbudget und Messung
 
 | Messwert | Budget | Gemessen von … bis … |
@@ -176,7 +226,9 @@ core/                          Suchkern ohne Android (Kotlin/JVM, Unit-Tests)
 ├── SearchEngine.kt            Teilindizes je Quelle, Top-K je Gruppe, Top-Treffer
 ├── Predictor.kt               Vorschläge nach Tageszeit/Wochentag/Häufigkeit; Engagement
 ├── Snippets.kt                Textausschnitt um den Treffer
-└── HomeGrid.kt                Rasterregeln des Homescreens: freie Plätze, Verdrängen, leere Seiten
+├── HomeGrid.kt                Rasterregeln des Homescreens: freie Plätze, Verdrängen, leere Seiten
+├── IslandLogic.kt             Reihenfolge der Live-Aktivitäten in der Island, Countdown-Formate
+└── UrlCleaner.kt              Tracking-Parameter aus Links entfernen
 app/src/main/java/io/github/davydgky/launcher/
 ├── MainActivity.kt            Homescreen-Activity, Hintergrundbild-Farben
 ├── apps/                      Apps und Verknüpfungen (LauncherApps), Standard-Apps
@@ -187,6 +239,7 @@ app/src/main/java/io/github/davydgky/launcher/
 ├── ui/                        Geste, Tastatursteuerung, Suchpanel, Trefferzeilen, Liquid Glass
 ├── home/                      Anordnung (Workspace), Seiten, Ordner, Dock, App-Mediathek, Ziehen
 ├── widgets/                   AppWidgetHost, Hinzufügen mit Erlaubnis und Einrichtung
+├── island/                    Dynamic Island: Fenster, Gesten, Inhalte, Musik, Ablage, Kachel, Widget
 └── settings/                  Einstellungen
 ```
 

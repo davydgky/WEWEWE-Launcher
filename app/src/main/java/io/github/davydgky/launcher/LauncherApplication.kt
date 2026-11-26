@@ -13,6 +13,7 @@ import io.github.davydgky.launcher.home.WorkspaceRepository
 import io.github.davydgky.launcher.organizer.OrganizerRepository
 import io.github.davydgky.launcher.organizer.TodoSuggester
 import io.github.davydgky.launcher.index.IndexStore
+import io.github.davydgky.launcher.island.IslandHub
 import io.github.davydgky.launcher.messages.Messages
 import io.github.davydgky.launcher.notifications.Notifications
 import io.github.davydgky.launcher.perf.PerfStats
@@ -52,6 +53,7 @@ class LauncherApplication : Application() {
     val updater: AppUpdater by lazy { AppUpdater(this, settings, appScope) }
     val torch: Torch by lazy { Torch(this) }
     val notifications: Notifications by lazy { Notifications(this) }
+    val island: IslandHub by lazy { IslandHub(this, appScope) }
     val nano: NanoAnswers by lazy { NanoAnswers(appScope) }
     val appKnowledge: AppKnowledge by lazy { AppKnowledge(this, nano, apps, appScope) }
     val playStore: PlayStore by lazy { PlayStore(this, nano) }
