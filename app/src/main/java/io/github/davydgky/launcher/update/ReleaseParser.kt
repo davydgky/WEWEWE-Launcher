@@ -16,21 +16,22 @@ data class Release(
 /** Reads GitHub's "latest release" API response. */
 object ReleaseParser {
 
-    private val ApkName = Regex("""^launcher-(\d+)\.apk$""")
     private val Sha256 = Regex("""^sha256:([0-9a-fA-F]{64})$""")
 
     /**
      * Returns the APK of the release, or null if there is none. Only download URLs of [repository]'s
      * own releases are accepted, so a tampered response cannot point the updater somewhere else.
      */
-    fun parse(json: String, repository: String): Release? = runCatching {
+    fun parse(json: String, repository: String, apkPrefix: String = "launcher"): Release? = runCatching {
+        // Each app of the repository has its own asset: launcher-<code>.apk, island-<code>.apk.
+        val apkName = Regex("^" + Regex.escape(apkPrefix) + """-(\d+)\.apk$""")
         val root = JSONObject(json)
         if (root.optBoolean("draft") || root.optBoolean("prerelease")) return null
         val assets = root.optJSONArray("assets") ?: return null
         val prefix = "https://github.com/$repository/releases/download/"
         for (i in 0 until assets.length()) {
             val asset = assets.getJSONObject(i)
-            val match = ApkName.matchEntire(asset.optString("name")) ?: continue
+            val match = apkName.matchEntire(asset.optString("name")) ?: continue
             val url = asset.optString("browser_download_url")
             if (!url.startsWith(prefix, ignoreCase = true)) continue
             return Release(

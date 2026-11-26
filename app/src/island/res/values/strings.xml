@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name" translatable="false">WEWEWE Island</string>
+    <string name="settings_title">Dynamic Island</string>
+    <string name="lock_service_label">WEWEWE Island</string>
+    <string name="lock_service_description">Draws the Dynamic Island around the camera, over any app and any home screen. It reads nothing on the screen; only “Screen text” in the island takes a screenshot, read on this device.</string>
+    <string name="island_service_needed">Needs “WEWEWE Island” in the accessibility settings, the only way Android lets apps draw around the camera.</string>
+    <string name="settings_group_without_launcher">Search from anywhere</string>
+    <string name="without_launcher_description">The island works with the Pixel Launcher or any other home screen. Besides pulling the island down, these open the search:</string>
+    <string name="quick_note_hint">Kept in the island\'s tray</string>
+</resources>

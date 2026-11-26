@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_title">Dynamic Island</string>
+    <string name="lock_service_label">WEWEWE Island</string>
+    <string name="lock_service_description">Zeichnet die Dynamic Island um die Kamera, über jeder App und jedem Startbildschirm. Es wird nichts vom Bildschirm gelesen; nur „Bildschirmtext“ in der Island macht ein Bildschirmfoto, das auf dem Gerät gelesen wird.</string>
+    <string name="island_service_needed">Braucht „WEWEWE Island“ in den Bedienungshilfen. Nur so lässt Android Apps um die Kamera zeichnen.</string>
+    <string name="settings_group_without_launcher">Suche von überall</string>
+    <string name="without_launcher_description">Die Island funktioniert mit dem Pixel Launcher und jedem anderen Startbildschirm. Neben dem Herunterziehen der Island öffnen auch diese die Suche:</string>
+    <string name="quick_note_hint">Landet in der Ablage der Island</string>
+</resources>

@@ -47,6 +47,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
+import io.github.davydgky.launcher.BuildConfig
 import io.github.davydgky.launcher.R
 import io.github.davydgky.launcher.core.UrlCleaner
 import io.github.davydgky.launcher.launcherApp
@@ -68,7 +69,11 @@ class QuickNoteActivity : ComponentActivity() {
                 LaunchedEffect(Unit) { focus.requestFocus() }
                 val save = {
                     val title = text.trim()
-                    if (title.isNotEmpty()) {
+                    if (title.isNotEmpty() && !BuildConfig.IS_LAUNCHER) {
+                        // The island app has no organizer page: the note is kept in the tray, where it is seen.
+                        launcherApp.island.addToShelf(title)
+                        launcherApp.island.confirm(getString(R.string.quick_note_saved), R.drawable.ic_note)
+                    } else if (title.isNotEmpty()) {
                         val organizer = launcherApp.organizer
                         val list = organizer.organizer.value?.lists?.minByOrNull { it.order }
                         if (list != null) {

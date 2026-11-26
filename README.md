@@ -155,6 +155,24 @@ verschwindet sie. Musik kommt aus den Media-Sessions, alles andere aus den Benac
 Zugriff, den die Benachrichtigungspunkte schon nutzen). Nichts davon wird gespeichert außer der Ablage
 (`files/shelf.json`).
 
+### Die Island als eigene App
+
+Die Island gibt es auch als eigene App, **WEWEWE Island** (`io.github.davydgky.island`, Release-Datei
+`island-<Nummer>.apk`), für alle, die den Pixel Launcher behalten wollen. Sie wird aus demselben Code
+gebaut (Build-Variante `island`, die Launcher-App ist `launcher`) und enthält alles der Island: die
+Island selbst, die Suche mit allen Quellen und Gemini Nano, Bildschirmtext, Ablage, Kachel, Widget
+und die Assistenten-Geste. Es fehlen nur Startbildschirm, App-Mediathek und Organizer; Notizen landen
+dort in der Ablage. Beide Apps lassen sich nebeneinander installieren. Ist die Island-App da, schaltet
+die Launcher-App ihre eigene Island ab, damit es nie zwei gibt. Jede App aktualisiert sich aus ihrer
+eigenen Release-Datei.
+
+**Berechtigungen**: *Einstellungen › Berechtigungen* zeigt jede Freigabe mit Status und Zweck. Jeder
+Knopf öffnet genau die Seite, auf der Android sie erteilt: den Dialog bei Laufzeit-Berechtigungen (und
+die App-Infos, sobald Android nicht mehr fragt), sonst die passende Systemseite. Ist die Seite auf
+einem Gerät unbekannt, öffnet die nächstbessere. Bei Installation außerhalb eines App-Stores erklärt
+die Seite, wie man „Eingeschränkte Einstellungen zulassen“ findet, ohne das Android Bedienungshilfe und
+Benachrichtigungszugriff sperrt.
+
 ### Ohne WEWEWE als Startbildschirm
 
 Island und Suche brauchen den Launcher nicht. Die Suche läuft dann als eigenes Fenster über der

@@ -3,9 +3,11 @@ package io.github.davydgky.launcher.gestures
 import android.accessibilityservice.AccessibilityService
 import android.app.ActivityOptions
 import android.app.PendingIntent
+import android.content.BroadcastReceiver
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.net.Uri
@@ -16,6 +18,7 @@ import android.util.Log
 import android.view.Display
 import android.view.accessibility.AccessibilityEvent
 import android.widget.Toast
+import io.github.davydgky.launcher.BuildConfig
 import io.github.davydgky.launcher.R
 import io.github.davydgky.launcher.island.IslandActions
 import io.github.davydgky.launcher.island.IslandWindow
@@ -23,11 +26,14 @@ import io.github.davydgky.launcher.island.QuickNoteActivity
 import io.github.davydgky.launcher.island.ScreenText
 import io.github.davydgky.launcher.island.ScreenTextActivity
 import io.github.davydgky.launcher.launcherApp
+import io.github.davydgky.launcher.permissions.Permission
+import io.github.davydgky.launcher.permissions.SystemPages
 import io.github.davydgky.launcher.ui.SearchActivity
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
 /**
@@ -42,14 +48,36 @@ class LockService : AccessibilityService(), IslandActions {
     private val main = Handler(Looper.getMainLooper())
     private var island: IslandWindow? = null
 
+    /** The island app is installed: the launcher leaves the island to it, so there are never two. */
+    private val islandAppInstalled = MutableStateFlow(false)
+
+    private val packageReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            islandAppInstalled.value = isIslandAppInstalled()
+        }
+    }
+
     override fun onServiceConnected() {
         instance = this
         val app = launcherApp
         val window = IslandWindow(this, app.island, this)
         island = window
+        if (BuildConfig.IS_LAUNCHER) {
+            islandAppInstalled.value = isIslandAppInstalled()
+            val filter = IntentFilter().apply {
+                addAction(Intent.ACTION_PACKAGE_ADDED)
+                addAction(Intent.ACTION_PACKAGE_REMOVED)
+                addDataScheme("package")
+            }
+            registerReceiver(packageReceiver, filter, RECEIVER_NOT_EXPORTED)
+        } else {
+            // The island app has no home screen that would look for updates; the service runs all along.
+            app.updater.onAppStarted()
+        }
         scope.launch {
-            app.settings.prefs
-                .map { IslandPrefs(it.islandEnabled, it.islandNotifications, it.islandSystemEvents, it.islandIdleVisible) }
+            combine(app.settings.prefs, islandAppInstalled) { prefs, otherApp ->
+                IslandPrefs(prefs.islandEnabled && !otherApp, prefs.islandNotifications, prefs.islandSystemEvents, prefs.islandIdleVisible)
+            }
                 .distinctUntilChanged()
                 .collect { prefs ->
                     app.island.notificationPeeks = prefs.notifications
@@ -59,6 +87,9 @@ class LockService : AccessibilityService(), IslandActions {
                 }
         }
     }
+
+    private fun isIslandAppInstalled(): Boolean =
+        runCatching { packageManager.getPackageInfo(BuildConfig.ISLAND_PACKAGE, 0) }.isSuccess
 
     private data class IslandPrefs(val enabled: Boolean, val notifications: Boolean, val systemEvents: Boolean, val idleVisible: Boolean)
 
@@ -79,6 +110,7 @@ class LockService : AccessibilityService(), IslandActions {
 
     private fun shutDown() {
         if (instance === this) instance = null
+        if (BuildConfig.IS_LAUNCHER) runCatching { unregisterReceiver(packageReceiver) }
         island?.destroy()
         island = null
         scope.cancel()
@@ -123,7 +155,9 @@ class LockService : AccessibilityService(), IslandActions {
 
     override fun quickNote() = startSafely(Intent(this, QuickNoteActivity::class.java))
 
-    override fun openNotificationAccess() = startSafely(launcherApp.notifications.accessIntent())
+    override fun openNotificationAccess() {
+        SystemPages.open(this, Permission.NotificationAccess)
+    }
 
     /** Photographs the screen without the island, reads its text on the device and shows it to select. */
     override fun readScreen() {
@@ -185,7 +219,5 @@ class LockService : AccessibilityService(), IslandActions {
             return enabled.split(':').any { ComponentName.unflattenFromString(it) == me }
         }
 
-        /** The system page where the service is switched on. */
-        fun settingsIntent(): Intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     }
 }

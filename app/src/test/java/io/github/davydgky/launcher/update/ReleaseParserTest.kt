@@ -22,6 +22,19 @@ class ReleaseParserTest {
     """.trimIndent()
 
     @Test
+    fun `each app takes only its own apk`() {
+        val both = """
+            {"tag_name": "v0.1.42", "assets": [
+              {"name": "launcher-42.apk", "browser_download_url": "https://github.com/$repo/releases/download/v0.1.42/launcher-42.apk"},
+              {"name": "island-42.apk", "browser_download_url": "https://github.com/$repo/releases/download/v0.1.42/island-42.apk"}
+            ]}
+        """.trimIndent()
+        assertEquals("https://github.com/$repo/releases/download/v0.1.42/launcher-42.apk", ReleaseParser.parse(both, repo, "launcher")!!.apkUrl)
+        assertEquals("https://github.com/$repo/releases/download/v0.1.42/island-42.apk", ReleaseParser.parse(both, repo, "island")!!.apkUrl)
+        assertNull(ReleaseParser.parse(release(), repo, "island"))
+    }
+
+    @Test
     fun `reads version, url, size and digest of the apk`() {
         val result = ReleaseParser.parse(release(), repo)!!
         assertEquals(42L, result.versionCode)

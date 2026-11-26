@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    The Dynamic Island on its own: everything of the launcher's manifest except the home screen itself.
+    The island, the search over any app (island, assistant gesture, tile, widget) and the settings stay;
+    the launcher icon opens the settings, on the island's page.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <application>
+        <activity android:name=".MainActivity" tools:node="remove" />
+        <activity android:name=".home.AddShortcutActivity" tools:node="remove" />
+    </application>
+</manifest>

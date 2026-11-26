@@ -170,7 +170,7 @@ class AppUpdater(
                 else -> throw IOException("HTTP ${connection.responseCode}")
             }
             val body = connection.inputStream.bufferedReader().use { it.readText() }
-            ReleaseParser.parse(body, BuildConfig.UPDATE_REPOSITORY)
+            ReleaseParser.parse(body, BuildConfig.UPDATE_REPOSITORY, BuildConfig.APK_PREFIX)
         } finally {
             connection.disconnect()
         }

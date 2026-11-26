@@ -30,33 +30,54 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import io.github.davydgky.launcher.BuildConfig
 import io.github.davydgky.launcher.R
 import io.github.davydgky.launcher.data.LauncherPrefs
 import io.github.davydgky.launcher.gestures.LockService
 import io.github.davydgky.launcher.island.SearchTileService
 import io.github.davydgky.launcher.island.SearchWidgetProvider
 import io.github.davydgky.launcher.launcherApp
+import io.github.davydgky.launcher.permissions.Permission
+import io.github.davydgky.launcher.permissions.SystemPages
 import kotlinx.coroutines.launch
 
 /** The Dynamic Island's page: on or off, what it shows, and the ways into the search without WEWEWE as home screen. */
-internal fun LazyListScope.islandSettings(prefs: LauncherPrefs, notificationAccess: Boolean, resumeCount: Int) {
+internal fun LazyListScope.islandSettings(prefs: LauncherPrefs, notificationAccess: Boolean, resumeCount: Int, openPermissions: () -> Unit) {
+    item {
+        // All that is still missing, in one place, each with the way to where it is granted.
+        val missing = missingPermissions(resumeCount)
+        if (missing > 0) PermissionsSummaryCard(missing, openPermissions)
+    }
     item {
         val context = LocalContext.current
         val app = context.launcherApp
         val scope = rememberCoroutineScope()
         // Read again on every return to the settings: the service is switched on in the system's pages.
         val serviceOn = remember(resumeCount) { LockService.isEnabled(context) }
+        val islandApp = remember(resumeCount) {
+            BuildConfig.IS_LAUNCHER && runCatching { context.packageManager.getPackageInfo(BuildConfig.ISLAND_PACKAGE, 0) }.isSuccess
+        }
+        if (islandApp) {
+            Card {
+                Text(
+                    stringResource(R.string.island_in_other_app),
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(16.dp),
+                )
+            }
+            Spacer(Modifier.size(20.dp))
+        }
         Group(stringResource(R.string.settings_group_island)) {
             SwitchRow(R.string.setting_island, R.string.setting_island_description, prefs.islandEnabled) { enabled ->
                 scope.launch { app.settings.setIsland(enabled = enabled) }
-                if (enabled && !serviceOn) runCatching { context.startActivity(LockService.settingsIntent()) }
+                if (enabled && !serviceOn) SystemPages.open(context, Permission.Accessibility)
             }
             if (prefs.islandEnabled && !serviceOn) {
                 ActionRow(
                     title = stringResource(R.string.island_service_needed),
                     description = stringResource(R.string.island_service_restricted),
                     action = stringResource(R.string.island_service_action),
-                ) { runCatching { context.startActivity(LockService.settingsIntent()) } }
+                ) { SystemPages.open(context, Permission.Accessibility) }
             }
             HorizontalDivider()
             ActionRow(
@@ -64,7 +85,7 @@ internal fun LazyListScope.islandSettings(prefs: LauncherPrefs, notificationAcce
                 description = stringResource(R.string.island_notification_access_description),
                 action = stringResource(if (notificationAccess) R.string.notification_dots_on else R.string.notification_dots_allow),
                 tonal = !notificationAccess,
-            ) { runCatching { context.startActivity(app.notifications.accessIntent()) } }
+            ) { SystemPages.open(context, Permission.NotificationAccess) }
             HorizontalDivider()
             SwitchRow(R.string.setting_island_notifications, R.string.setting_island_notifications_description, prefs.islandNotifications, enabled = prefs.islandEnabled) {
                 scope.launch { app.settings.setIsland(notifications = it) }
@@ -105,7 +126,7 @@ internal fun LazyListScope.islandSettings(prefs: LauncherPrefs, notificationAcce
                 description = stringResource(R.string.assistant_description),
                 action = stringResource(if (assistantHeld) R.string.assistant_set else R.string.assistant_action),
                 tonal = !assistantHeld,
-            ) { openAssistantSettings(context) }
+            ) { SystemPages.open(context, Permission.Assistant) }
             HorizontalDivider()
             ActionRow(
                 title = stringResource(R.string.tile_title),
@@ -122,16 +143,6 @@ internal fun LazyListScope.islandSettings(prefs: LauncherPrefs, notificationAcce
             }
         }
     }
-}
-
-/** The page where the digital assistant is chosen; Android does not let apps ask for that role directly. */
-private fun openAssistantSettings(context: Context) {
-    val intents = listOf(
-        Intent(Settings.ACTION_VOICE_INPUT_SETTINGS),
-        Intent(Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS),
-        Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", context.packageName, null)),
-    )
-    intents.firstOrNull { runCatching { context.startActivity(it) }.isSuccess }
 }
 
 private fun addTile(context: Context) {

@@ -71,8 +71,11 @@ class LauncherApplication : Application() {
         // Start indexing right away, before the first frame needs it.
         appKnowledge.start()
         search.start()
-        workspace.start()
-        organizer.start()
+        // The island app has no home screen to arrange; its notes go to the island's tray.
+        if (BuildConfig.IS_LAUNCHER) {
+            workspace.start()
+            organizer.start()
+        }
     }
 }
 

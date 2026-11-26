@@ -25,6 +25,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.kyant.backdrop.backdrops.layerBackdrop
 import com.kyant.backdrop.backdrops.rememberLayerBackdrop
+import io.github.davydgky.launcher.BuildConfig
 import io.github.davydgky.launcher.data.LauncherPrefs
 import io.github.davydgky.launcher.launcherApp
 import io.github.davydgky.launcher.search.ResultActions
@@ -99,6 +100,17 @@ class SearchActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        launcherApp.updater.isAppVisible = true
+        if (!BuildConfig.IS_LAUNCHER) launcherApp.updater.onAppStarted()
+    }
+
+    override fun onPause() {
+        launcherApp.updater.isAppVisible = false
+        super.onPause()
     }
 
     override fun onStop() {

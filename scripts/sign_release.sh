@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Signs the unsigned release APK for distribution, as in Velo.
+# Signs the unsigned release APK of one app ("launcher" or "island", the first argument) for
+# distribution, as in Velo.
 #
 # With the secret release key (LAUNCHER_KEYSTORE_BASE64 / LAUNCHER_KEYSTORE_PASSWORD, key alias
 # "launcher") the APK is signed with APK Signature Scheme v3 key rotation: the lineage proves that the
@@ -11,29 +12,30 @@ set -euo pipefail
 
 BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
 VERSION_CODE=${GITHUB_RUN_NUMBER:-1}
-IN=app/build/outputs/apk/release/app-release-unsigned.apk
-OUT=dist/launcher-$VERSION_CODE.apk
+FLAVOR=${1:-launcher}
+IN=app/build/outputs/apk/$FLAVOR/release/app-$FLAVOR-release-unsigned.apk
+OUT=dist/$FLAVOR-$VERSION_CODE.apk
 TMP=${RUNNER_TEMP:-$(mktemp -d)}
 DEBUG_KEY=(--ks keystore/debug.keystore --ks-pass pass:android --ks-key-alias androiddebugkey)
 
 mkdir -p dist
-"$BT/zipalign" -p -f 4 "$IN" "$TMP/aligned.apk"
+"$BT/zipalign" -p -f 4 "$IN" "$TMP/aligned-$FLAVOR.apk"
 
 if [ -n "${LAUNCHER_KEYSTORE_BASE64:-}" ] && [ -n "${LAUNCHER_KEYSTORE_PASSWORD:-}" ]; then
   printf '%s' "$LAUNCHER_KEYSTORE_BASE64" | base64 -d > "$TMP/release.p12"
   RELEASE_KEY=(--ks "$TMP/release.p12" --ks-pass env:LAUNCHER_KEYSTORE_PASSWORD --ks-key-alias launcher)
-  "$BT/apksigner" rotate --out "$TMP/lineage" \
+  "$BT/apksigner" rotate --out "$TMP/lineage-$FLAVOR" \
     --old-signer "${DEBUG_KEY[@]}" \
     --new-signer "${RELEASE_KEY[@]}"
   "$BT/apksigner" sign "${DEBUG_KEY[@]}" \
     --next-signer "${RELEASE_KEY[@]}" \
-    --lineage "$TMP/lineage" \
-    --out "$OUT" "$TMP/aligned.apk"
+    --lineage "$TMP/lineage-$FLAVOR" \
+    --out "$OUT" "$TMP/aligned-$FLAVOR.apk"
   rm -f "$TMP/release.p12"
   SIGNED_WITH=release
 else
   echo "::warning::LAUNCHER_KEYSTORE_BASE64 is not set; the release APK is signed with the public debug key."
-  "$BT/apksigner" sign "${DEBUG_KEY[@]}" --out "$OUT" "$TMP/aligned.apk"
+  "$BT/apksigner" sign "${DEBUG_KEY[@]}" --out "$OUT" "$TMP/aligned-$FLAVOR.apk"
   SIGNED_WITH=debug
 fi
 

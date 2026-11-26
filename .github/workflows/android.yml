@@ -35,11 +35,11 @@ jobs:
 
       - name: Compile and unit tests
         if: steps.mode.outputs.full != 'true'
-        run: ./gradlew --stacktrace :core:test compileDebugKotlin testDebugUnitTest
+        run: ./gradlew --stacktrace :core:test compileLauncherDebugKotlin compileIslandDebugKotlin testLauncherDebugUnitTest
 
       - name: Build, unit tests and lint
         if: steps.mode.outputs.full == 'true'
-        run: ./gradlew --stacktrace :core:test assembleDebug assembleRelease testDebugUnitTest lintDebug
+        run: ./gradlew --stacktrace :core:test assembleLauncherDebug assembleLauncherRelease assembleIslandRelease testLauncherDebugUnitTest lintLauncherDebug lintIslandDebug
 
       # Searches never leave the device: the updater is the only code that may open connections.
       - name: Check that only the updater and the Play Store results use the network
@@ -56,13 +56,16 @@ jobs:
         env:
           LAUNCHER_KEYSTORE_BASE64: ${{ secrets.LAUNCHER_KEYSTORE_BASE64 }}
           LAUNCHER_KEYSTORE_PASSWORD: ${{ secrets.LAUNCHER_KEYSTORE_PASSWORD }}
-        run: scripts/sign_release.sh
+        # Two apps from one code base: the launcher and the island on its own.
+        run: |
+          scripts/sign_release.sh launcher
+          scripts/sign_release.sh island
 
       - name: Check that ML Kit cannot report usage
         if: steps.mode.outputs.full == 'true'
         run: |
           BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
-          for APK in dist/*.apk app/build/outputs/apk/debug/*.apk; do
+          for APK in dist/*.apk app/build/outputs/apk/*/debug/*.apk; do
             if "$BT/aapt2" dump xmltree --file AndroidManifest.xml "$APK" | grep -q "CctBackendFactory"; then
               echo "::error::$APK registers ML Kit's usage reporting backend"
               exit 1
@@ -73,8 +76,10 @@ jobs:
         if: steps.mode.outputs.full == 'true'
         run: |
           BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
-          "$BT/aapt2" dump badging dist/*.apk | head -1
-          "$BT/aapt2" dump permissions dist/*.apk
+          for APK in dist/*.apk; do
+            "$BT/aapt2" dump badging "$APK" | head -1
+            "$BT/aapt2" dump permissions "$APK"
+          done
 
       - name: Upload release APK
         if: steps.mode.outputs.full == 'true'
@@ -89,7 +94,7 @@ jobs:
         uses: actions/upload-artifact@v5
         with:
           name: launcher-debug-apk
-          path: app/build/outputs/apk/debug/*.apk
+          path: app/build/outputs/apk/launcher/debug/*.apk
           if-no-files-found: error
 
       - name: Upload reports
@@ -151,7 +156,7 @@ jobs:
           disable-animations: false
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot
           script: |
-            if [ "${{ needs.build.outputs.signed_with }}" = "release" ]; then scripts/check_key_rotation.sh apk-debug/app-debug.apk apk/launcher-*.apk || echo "critical=true" > smoke-result.txt; fi
+            if [ "${{ needs.build.outputs.signed_with }}" = "release" ]; then scripts/check_key_rotation.sh apk-debug/app-launcher-debug.apk apk/launcher-*.apk || echo "critical=true" > smoke-result.txt; fi
             python3 scripts/emulator_smoke.py apk/launcher-*.apk
 
       - name: Smoke test result
@@ -204,7 +209,7 @@ jobs:
         run: |
           APK=$(ls dist/launcher-*.apk)
           CODE=$(basename "$APK" .apk | sed 's/launcher-//')
-          gh release create "v0.1.$CODE" "$APK" \
+          gh release create "v0.1.$CODE" "$APK" dist/island-*.apk \
             --repo "${{ github.repository }}" \
             --target "${{ github.sha }}" \
             --title "WEWEWE 0.1.$CODE" \

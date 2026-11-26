@@ -20,6 +20,28 @@ android {
         androidResources.localeFilters += listOf("en", "de")
         // GitHub repository whose releases the in-app updater follows.
         buildConfigField("String", "UPDATE_REPOSITORY", "\"davydgky/WEWEWE-Launcher\"")
+        // The island app: while it is installed, the launcher leaves the island to it.
+        buildConfigField("String", "ISLAND_PACKAGE", "\"io.github.davydgky.island\"")
+    }
+
+    // Two apps from one code base: the launcher, and the Dynamic Island on its own for any home screen
+    // (the Pixel Launcher stays active). The island app has the island, the search and its ways in,
+    // but no home screen; both can be installed side by side.
+    flavorDimensions += "app"
+    productFlavors {
+        create("launcher") {
+            dimension = "app"
+            isDefault = true
+            buildConfigField("boolean", "IS_LAUNCHER", "true")
+            // Release assets are named <prefix>-<versionCode>.apk; each app updates from its own.
+            buildConfigField("String", "APK_PREFIX", "\"launcher\"")
+        }
+        create("island") {
+            dimension = "app"
+            applicationId = "io.github.davydgky.island"
+            buildConfigField("boolean", "IS_LAUNCHER", "false")
+            buildConfigField("String", "APK_PREFIX", "\"island\"")
+        }
     }
 
     signingConfigs {
