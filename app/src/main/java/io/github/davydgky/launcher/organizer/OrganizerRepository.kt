@@ -30,6 +30,7 @@ class OrganizerRepository(private val context: Context, private val scope: Corou
         started = true
         scope.launch {
             state.value = withContext(Dispatchers.IO) { load() } ?: OrganizerState.initial(context.getString(R.string.organizer_default_list))
+            syncWithPeer()
         }
     }
 
@@ -44,8 +45,36 @@ class OrganizerRepository(private val context: Context, private val scope: Corou
         val current = state.value ?: return
         val next = runCatching { change(current) }.onFailure { Log.w(TAG, "Edit failed", it) }.getOrNull() ?: return
         if (next == current) return
-        state.value = next
-        scheduleSave()
+        state.value = next.copy(modifiedAt = maxOf(System.currentTimeMillis(), current.modifiedAt + 1))
+        scheduleSave(share = true)
+    }
+
+    /**
+     * Reminders from the other app (launcher or island app), taken if they are newer than these. Not sent
+     * back: they came from there.
+     */
+    fun takeFromPeer(peer: OrganizerState): Boolean {
+        val current = state.value ?: return false
+        if (peer.modifiedAt <= current.modifiedAt) return false
+        state.value = peer
+        scheduleSave(share = false)
+        return true
+    }
+
+    /**
+     * Compares with the other app: whichever has the newer reminders wins. Once loaded, and whenever the
+     * reminders are opened, in case the other app could not reach this one (Android grants the shared
+     * permission only to an app installed after the one that defines it, until the next update).
+     */
+    fun syncWithPeer() {
+        scope.launch {
+            val local = state.value ?: return@launch
+            val peer = withContext(Dispatchers.IO) { OrganizerSync.fetch(context) } ?: return@launch
+            when {
+                peer.modifiedAt > local.modifiedAt -> takeFromPeer(peer)
+                local.modifiedAt > peer.modifiedAt -> withContext(Dispatchers.IO) { OrganizerSync.send(context, local) }
+            }
+        }
     }
 
     fun addList(name: String): Long {
@@ -139,12 +168,17 @@ class OrganizerRepository(private val context: Context, private val scope: Corou
         st.copy(hiddenSections = if (hidden) st.hiddenSections + section else st.hiddenSections - section)
     }
 
-    private fun scheduleSave() {
+    private fun scheduleSave(share: Boolean) {
         saveJob?.cancel()
         saveJob = scope.launch {
             delay(400)
-            val text = OrganizerCodec.encode(state.value ?: return@launch)
-            withContext(Dispatchers.IO) { write(text) }
+            val current = state.value ?: return@launch
+            val text = OrganizerCodec.encode(current)
+            withContext(Dispatchers.IO) {
+                write(text)
+                // The other app (launcher or island app) gets the same reminders.
+                if (share) OrganizerSync.send(context, current)
+            }
         }
     }
 

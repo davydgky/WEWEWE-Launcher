@@ -75,6 +75,7 @@ class OrganizerActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        launcherApp.organizer.syncWithPeer()
         // As on the launcher's page: Gemini Nano drafts reminders from new messages while this is open.
         lifecycleScope.launch {
             val prefs = launcherApp.settings.prefs.first()

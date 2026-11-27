@@ -22,6 +22,8 @@ android {
         buildConfigField("String", "UPDATE_REPOSITORY", "\"davydgky/WEWEWE-Launcher\"")
         // The island app: while it is installed, the launcher leaves the island to it.
         buildConfigField("String", "ISLAND_PACKAGE", "\"io.github.davydgky.island\"")
+        // The launcher: the island app shares its reminders with it.
+        buildConfigField("String", "LAUNCHER_PACKAGE", "\"io.github.davydgky.launcher\"")
     }
 
     // Two apps from one code base: the launcher, and the Dynamic Island on its own for any home screen

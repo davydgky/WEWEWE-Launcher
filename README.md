@@ -149,6 +149,9 @@ sich mit einem Tippen oder wenn man sie nach unten zieht.
   Nano. Eine Erinnerung mit Uhrzeit meldet sich zur Zeit: als Benachrichtigung (mit „Erledigt“ und „In
   10 Minuten“, exakter Wecker über `USE_EXACT_ALARM`) und in der Island, wo sie ab 15 Minuten vorher
   neben der Kamera steht. Die Island-App hat dafür ein eigenes Symbol „Erinnerungen“.
+  Launcher und Island-App teilen dieselben Erinnerungen: Jede App meldet jede Änderung der anderen
+  (`OrganizerProvider`, nur für Apps mit demselben Signaturschlüssel), die neuere gewinnt. Erinnern tut
+  nur eine, die Island-App, wenn sie installiert ist.
 - **Größe**: Die Pille ist höchstens 30 dp hoch, auch wenn das System eine größere Aussparung meldet;
   die Breite neben der Kamera ist einstellbar (Schmal lässt VPN- und andere Symbole der Statusleiste frei).
 

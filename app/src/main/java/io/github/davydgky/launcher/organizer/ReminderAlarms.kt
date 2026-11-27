@@ -12,6 +12,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.text.format.DateFormat
 import android.util.Log
+import io.github.davydgky.launcher.BuildConfig
 import io.github.davydgky.launcher.LauncherApplication
 import io.github.davydgky.launcher.R
 import io.github.davydgky.launcher.island.Peek
@@ -64,7 +65,8 @@ object ReminderAlarms {
     private fun schedule(context: Context, time: Long?) {
         val alarms = context.getSystemService(AlarmManager::class.java)
         val intent = fireIntent(context, time ?: 0L)
-        if (time == null) {
+        // Launcher and island app share the reminders; only one of them reminds, the island app if it is there.
+        if (time == null || (BuildConfig.IS_LAUNCHER && islandAppInstalled(context))) {
             alarms.cancel(intent)
             return
         }
@@ -76,6 +78,9 @@ object ReminderAlarms {
             }
         }.onFailure { Log.w(TAG, "Cannot set the reminder alarm", it) }
     }
+
+    private fun islandAppInstalled(context: Context) =
+        runCatching { context.packageManager.getPackageInfo(BuildConfig.ISLAND_PACKAGE, 0) }.isSuccess
 
     private fun fireIntent(context: Context, time: Long): PendingIntent = PendingIntent.getBroadcast(
         context,

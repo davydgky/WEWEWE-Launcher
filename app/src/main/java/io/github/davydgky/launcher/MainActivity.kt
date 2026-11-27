@@ -115,6 +115,8 @@ class MainActivity : ComponentActivity() {
         // Checks at most every few hours; the home screen resumes often.
         launcherApp.updater.onAppStarted()
         launcherApp.updater.onAppResumed()
+        // The reminders may have changed in the island app meanwhile.
+        launcherApp.organizer.syncWithPeer()
         // Gemini Nano describes new apps for the search, only while the home screen is in use.
         // In safe mode after a crash loop, no background work that is not needed.
         lifecycleScope.launch {

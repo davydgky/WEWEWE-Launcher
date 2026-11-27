@@ -714,6 +714,8 @@ private const val MAX_LIVE_ROWS = 4
 private fun RemindersCard(controller: IslandController) {
     val context = LocalContext.current
     val repository = context.launcherApp.organizer
+    // Opened: the latest reminders, also those changed in the other app.
+    LaunchedEffect(Unit) { repository.syncWithPeer() }
     val state by repository.organizer.collectAsState()
     val now by produceState(System.currentTimeMillis()) {
         while (true) {

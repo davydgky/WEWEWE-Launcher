@@ -42,6 +42,16 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- "timer 5 min" and "wecker 7:30" in the search hand the timer or alarm to the clock app. -->
     <uses-permission android:name="com.android.alarm.permission.SET_ALARM" />
+
+    <!--
+        The launcher and the island app share their reminders. Each app defines a permission for its own
+        reminders that only an app signed with the same key gets, and asks for the other app's.
+    -->
+    <permission
+        android:name="${applicationId}.permission.REMINDERS"
+        android:protectionLevel="signature" />
+    <uses-permission android:name="io.github.davydgky.launcher.permission.REMINDERS" />
+    <uses-permission android:name="io.github.davydgky.island.permission.REMINDERS" />
     <!-- The periodic update check (update/UpdateJob.kt) survives a reboot. -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <!-- Reminders remind at their exact time (granted to reminder apps without asking). -->
@@ -70,6 +80,7 @@
         <package android:name="io.github.davydgky.browser" />
         <!-- The island app; while it is installed, the launcher does not show a second island. -->
         <package android:name="io.github.davydgky.island" />
+        <package android:name="io.github.davydgky.launcher" />
         <package android:name="md.obsidian" />
         <!-- "Search in Google Photos" for pictures that are only in the cloud. -->
         <package android:name="com.google.android.apps.photos" />
@@ -123,6 +134,13 @@
         <receiver
             android:name=".update.InstallResultReceiver"
             android:exported="false" />
+
+        <!-- The reminders, for the other of the two apps (launcher and island app) only. -->
+        <provider
+            android:name=".organizer.OrganizerProvider"
+            android:authorities="${applicationId}.organizer"
+            android:exported="true"
+            android:permission="${applicationId}.permission.REMINDERS" />
 
         <!-- The time of a reminder, its "Done" and "In 10 minutes", and a restart (the app sets the alarm again). -->
         <receiver
