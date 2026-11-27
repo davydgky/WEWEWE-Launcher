@@ -102,7 +102,9 @@ import io.github.davydgky.launcher.organizer.TodoList
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.TextStyle as DayStyle
+import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 /**
@@ -144,6 +146,12 @@ open class IslandRemindersActivity : ComponentActivity() {
         hideStatusBar()
         launcherApp.island.cover(true)
         launcherApp.organizer.syncWithPeer()
+        // Gemini Nano drafts reminders from new messages, but Android lets it run only while the app is in
+        // front: this screen is when the island app is. It starts at once, the screen is often short-lived.
+        lifecycleScope.launch {
+            val prefs = launcherApp.settings.prefs.first()
+            if (prefs.aiAnswers && prefs.todoSuggestions && !launcherApp.crashGuard.safeMode) launcherApp.todoSuggester.resume(startDelayMs = 800)
+        }
     }
 
     /**
@@ -159,6 +167,7 @@ open class IslandRemindersActivity : ComponentActivity() {
     }
 
     override fun onPause() {
+        launcherApp.todoSuggester.pause()
         launcherApp.island.cover(false)
         super.onPause()
     }

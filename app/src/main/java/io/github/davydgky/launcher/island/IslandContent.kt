@@ -63,6 +63,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.RoundRect
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathOperation
+import androidx.compose.ui.graphics.drawscope.clipPath
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.runtime.mutableStateMapOf
@@ -211,6 +219,11 @@ fun IslandContent(controller: IslandController) {
     val primary = shown.firstOrNull()
     val secondary = shown.getOrNull(1)
     val mascotAtRest = controller.mascot && !systemChips
+    // The mascot shows the phone's state in its colours: charging, a low battery, do not disturb.
+    val battery by hub.battery.collectAsState()
+    val quiet by hub.doNotDisturb.collectAsState()
+    val restMood = restMoodOf(battery, quiet)
+    val restLevel = battery.level.takeIf { it >= 0 }?.div(100f)
 
     // Text on the right (a running call, a timer, "in 5 Min.") widens the island just enough to fit.
     val german = LocalConfiguration.current.locales[0].language == "de"
@@ -264,6 +277,14 @@ fun IslandContent(controller: IslandController) {
                     label = "islandShift",
                 )
                 IslandSurface(controller, sizes, display, primary, currentPeek, shown, mascotAtRest, Modifier.align(Alignment.TopCenter).offset(x = shift))
+                androidx.compose.animation.AnimatedVisibility(
+                    display == IslandMode.Idle && mascotAtRest && !controller.dragging,
+                    Modifier.align(Alignment.TopCenter).offset(x = shift),
+                    enter = fadeIn(tween(220, delayMillis = 120)),
+                    exit = fadeOut(tween(80)),
+                ) {
+                    RestingMascot(sizes, restMood, restLevel, background = controller.idleVisible)
+                }
                 if (bubble && secondary != null) {
                     Bubble(secondary, sizes, Modifier.align(Alignment.TopEnd), onTap = controller::expand)
                 }
@@ -407,14 +428,8 @@ private fun IslandSurface(
         label = "island",
     ) { target ->
         when {
-            target == IslandMode.Idle.name && mascotAtRest -> Row(
-                Modifier.size(sizes.idleMascotWidth, sizes.pillHeight),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Box(Modifier.width(sizes.mascotSlot).fillMaxHeight().padding(start = 4.dp), contentAlignment = Alignment.CenterStart) {
-                    MascotInPill(sizes.pillHeight, MascotMood.Idle)
-                }
-            }
+            // The mascot itself is drawn over the pill (RestingMascot), so it can push out of it.
+            target == IslandMode.Idle.name && mascotAtRest -> Box(Modifier.size(sizes.idleMascotWidth, sizes.pillHeight))
             target == IslandMode.Idle.name || target == IslandMode.Hidden.name -> Box(Modifier.size(sizes.idleWidth, sizes.pillHeight))
             target == IslandMode.Expanded.name -> ExpandedIsland(controller, sizes)
             target.startsWith("compact:") -> {
@@ -529,7 +544,10 @@ private fun CompactIsland(shown: Shown, sizes: IslandSizes, mascot: Boolean) {
     // With music the mascot bobs beside the camera and pastel waves run on the other side.
     val music = mascot && shown is Shown.Media
     SplitRow(sizes, Modifier.width(sizes.compactWidth).height(sizes.pillHeight), startPadding = 6.dp, endPadding = TrailingPadding, left = {
-        if (music) {
+        if (mascot && shown is Shown.Reminder) {
+            // A reminder that is due: the mascot turns yellow and waves.
+            MascotInPill(sizes.pillHeight, MascotMood.Alert)
+        } else if (music) {
             MascotInPill(sizes.pillHeight, if ((shown as Shown.Media).info.playing) MascotMood.Music else MascotMood.Idle)
         } else {
             Leading(shown, size = (sizes.pillHeight - 8.dp).coerceAtMost(22.dp))
@@ -544,12 +562,22 @@ private fun CompactIsland(shown: Shown, sizes: IslandSizes, mascot: Boolean) {
  * the pill cuts the feet, the dome and the upper W arches show.
  */
 @Composable
-internal fun MascotInPill(height: Dp, mood: MascotMood, bounce: Any? = null) {
+internal fun MascotInPill(
+    height: Dp,
+    mood: MascotMood,
+    bounce: Any? = null,
+    level: Float? = null,
+    reach: Float = 0f,
+    lean: Float = 0f,
+) {
     Box(Modifier.size(width = height * 1.15f, height = height), contentAlignment = Alignment.TopCenter) {
         Mascot(
             mood,
             Modifier.requiredSize(width = height * 1.15f, height = height * 1.2f).offset(y = height * 0.12f),
             bounce = bounce,
+            level = level,
+            reach = reach,
+            lean = lean,
         )
     }
 }
@@ -743,7 +771,8 @@ private fun PeekIsland(peek: Peek, sizes: IslandSizes, mascot: Boolean) {
             // The row's ends lie in the island's round corners: they keep well clear of the curve.
             SplitRow(sizes, Modifier.fillMaxWidth().height(sizes.pillHeight + 4.dp).padding(top = 4.dp), startPadding = 26.dp, endPadding = 34.dp, left = {
                 if (mascot) {
-                    MascotInPill(sizes.pillHeight + 4.dp, MascotMood.Happy, bounce = peek.id)
+                    // It throws a message in; a reminder it announces, yellow and waving.
+                    MascotInPill(sizes.pillHeight + 4.dp, if (peek.kind == PeekKind.Reminder) MascotMood.Alert else MascotMood.Throw, bounce = peek.id)
                 } else {
                     PeekSource(peek)
                 }
@@ -790,9 +819,14 @@ private fun PeekIsland(peek: Peek, sizes: IslandSizes, mascot: Boolean) {
         }
     } else {
         val tint = Color(peek.tint)
-        SplitRow(sizes, Modifier.width(sizes.systemPeekWidth).height(sizes.pillHeight), startPadding = 14.dp, endPadding = 16.dp, left = {
+        val mood = if (mascot) systemMoodOf(peek.kind) else null
+        SplitRow(sizes, Modifier.width(sizes.systemPeekWidth).height(sizes.pillHeight), startPadding = if (mood != null) 10.dp else 14.dp, endPadding = 16.dp, left = {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Glyph(peek.iconRes, tint, 18.dp)
+                if (mood != null) {
+                    MascotInPill(sizes.pillHeight, mood, bounce = peek.id, level = peek.level?.takeIf { it >= 0 }?.div(100f))
+                } else {
+                    Glyph(peek.iconRes, tint, 18.dp)
+                }
                 Spacer(Modifier.width(6.dp))
                 IslandText(peek.title, Color.White, 13.sp, weight = FontWeight.SemiBold)
             }
@@ -805,6 +839,137 @@ private fun PeekIsland(peek: Peek, sizes: IslandSizes, mascot: Boolean) {
                 }
             }
         })
+    }
+}
+
+/** The mascot for a short message of the phone itself; null where the message's own icon says more. */
+private fun systemMoodOf(kind: PeekKind): MascotMood? = when (kind) {
+    PeekKind.Charging -> MascotMood.Charging
+    PeekKind.BatteryLow -> MascotMood.Low
+    PeekKind.Device -> MascotMood.Music
+    PeekKind.Done -> MascotMood.Happy
+    else -> null
+}
+
+/** What the mascot shows at rest: charging, a low battery, do not disturb, or nothing in particular. */
+private fun restMoodOf(battery: BatteryInfo, quiet: Boolean): MascotMood = when {
+    battery.charging -> MascotMood.Charging
+    battery.level in 0..LOW_BATTERY -> MascotMood.Low
+    quiet -> MascotMood.Sleepy
+    else -> MascotMood.Idle
+}
+
+private const val LOW_BATTERY = 15
+
+/** Which way the mascot tries to get out of the island. */
+internal enum class Breakout { Down, Side }
+
+/**
+ * The mascot in the island at rest, drawn over the pill so it can push out of it: now and then it
+ * presses down through the island's floor, which bulges like rubber under it, or climbs out of its round
+ * end, stretching it, and snaps back. It only ever shows inside the black, the island's or the bulge's.
+ */
+@Composable
+private fun RestingMascot(sizes: IslandSizes, mood: MascotMood, level: Float?, background: Boolean) {
+    val escape = remember { Animatable(0f) }
+    var way by remember { mutableStateOf(Breakout.Down) }
+    BreakoutPreview.current?.let { (previewWay, previewT) ->
+        LaunchedEffect(previewWay, previewT) {
+            way = previewWay
+            escape.snapTo(previewT)
+        }
+    }
+    val breakoutPreview = BreakoutPreview.current
+    LaunchedEffect(mood) {
+        if (breakoutPreview != null) return@LaunchedEffect
+        escape.animateTo(0f, spring(dampingRatio = 0.6f, stiffness = 300f))
+        // Only when nothing in particular goes on: tired, charging or asleep it stays put.
+        if (mood != MascotMood.Idle || breakoutPreview != null) return@LaunchedEffect
+        delay(kotlin.random.Random.nextLong(6_000, 14_000))
+        while (true) {
+            way = if (kotlin.random.Random.nextBoolean()) Breakout.Down else Breakout.Side
+            escape.animateTo(1f, spring(dampingRatio = 0.5f, stiffness = 110f))
+            delay(kotlin.random.Random.nextLong(900, 1_700))
+            escape.animateTo(0f, spring(dampingRatio = 0.42f, stiffness = 240f))
+            delay(kotlin.random.Random.nextLong(25_000, 55_000))
+        }
+    }
+    val height = sizes.pillHeight
+    val mascotWidth = height * 1.15f
+    val inset = 4.dp
+    val t = escape.value.coerceIn(0f, 1.3f)
+    Box(
+        Modifier
+            .size(sizes.idleMascotWidth, height)
+            .drawWithContent {
+                val shape = breakoutShape(
+                    size,
+                    escape.value.coerceIn(0f, 1.3f),
+                    way,
+                    centre = (inset + mascotWidth / 2).toPx(),
+                    width = mascotWidth.toPx(),
+                    down = (height * 0.55f).toPx(),
+                    side = BreakoutSide.toPx(),
+                )
+                if (background) drawPath(shape, Surface)
+                clipPath(shape) { this@drawWithContent.drawContent() }
+            },
+    ) {
+        Box(
+            Modifier
+                .width(sizes.mascotSlot)
+                .fillMaxHeight()
+                .padding(start = inset)
+                .graphicsLayer {
+                    val e = escape.value
+                    translationY = if (way == Breakout.Down) e * (height * 0.45f).toPx() else 0f
+                    translationX = if (way == Breakout.Side) -e * 10.dp.toPx() else 0f
+                    rotationZ = if (way == Breakout.Side) -e * 8f else 0f
+                },
+            contentAlignment = Alignment.CenterStart,
+        ) {
+            MascotInPill(
+                height,
+                mood,
+                level = level,
+                reach = if (way == Breakout.Down) t.coerceAtMost(1f) else 0f,
+                lean = if (way == Breakout.Side) t.coerceAtMost(1f) else 0f,
+            )
+        }
+    }
+}
+
+/** How far the mascot climbs out of the island's round end: inside the window's margin. */
+private val BreakoutSide = 11.dp
+
+/** Holds the breakout at a given way and progress, for pictures of it in tests. */
+internal val BreakoutPreview = androidx.compose.runtime.staticCompositionLocalOf<Pair<Breakout, Float>?> { null }
+
+/** The pill, and the bulge the mascot pushes out of it ([t] from 0, at rest, to 1, out). */
+internal fun breakoutShape(size: Size, t: Float, way: Breakout, centre: Float, width: Float, down: Float, side: Float): Path {
+    val w = size.width
+    val h = size.height
+    if (t <= 0.001f) return Path().apply { addRoundRect(RoundRect(0f, 0f, w, h, CornerRadius(h / 2))) }
+    return when (way) {
+        Breakout.Down -> {
+            val d = down * t
+            val from = (centre - width * 0.78f).coerceAtLeast(h * 0.35f)
+            val to = centre + width * 0.78f
+            val drip = Path().apply {
+                moveTo(from, h * 0.5f)
+                cubicTo(centre - width * 0.6f, h * 0.98f, centre - width * 0.62f, h + d, centre, h + d)
+                cubicTo(centre + width * 0.62f, h + d, centre + width * 0.6f, h * 0.98f, to, h * 0.5f)
+                close()
+            }
+            val pill = Path().apply { addRoundRect(RoundRect(0f, 0f, w, h, CornerRadius(h / 2))) }
+            Path.combine(PathOperation.Union, pill, drip)
+        }
+        Breakout.Side -> {
+            // The round end stretches out after it and swells a little, like rubber.
+            val l = side * t
+            val swell = h * 0.06f * t
+            Path().apply { addRoundRect(RoundRect(-l, -swell, w, h + swell, CornerRadius(h / 2 + swell))) }
+        }
     }
 }
 
@@ -865,7 +1030,14 @@ private fun ExpandedIsland(controller: IslandController, sizes: IslandSizes) {
         // The row around the camera: the mascot, glad the island was opened; else empty.
         if (controller.mascot) {
             SplitRow(sizes, Modifier.fillMaxWidth().height(sizes.pillHeight + 6.dp), startPadding = 12.dp, left = {
-                MascotInPill(sizes.pillHeight + 6.dp, MascotMood.Happy, bounce = Unit)
+                val battery by hub.battery.collectAsState()
+                val quiet by hub.doNotDisturb.collectAsState()
+                // Glad the island was opened, in the colours of what is going on.
+                val mood = when {
+                    live.any { it.kind == LiveKind.Call } -> MascotMood.Calling
+                    else -> restMoodOf(battery, quiet).takeIf { it != MascotMood.Idle } ?: MascotMood.Happy
+                }
+                MascotInPill(sizes.pillHeight + 6.dp, mood, bounce = Unit, level = battery.level.takeIf { it >= 0 }?.div(100f))
             }, right = {})
         } else {
             Spacer(Modifier.height(sizes.pillHeight + 6.dp))
@@ -1032,6 +1204,25 @@ private fun RemindersCard(controller: IslandController, locked: Boolean) {
             )
         }
         if (locked) return@Column
+        // What Gemini Nano drafted from messages, waiting to be taken or dismissed in the reminders.
+        val suggestions = state?.suggestions.orEmpty()
+        if (suggestions.isNotEmpty()) {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .combinedClickable(onClick = {
+                        controller.collapse()
+                        controller.actions.openReminders()
+                    })
+                    .padding(vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(Modifier.size(28.dp), contentAlignment = Alignment.Center) { Glyph(R.drawable.ic_sparkle, MascotArt.LeftArm, 16.dp) }
+                Spacer(Modifier.width(6.dp))
+                IslandText(stringResource(R.string.isr_suggestions_count, suggestions.size), MascotArt.LeftArm, 14.sp, weight = FontWeight.SemiBold)
+            }
+        }
         if (open.isEmpty()) {
             IslandText(stringResource(R.string.reminders_none), Secondary, 13.sp, modifier = Modifier.padding(top = 2.dp, bottom = 4.dp))
         }

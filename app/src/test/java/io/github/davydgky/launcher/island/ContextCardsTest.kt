@@ -24,6 +24,8 @@ import java.io.File
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -169,6 +171,47 @@ class ContextCardsTest {
         app.island.setLiveForTest(emptyList())
         controller.collapse()
         compose.mainClock.advanceTimeBy(1_000)
+    }
+
+    /** At rest the mascot now and then pushes out of the island; pictures along the way. */
+    @Test
+    fun theMascotBreaksOut() {
+        val controller = IslandController(app.island, NoActions, CoroutineScope(SupervisorJob() + Dispatchers.Main)).apply {
+            geometry = IslandGeometry(1080, 2400, 540, 70, 70, 20, 80, 2.625f)
+        }
+        app.island.setLiveForTest(emptyList())
+        compose.mainClock.autoAdvance = false
+        compose.setContent {
+            Box(Modifier.size(411.dp, 120.dp).background(Color(0xFF6B8F5E)).testTag("screen")) { IslandContent(controller) }
+        }
+        compose.mainClock.advanceTimeBy(1_000)
+        // The first breakout comes after 6 to 14 seconds; pictures through that time.
+        var t = 1_000L
+        while (t < 16_000L) {
+            compose.mainClock.advanceTimeBy(250)
+            t += 250
+            if (t >= 6_000L) save("breakout-${t / 250}.png")
+        }
+    }
+
+    /** Both ways out of the island, held at their furthest, for a look. */
+    @Test
+    fun breakoutWays() {
+        val controller = IslandController(app.island, NoActions, CoroutineScope(SupervisorJob() + Dispatchers.Main)).apply {
+            geometry = IslandGeometry(1080, 2400, 540, 70, 70, 20, 80, 2.625f)
+        }
+        app.island.setLiveForTest(emptyList())
+        var preview by androidx.compose.runtime.mutableStateOf(Breakout.Down to 1f)
+        compose.setContent {
+            androidx.compose.runtime.CompositionLocalProvider(BreakoutPreview provides preview) {
+                Box(Modifier.size(411.dp, 120.dp).background(Color(0xFF6B8F5E)).testTag("screen")) { IslandContent(controller) }
+            }
+        }
+        compose.mainClock.advanceTimeBy(1_500)
+        save("breakout-down.png")
+        preview = Breakout.Side to 1f
+        compose.mainClock.advanceTimeBy(1_500)
+        save("breakout-side.png")
     }
 
     private fun save(name: String) {
