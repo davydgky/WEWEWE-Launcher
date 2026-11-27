@@ -36,7 +36,10 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
@@ -732,14 +735,41 @@ private fun ExpandedIsland(controller: IslandController, sizes: IslandSizes) {
         } else {
             Spacer(Modifier.height(sizes.pillHeight + 6.dp))
         }
+        // The context cards side by side: the current one in the middle, its neighbours peeking in at the
+        // edges, a swipe to the left or right moves between them.
+        val pages = buildList {
+            if (live.isNotEmpty() || event != null) add(IslandPage.Live)
+            if (media != null) add(IslandPage.Music)
+            if (!locked) add(IslandPage.Reminders)
+            if (!locked && shelf.isNotEmpty()) add(IslandPage.Shelf)
+        }
+        if (pages.isNotEmpty()) {
+            // Opens on what matters now: something running, else music that plays, else the reminders.
+            val first = remember {
+                when {
+                    IslandPage.Live in pages && live.isNotEmpty() -> IslandPage.Live
+                    IslandPage.Music in pages && media?.playing == true -> IslandPage.Music
+                    IslandPage.Reminders in pages -> IslandPage.Reminders
+                    else -> pages.first()
+                }
+            }
+            ContextCards(pages, initial = pages.indexOf(first).coerceAtLeast(0)) { page ->
+                when (page) {
+                    IslandPage.Live -> Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        // A handful at most; more would push the card off the screen.
+                        live.take(MAX_LIVE_ROWS).forEach { LiveRow(controller, it) }
+                        event?.let { e -> EventRow(e) { controller.collapse(); controller.actions.startIntent(calendarIntent(e.begin)) } }
+                    }
+                    IslandPage.Music -> media?.let { MediaCard(controller, it) }
+                    IslandPage.Reminders -> RemindersCard(controller)
+                    IslandPage.Shelf -> Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(Tile).padding(12.dp)) {
+                        ShelfRow(controller, shelf)
+                    }
+                }
+            }
+            Spacer(Modifier.height(10.dp))
+        }
         Column(Modifier.padding(horizontal = 12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            // A handful at most; more would push the toggles off the screen.
-            live.take(MAX_LIVE_ROWS).forEach { LiveRow(controller, it) }
-            // Reminders before everything else that can wait: they are what the island is opened for most.
-            if (!locked) RemindersCard(controller)
-            media?.let { MediaCard(controller, it) }
-            event?.let { e -> EventRow(e) { controller.collapse(); controller.actions.startIntent(calendarIntent(e.begin)) } }
-            if (!locked && shelf.isNotEmpty()) ShelfRow(controller, shelf)
             Toggles(controller, locked)
             if (!locked) SearchBar(controller)
         }
@@ -747,6 +777,55 @@ private fun ExpandedIsland(controller: IslandController, sizes: IslandSizes) {
 }
 
 private const val MAX_LIVE_ROWS = 4
+
+/** The context cards of the opened island, in this order from left to right. */
+private enum class IslandPage { Live, Music, Reminders, Shelf }
+
+/**
+ * Cards side by side as in a carousel: the current one in the middle at full size, the ones beside it
+ * smaller and dimmed at the edges, a dot for each below. The island's own vertical drags still work over
+ * them; sideways swipes are the cards'.
+ */
+@Composable
+private fun ContextCards(pages: List<IslandPage>, initial: Int, content: @Composable (IslandPage) -> Unit) {
+    val state = rememberPagerState(initialPage = initial) { pages.size }
+    Column {
+        HorizontalPager(
+            state = state,
+            contentPadding = PaddingValues(horizontal = if (pages.size > 1) 36.dp else 12.dp),
+            pageSpacing = 10.dp,
+            verticalAlignment = Alignment.Top,
+            modifier = Modifier.fillMaxWidth(),
+        ) { index ->
+            Box(
+                Modifier.fillMaxWidth().graphicsLayer {
+                    // How far this card is from the middle: 0 in the middle, 1 one card away.
+                    val away = abs((state.currentPage - index) + state.currentPageOffsetFraction).coerceIn(0f, 1f)
+                    val scale = 1f - 0.08f * away
+                    scaleX = scale
+                    scaleY = scale
+                    alpha = 1f - 0.45f * away
+                },
+            ) {
+                content(pages[index])
+            }
+        }
+        if (pages.size > 1) {
+            Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.Center) {
+                pages.indices.forEach { index ->
+                    val active = index == state.currentPage
+                    Box(
+                        Modifier
+                            .padding(horizontal = 3.dp)
+                            .size(if (active) 7.dp else 6.dp)
+                            .clip(CircleShape)
+                            .background(if (active) Color.White else Secondary.copy(alpha = 0.6f)),
+                    )
+                }
+            }
+        }
+    }
+}
 
 /**
  * The open reminders of the organizer, as on the launcher's page: overdue and today's first, then the
