@@ -45,7 +45,6 @@ class OrganizerActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         launcherApp.organizer.start()
         val blur = windowManager.isCrossWindowBlurEnabled
-        if (blur) window.setBackgroundBlurRadius((24 * resources.displayMetrics.density).toInt())
         lifecycleScope.launch {
             val colors = withContext(Dispatchers.IO) { WallpaperManager.getInstance(this@OrganizerActivity).getWallpaperColors(WallpaperManager.FLAG_SYSTEM) }
             lightWallpaper = colors != null && colors.colorHints and WallpaperColors.HINT_SUPPORTS_DARK_TEXT != 0
@@ -70,6 +69,15 @@ class OrganizerActivity : ComponentActivity() {
                     }
                 }
             }
+        }
+    }
+
+    override fun onPostCreate(savedInstanceState: Bundle?) {
+        super.onPostCreate(savedInstanceState)
+        // Only once the window has its content: before that it has no view to blur behind, and Android
+        // crashes (this crashed the reminders screen on opening).
+        if (windowManager.isCrossWindowBlurEnabled) {
+            runCatching { window.setBackgroundBlurRadius((24 * resources.displayMetrics.density).toInt()) }
         }
     }
 
