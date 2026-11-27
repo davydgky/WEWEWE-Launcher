@@ -471,10 +471,10 @@
     <string name="island_copied">Copied</string>
     <string name="island_shelf">Tray</string>
     <string name="island_shelf_clear">Clear</string>
-    <string name="island_torch">Flashlight</string>
-    <string name="island_awake">Stay awake</string>
-    <string name="island_dnd">Do not disturb</string>
-    <string name="island_read_screen">Screen text</string>
+    <string name="island_torch">Light</string>
+    <string name="island_awake">Awake</string>
+    <string name="island_dnd">Quiet</string>
+    <string name="island_read_screen">Text</string>
     <string name="island_note">Note</string>
     <string name="island_lock">Lock</string>
     <string name="island_search">Search</string>
@@ -545,9 +545,12 @@
     <string name="permission_usage">Usage access</string>
     <string name="permission_usage_purpose">Suggestions from how often you use apps, also outside WEWEWE</string>
     <string name="permission_post_notifications">Notifications</string>
-    <string name="permission_post_notifications_purpose">Only for “Open as bubble”</string>
+    <string name="permission_post_notifications_purpose">“Update ready” and “Open as bubble”</string>
     <string name="permission_install">Install updates</string>
     <string name="permission_install_purpose">New versions install themselves</string>
     <string name="permission_velo">Velo</string>
     <string name="permission_velo_purpose">Velo\'s history and favourites in the search</string>
+    <string name="update_channel">Updates</string>
+    <string name="update_ready_title">Update %1$s is ready</string>
+    <string name="update_ready_text">Tap to install. Android asks once; later updates install by themselves.</string>
 </resources>

@@ -9,6 +9,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.launch
 
 /** What the island can do outside itself; the accessibility service that hosts it carries it out. */
@@ -124,7 +125,8 @@ class IslandController(
     }
 
     fun dragBy(dy: Float) {
-        scope.launch { drag.snapTo(drag.value + dy) }
+        // Undispatched: the stretch follows the finger in the same frame, not one later.
+        scope.launch(start = CoroutineStart.UNDISPATCHED) { drag.snapTo(drag.value + dy) }
     }
 
     /**
@@ -140,14 +142,20 @@ class IslandController(
             travel > SEARCH_DP * density -> openSearch()
             mode == IslandMode.Expanded && (travel < -open || velocity < -FLING_DP * density) -> collapse()
             mode == IslandMode.Peek && (travel < -open / 2 || velocity < -FLING_DP * density) -> hub.dismissPeek()
-            // Opened by this drag, but let go before it was really pulled: back to how it was.
-            openedByDrag && travel < open && velocity < FLING_DP * density -> collapse()
+            // Opened by this drag and pushed back up before letting go: closed again. A short pull that
+            // ends going down keeps it open; closing it then would look like it shut by itself.
+            openedByDrag && (travel < 0f || velocity < -FLING_DP * density) -> collapse()
         }
         openedByDrag = false
         if (mode == IslandMode.Peek) hub.releasePeek()
         scope.launch {
-            drag.animateTo(0f, spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMediumLow), initialVelocity = velocity)
-            dragging = false
+            // Also when the spring is interrupted (a new touch): a drag that never ends would keep the
+            // window large, and the large window would swallow every touch meant for the app below.
+            try {
+                drag.animateTo(0f, spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMedium), initialVelocity = velocity)
+            } finally {
+                dragging = false
+            }
         }
     }
 

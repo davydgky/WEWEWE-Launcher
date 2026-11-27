@@ -7,6 +7,8 @@ import android.content.res.Configuration
 import android.graphics.PixelFormat
 import android.hardware.display.DisplayManager
 import android.view.Display
+import android.os.Handler
+import android.os.Looper
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
@@ -98,8 +100,15 @@ class IslandWindow(
         view.setOnApplyWindowInsetsListener { _, insets ->
             val visible = insets.isVisible(WindowInsets.Type.statusBars())
             if (visible) statusBarSeen = true
-            statusBarVisible = visible
-            updateHidden()
+            main.removeCallbacks(fullScreenCheck)
+            if (visible) {
+                statusBarVisible = true
+                updateHidden()
+            } else {
+                // Apps hide the status bar for a moment while they switch (camera, games, video players):
+                // the island only goes once it stays hidden.
+                main.postDelayed(fullScreenCheck, FULL_SCREEN_DELAY_MS)
+            }
             insets
         }
         updateGeometry()
@@ -124,6 +133,7 @@ class IslandWindow(
         val view = root ?: return
         jobs.forEach { it.cancel() }
         jobs = emptyList()
+        main.removeCallbacks(fullScreenCheck)
         root = null
         runCatching { windowManager.removeViewImmediate(view) }
         hub.stop()
@@ -145,6 +155,15 @@ class IslandWindow(
     fun hideForScreenshot(hidden: Boolean) {
         screenshotHidden = hidden
         root?.visibility = if (hidden) View.INVISIBLE else View.VISIBLE
+        updateHidden()
+    }
+
+    private val main = Handler(Looper.getMainLooper())
+
+    private val fullScreenCheck = Runnable {
+        // While the island is open or in the hand, it stays: it must never close under the finger.
+        if (controller.expanded || controller.dragging) return@Runnable
+        statusBarVisible = false
         updateHidden()
     }
 
@@ -217,7 +236,11 @@ class IslandWindow(
     }
 
     private companion object {
-        const val SHRINK_DELAY_MS = 420L
+        /** Longer than the island's spring takes to settle, so the window never cuts it off while it shrinks. */
+        const val SHRINK_DELAY_MS = 650L
+
+        /** A full-screen app keeps the status bar hidden at least this long before the island goes. */
+        const val FULL_SCREEN_DELAY_MS = 600L
     }
 }
 

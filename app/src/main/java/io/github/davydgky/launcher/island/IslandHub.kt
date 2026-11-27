@@ -77,7 +77,7 @@ class IslandHub(private val context: Context, private val scope: CoroutineScope)
     var notificationPeeks = true
     var systemPeeks = true
 
-    val media = MediaTracker(context)
+    val media = MediaTracker(context, scope)
 
     private var running = false
     private var listener: NotificationListenerService? = null
@@ -123,7 +123,9 @@ class IslandHub(private val context: Context, private val scope: CoroutineScope)
 
     // region Notifications
 
-    internal fun listenerConnected(service: NotificationListenerService) {
+    internal fun listenerConnected(service: NotificationListenerService) = safely("listener") { connect(service) }
+
+    private fun connect(service: NotificationListenerService) {
         listener = service
         val active = runCatching { service.activeNotifications }.getOrNull().orEmpty()
         live.value = active.mapNotNull(::liveItemOf).sortedByDescending { it.updatedAt }
@@ -142,7 +144,9 @@ class IslandHub(private val context: Context, private val scope: CoroutineScope)
         dndState.value = filter.isDnd()
     }
 
-    internal fun posted(sbn: StatusBarNotification, rankingMap: NotificationListenerService.RankingMap?) {
+    internal fun posted(sbn: StatusBarNotification, rankingMap: NotificationListenerService.RankingMap?) = safely("posted") { post(sbn, rankingMap) }
+
+    private fun post(sbn: StatusBarNotification, rankingMap: NotificationListenerService.RankingMap?) {
         if (sbn.packageName == context.packageName) return
         val item = liveItemOf(sbn)
         val others = live.value.filter { it.key != sbn.key }
@@ -150,7 +154,9 @@ class IslandHub(private val context: Context, private val scope: CoroutineScope)
         if (item == null) maybePeek(sbn, rankingMap)
     }
 
-    internal fun removed(sbn: StatusBarNotification) {
+    internal fun removed(sbn: StatusBarNotification) = safely("removed") { remove(sbn) }
+
+    private fun remove(sbn: StatusBarNotification) {
         peeked.remove(sbn.key)
         if (live.value.any { it.key == sbn.key }) live.value = live.value.filter { it.key != sbn.key }
         if (peekState.value?.notificationKey == sbn.key) dismissPeek()
@@ -304,7 +310,9 @@ class IslandHub(private val context: Context, private val scope: CoroutineScope)
     private val keyguard = context.getSystemService(KeyguardManager::class.java)
 
     private val receiver = object : BroadcastReceiver() {
-        override fun onReceive(c: Context, intent: Intent) {
+        override fun onReceive(c: Context, intent: Intent) = safely("broadcast") { receive(intent) }
+
+        private fun receive(intent: Intent) {
             when (intent.action) {
                 Intent.ACTION_BATTERY_CHANGED -> {
                     val level = intent.getIntExtra(BatteryManager.EXTRA_LEVEL, -1)
@@ -371,7 +379,9 @@ class IslandHub(private val context: Context, private val scope: CoroutineScope)
     private var knownDevices: Set<Int>? = null
 
     private val audioDevices = object : AudioDeviceCallback() {
-        override fun onAudioDevicesAdded(added: Array<out AudioDeviceInfo>) {
+        override fun onAudioDevicesAdded(added: Array<out AudioDeviceInfo>) = safely("audio") { devicesAdded(added) }
+
+        private fun devicesAdded(added: Array<out AudioDeviceInfo>) {
             val known = knownDevices
             val sinks = added.filter { it.isSink && it.type in Headphones }
             knownDevices = known.orEmpty() + sinks.map { it.id }
@@ -456,6 +466,18 @@ class IslandHub(private val context: Context, private val scope: CoroutineScope)
     }.getOrDefault(emptyList())
 
     // endregion
+
+    /**
+     * Runs a callback from the system. Whatever one app's notification or one device reports, it must not
+     * take the island down with it: the error is logged and the island goes on.
+     */
+    private inline fun safely(what: String, block: () -> Unit) {
+        try {
+            block()
+        } catch (e: RuntimeException) {
+            Log.e(TAG, "Island: $what failed", e)
+        }
+    }
 
     private fun Int.isDnd() = this != NotificationListenerService.INTERRUPTION_FILTER_ALL && this != NotificationListenerService.INTERRUPTION_FILTER_UNKNOWN
 

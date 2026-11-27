@@ -5,9 +5,8 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.os.SystemClock
 import android.provider.CalendarContract
-import android.text.format.DateFormat
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -17,7 +16,6 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
@@ -30,6 +28,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -49,6 +48,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
@@ -79,6 +79,8 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.animation.core.VisibilityThreshold
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.davydgky.launcher.R
@@ -187,39 +189,30 @@ fun IslandContent(controller: IslandController) {
     // The window follows the island: small around the pill, large while open or dragged.
     val large = mode == IslandMode.Expanded || controller.dragging
     val peekStyle = currentPeek?.style()
-    LaunchedEffect(mode, large, secondary != null, peekStyle, sizes) {
-        val d = sizes.density
-        fun px(dp: Dp) = (dp.value * d).roundToInt()
-        val margin = 10.dp
-        val bottom = sizes.pillTop + margin
-        controller.windowRequest = when {
-            mode == IslandMode.Hidden -> WindowRequest(1, 1, large = false, touchable = false)
-            large -> WindowRequest(px(sizes.maxWidth), (geometry.screenHeight * 0.85f).roundToInt(), large = true)
-            mode == IslandMode.Peek -> {
-                val width = if (peekStyle == PeekStyle.Notification) sizes.peekWidth else sizes.systemPeekWidth
-                val height = sizes.pillHeight + if (peekStyle == PeekStyle.Notification) 64.dp else 0.dp
-                WindowRequest(px(width + margin * 2), px(bottom + height + margin), large = false)
-            }
-            mode == IslandMode.Compact -> {
-                val extra = if (secondary != null) (sizes.bubbleGap + sizes.bubble) * 2 else 0.dp
-                WindowRequest(px(sizes.compactWidth + extra + margin * 2), px(bottom + sizes.pillHeight + margin), large = false)
-            }
-            else -> WindowRequest(px(sizes.idleWidth + margin * 2), px(bottom + sizes.pillHeight + margin), large = false)
-        }
+    val request = remember(mode, large, secondary != null, peekStyle, sizes, geometry) {
+        windowRequestFor(mode, large, secondary != null, peekStyle, sizes, geometry)
     }
+    LaunchedEffect(request) { controller.windowRequest = request }
 
-    Box(Modifier.fillMaxSize()) {
-        if (mode == IslandMode.Expanded) {
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        // A larger window arrives a frame or two after it was asked for. Until then the island keeps the
+        // shape it had: drawn into the old, smaller window it would be cut off and jump.
+        val fits = request.width <= constraints.maxWidth + 2 && request.height <= constraints.maxHeight + 2
+        val last = remember { ShownMode() }
+        val display = if (fits || mode == IslandMode.Hidden) mode else last.mode
+        SideEffect { last.mode = display }
+
+        if (display == IslandMode.Expanded) {
             // A tap beside the opened island closes it.
             Box(Modifier.fillMaxSize().pointerInput(Unit) { detectTapGestures { controller.collapse() } })
         }
-        if (mode != IslandMode.Hidden) {
-            val bubble = mode == IslandMode.Compact && secondary != null
+        if (display != IslandMode.Hidden) {
+            val bubble = display == IslandMode.Compact && secondary != null
             // With a second activity, the box is as wide as both on each side, so the pill stays on the camera
             // and the bubble beside it is inside the box (touches outside a layout's bounds do not reach it).
             val width = if (bubble) Modifier.width(sizes.compactWidth + (sizes.bubbleGap + sizes.bubble) * 2) else Modifier
             Box(Modifier.align(Alignment.TopCenter).padding(top = sizes.pillTop).then(width)) {
-                IslandSurface(controller, sizes, mode, primary, currentPeek, shown, Modifier.align(Alignment.TopCenter))
+                IslandSurface(controller, sizes, display, primary, currentPeek, shown, Modifier.align(Alignment.TopCenter))
                 if (bubble && secondary != null) {
                     Bubble(secondary, sizes, Modifier.align(Alignment.TopEnd), onTap = controller::expand)
                 }
@@ -227,6 +220,44 @@ fun IslandContent(controller: IslandController) {
         }
     }
 }
+
+/** The shape the island showed last; not state, it only bridges the frames until the window has grown. */
+private class ShownMode(var mode: IslandMode = IslandMode.Idle)
+
+/** The window for [mode], in pixels, centred on the island and never wider than the screen allows. */
+private fun windowRequestFor(
+    mode: IslandMode,
+    large: Boolean,
+    bubble: Boolean,
+    peekStyle: PeekStyle?,
+    sizes: IslandSizes,
+    geometry: IslandGeometry,
+): WindowRequest {
+    val d = sizes.density
+    fun px(dp: Dp) = (dp.value * d).roundToInt()
+    val maxWidth = px(sizes.maxWidth)
+    // Generous margins: a finger needs more room than the pill itself, especially around a small camera.
+    val margin = 12.dp
+    val bottom = sizes.pillTop + margin
+    fun request(width: Dp, height: Dp) = WindowRequest(px(width).coerceAtMost(maxWidth), px(height), large = false)
+    return when {
+        mode == IslandMode.Hidden -> WindowRequest(1, 1, large = false, touchable = false)
+        large -> WindowRequest(maxWidth, (geometry.screenHeight * 0.85f).roundToInt(), large = true)
+        mode == IslandMode.Peek -> {
+            val width = if (peekStyle == PeekStyle.Notification) sizes.peekWidth else sizes.systemPeekWidth
+            val height = sizes.pillHeight + if (peekStyle == PeekStyle.Notification) 64.dp else 0.dp
+            request(width + margin * 2, bottom + height + margin)
+        }
+        mode == IslandMode.Compact -> {
+            val extra = if (bubble) (sizes.bubbleGap + sizes.bubble) * 2 else 0.dp
+            request(sizes.compactWidth + extra + margin * 2, bottom + sizes.pillHeight + margin)
+        }
+        else -> request(maxOf(sizes.idleWidth + margin * 2, MinTouchWidth), bottom + sizes.pillHeight + margin)
+    }
+}
+
+/** The idle island is small; its window is at least this wide, so it is easy to hit. */
+private val MinTouchWidth = 72.dp
 
 /** Running before paused, calls before timers before music, as [IslandPicker] decides. */
 private fun shownActivities(
@@ -278,24 +309,19 @@ private fun IslandSurface(
     val currentMode by rememberUpdatedState(mode)
     val currentPeek by rememberUpdatedState(peek)
     val currentPrimary by rememberUpdatedState(primary)
-    AnimatedContent(
-        targetState = key,
-        transitionSpec = {
-            (fadeIn(tween(220, delayMillis = 90)) + scaleIn(tween(320, delayMillis = 40), initialScale = 0.94f)) togetherWith
-                fadeOut(tween(90)) using SizeTransform(clip = true) { _, _ -> spring(dampingRatio = 0.74f, stiffness = 380f) }
-        },
-        contentAlignment = Alignment.TopCenter,
-        label = "island",
-        modifier = modifier
+    // The black surface takes its size from what it shows and springs between sizes on its own; the
+    // content inside only fades. One layout animation instead of two keeps the frames even.
+    Box(
+        modifier
             .graphicsLayer {
                 // Pulled like rubber: it stretches a little, ever less the further it goes.
                 val travel = controller.drag.value
                 val max = 220f * density
                 val pull = if (travel >= 0f) max * (travel / max) / (1f + travel / max) else -max * (-travel / max) / (1f + -travel / max)
                 val height = size.height.coerceAtLeast(1f)
-                val ratio = (pull / height).coerceIn(-0.25f, 0.6f)
-                scaleY = 1f + ratio * 0.5f
-                scaleX = 1f + ratio * 0.08f
+                val ratio = (pull / height).coerceIn(-0.15f, 0.35f)
+                scaleY = 1f + ratio * 0.4f
+                scaleX = 1f + ratio * 0.06f
                 transformOrigin = TransformOrigin(0.5f, 0f)
             }
             .clip(shape)
@@ -313,7 +339,14 @@ private fun IslandSurface(
                     IslandMode.Peek -> controller.expand()
                     else -> Unit
                 }
-            }),
+            })
+            .animateContentSize(spring(dampingRatio = 0.8f, stiffness = 420f, visibilityThreshold = IntSize.VisibilityThreshold)),
+    ) {
+    AnimatedContent(
+        targetState = key,
+        transitionSpec = { fadeIn(tween(180, delayMillis = 70)) togetherWith fadeOut(tween(80)) using null },
+        contentAlignment = Alignment.TopCenter,
+        label = "island",
     ) { target ->
         when {
             target == IslandMode.Idle.name || target == IslandMode.Hidden.name -> Box(Modifier.size(sizes.idleWidth, sizes.pillHeight))
@@ -327,6 +360,7 @@ private fun IslandSurface(
                 if (current != null) PeekIsland(current, sizes) else Box(Modifier.size(sizes.idleWidth, sizes.pillHeight))
             }
         }
+    }
     }
 }
 
@@ -624,21 +658,14 @@ private fun ExpandedIsland(controller: IslandController, sizes: IslandSizes) {
     val event by hub.nextEvent.collectAsState()
     val shelf by hub.shelf.collectAsState()
     val locked by hub.locked.collectAsState()
-    val battery by hub.battery.collectAsState()
-    Column(Modifier.width(sizes.expandedWidth).padding(bottom = 14.dp)) {
-        SplitRow(sizes, Modifier.fillMaxWidth().height(sizes.pillHeight + 8.dp), left = {
-            IslandText(clockText(), Color.White, 15.sp, weight = FontWeight.SemiBold, modifier = Modifier.padding(start = 10.dp), tabular = true)
-        }, right = {
-            if (battery.level >= 0) {
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(end = 6.dp)) {
-                    if (battery.charging) Glyph(R.drawable.ic_bolt, Green, 14.dp)
-                    IslandText("${battery.level} %", if (battery.level <= 15 && !battery.charging) Color(0xFFFF453A) else Color.White, 14.sp, weight = FontWeight.SemiBold)
-                }
-            }
-        })
+    // Black of its own as well: whatever the surface around it does, the opened island is never see-through.
+    Column(Modifier.width(sizes.expandedWidth).background(Surface).padding(bottom = 14.dp)) {
+        // The row around the camera stays empty: the status bar's clock and battery lie below it.
+        Spacer(Modifier.height(sizes.pillHeight + 6.dp))
         Column(Modifier.padding(horizontal = 12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             media?.let { MediaCard(controller, it) }
-            live.forEach { LiveRow(controller, it) }
+            // A handful at most; more would push the toggles off the screen.
+            live.take(MAX_LIVE_ROWS).forEach { LiveRow(controller, it) }
             event?.let { e -> EventRow(e) { controller.collapse(); controller.actions.startIntent(calendarIntent(e.begin)) } }
             if (!locked && shelf.isNotEmpty()) ShelfRow(controller, shelf)
             Toggles(controller, locked)
@@ -647,18 +674,7 @@ private fun ExpandedIsland(controller: IslandController, sizes: IslandSizes) {
     }
 }
 
-@Composable
-private fun clockText(): String {
-    val context = LocalContext.current
-    val format = remember { DateFormat.getTimeFormat(context) }
-    val now by produceState(System.currentTimeMillis()) {
-        while (true) {
-            value = System.currentTimeMillis()
-            delay(60_000 - value % 60_000)
-        }
-    }
-    return format.format(now)
-}
+private const val MAX_LIVE_ROWS = 4
 
 @Composable
 private fun MediaCard(controller: IslandController, info: MediaInfo) {

@@ -38,10 +38,12 @@
     <uses-permission android:name="io.github.davydgky.browser.permission.READ_SEARCH_DATA" />
 
     <uses-permission android:name="android.permission.REQUEST_DELETE_PACKAGES" />
-    <!-- Only for "Open as bubble": a bubble is a notification, whose notification itself stays hidden. -->
+    <!-- "Update ready", and "Open as bubble" (a bubble is a notification, whose notification itself stays hidden). -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- "timer 5 min" and "wecker 7:30" in the search hand the timer or alarm to the clock app. -->
     <uses-permission android:name="com.android.alarm.permission.SET_ALARM" />
+    <!-- The periodic update check (update/UpdateJob.kt) survives a reboot. -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <queries>
         <intent>
@@ -119,6 +121,12 @@
         <receiver
             android:name=".update.InstallResultReceiver"
             android:exported="false" />
+
+        <!-- Looks for updates every few hours; the island app has no home screen that would. -->
+        <service
+            android:name=".update.UpdateJob"
+            android:exported="false"
+            android:permission="android.permission.BIND_JOB_SERVICE" />
 
         <!--
             ML Kit reports usage metrics through Google's data transport. Without a registered backend
@@ -200,6 +208,21 @@
             <intent-filter>
                 <action android:name="android.intent.action.ASSIST" />
                 <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+            <!--
+                Web searches of other apps and of the system ("search for …"); with these, Android can offer
+                WEWEWE where a search app is chosen.
+            -->
+            <intent-filter>
+                <action android:name="android.intent.action.WEB_SEARCH" />
+                <action android:name="android.intent.action.SEARCH" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.WEB_SEARCH" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="http" />
+                <data android:scheme="https" />
             </intent-filter>
             <meta-data android:name="com.android.systemui.action_assist_icon" android:resource="@drawable/ic_search" />
         </activity>

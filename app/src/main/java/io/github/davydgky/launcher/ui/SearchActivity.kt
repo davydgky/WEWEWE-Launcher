@@ -1,5 +1,6 @@
 package io.github.davydgky.launcher.ui
 
+import android.app.SearchManager
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
@@ -57,7 +58,7 @@ class SearchActivity : ComponentActivity() {
         }
         val ime = ImeController(window.decorView, launcherApp.perf)
         val actions = ResultActions(this)
-        val initialQuery = intent.getStringExtra(EXTRA_QUERY).orEmpty()
+        val initialQuery = queryOf(intent)
         launcherApp.search.onResume()
         launcherApp.suggestions.refresh(this)
 
@@ -118,6 +119,10 @@ class SearchActivity : ComponentActivity() {
         // Another app came to the front: the search does not wait in the background.
         if (!isChangingConfigurations) finish()
     }
+
+    /** A web search from elsewhere ("search for …") brings its words; the app's own entries may bring some too. */
+    private fun queryOf(intent: Intent): String =
+        (intent.getStringExtra(EXTRA_QUERY) ?: intent.getStringExtra(SearchManager.QUERY)).orEmpty().trim()
 
     companion object {
         const val EXTRA_FROM_ISLAND = "from_island"

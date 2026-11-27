@@ -83,7 +83,8 @@ class LockService : AccessibilityService(), IslandActions {
                     app.island.notificationPeeks = prefs.notifications
                     app.island.systemPeeks = prefs.systemEvents
                     window.controller.idleVisible = prefs.idleVisible
-                    if (prefs.enabled) window.show() else window.hide()
+                    // After a crash loop the app starts in safe mode: then the island stays away until the next start.
+                    if (prefs.enabled && !app.crashGuard.safeMode) window.show() else window.hide()
                 }
         }
     }

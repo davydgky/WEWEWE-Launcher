@@ -146,7 +146,7 @@
     <string name="update_error_download">Der Download ist fehlgeschlagen oder konnte nicht geprüft werden</string>
     <string name="update_error_install">Die Installation ist fehlgeschlagen</string>
     <string name="update_auto">Automatisch aktualisieren</string>
-    <string name="update_auto_hint">Lädt Updates im WLAN und installiert sie, während eine andere App offen ist. Beim ersten Update fragt Android einmal nach der Erlaubnis.</string>
+    <string name="update_auto_hint">Sucht alle paar Stunden nach Updates, lädt sie im WLAN und installiert sie, während eine andere App offen ist. Beim ersten Update fragt Android einmal nach der Erlaubnis.</string>
     <string name="menu_edit_home">Home-Bildschirm bearbeiten</string>
     <string name="edit_remove">Entfernen</string>
     <string name="edit_done">Fertig</string>
@@ -470,10 +470,10 @@
     <string name="island_copied">Kopiert</string>
     <string name="island_shelf">Ablage</string>
     <string name="island_shelf_clear">Leeren</string>
-    <string name="island_torch">Taschenlampe</string>
-    <string name="island_awake">Wach bleiben</string>
-    <string name="island_dnd">Nicht stören</string>
-    <string name="island_read_screen">Bildschirmtext</string>
+    <string name="island_torch">Licht</string>
+    <string name="island_awake">Wach</string>
+    <string name="island_dnd">Ruhe</string>
+    <string name="island_read_screen">Text</string>
     <string name="island_note">Notiz</string>
     <string name="island_lock">Sperren</string>
     <string name="island_search">Suchen</string>
@@ -544,9 +544,12 @@
     <string name="permission_usage">Nutzungsdatenzugriff</string>
     <string name="permission_usage_purpose">Vorschläge nach Nutzung der Apps, auch außerhalb von WEWEWE</string>
     <string name="permission_post_notifications">Benachrichtigungen</string>
-    <string name="permission_post_notifications_purpose">Nur für „Als Bubble öffnen“</string>
+    <string name="permission_post_notifications_purpose">„Update bereit“ und „Als Bubble öffnen“</string>
     <string name="permission_install">Updates installieren</string>
     <string name="permission_install_purpose">Neue Versionen installieren sich selbst</string>
     <string name="permission_velo">Velo</string>
     <string name="permission_velo_purpose">Verlauf und Favoriten von Velo in der Suche</string>
+    <string name="update_channel">Updates</string>
+    <string name="update_ready_title">Update %1$s ist bereit</string>
+    <string name="update_ready_text">Zum Installieren tippen. Android fragt einmal, danach installieren sich Updates von selbst.</string>
 </resources>

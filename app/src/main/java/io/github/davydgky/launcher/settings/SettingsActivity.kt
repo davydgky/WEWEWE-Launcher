@@ -124,13 +124,31 @@ class SettingsActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
+        // From the "update ready" notification: straight to the updates, and on with the install.
+        val fromUpdate = intent.getBooleanExtra(EXTRA_INSTALL_UPDATE, false)
+        if (fromUpdate && savedInstanceState == null) launcherApp.updater.performAction()
         setContent {
             LauncherTheme {
                 Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surfaceContainerLowest) {
-                    SettingsScreen(this)
+                    SettingsScreen(this, startOnUpdates = fromUpdate)
                 }
             }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // The installer's confirmation can only be shown over a visible app.
+        launcherApp.updater.isAppVisible = true
+    }
+
+    override fun onPause() {
+        launcherApp.updater.isAppVisible = false
+        super.onPause()
+    }
+
+    companion object {
+        const val EXTRA_INSTALL_UPDATE = "install_update"
     }
 }
 
@@ -154,7 +172,7 @@ private val SourceInfos = listOf(
 )
 
 @Composable
-private fun SettingsScreen(activity: ComponentActivity) {
+private fun SettingsScreen(activity: ComponentActivity, startOnUpdates: Boolean = false) {
     val context = LocalContext.current
     val app = context.launcherApp
     val scope = rememberCoroutineScope()
@@ -218,7 +236,15 @@ private fun SettingsScreen(activity: ComponentActivity) {
 
     // The overview lists the categories; each opens its own page, and back returns to the overview.
     // The island app opens on the island's page; back leads to the overview.
-    var page by rememberSaveable { mutableStateOf(if (BuildConfig.IS_LAUNCHER) null else SettingsPage.Island) }
+    var page by rememberSaveable {
+        mutableStateOf(
+            when {
+                startOnUpdates -> SettingsPage.Updates
+                BuildConfig.IS_LAUNCHER -> null
+                else -> SettingsPage.Island
+            },
+        )
+    }
     BackHandler(enabled = page != null) { page = null }
 
     AnimatedContent(

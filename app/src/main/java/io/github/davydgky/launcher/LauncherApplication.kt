@@ -70,6 +70,8 @@ class LauncherApplication : Application() {
         appScope.launch { settings.prefs.collect { icons.setThemed(it.themedIcons) } }
         // Start indexing right away, before the first frame needs it.
         appKnowledge.start()
+        // Updates are looked for every few hours, also when no screen of the app is opened.
+        io.github.davydgky.launcher.update.UpdateJob.schedule(this)
         search.start()
         // The island app has no home screen to arrange; its notes go to the island's tray.
         if (BuildConfig.IS_LAUNCHER) {

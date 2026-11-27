@@ -8,4 +8,8 @@
     <string name="settings_group_without_launcher">Search from anywhere</string>
     <string name="without_launcher_description">The island works with the Pixel Launcher or any other home screen. Besides pulling the island down, these open the search:</string>
     <string name="quick_note_hint">Kept in the island\'s tray</string>
+    <string name="update_up_to_date">WEWEWE Island is up to date (%1$s)</string>
+    <string name="update_needs_permission">Allow WEWEWE Island to install apps, then tap again</string>
+    <string name="update_scheduled">%1$s installs by itself while the phone is not in use</string>
+    <string name="update_auto_hint">Looks for updates every few hours, downloads them on Wi-Fi and installs them while the phone is not in use. The first update asks once for your OK.</string>
 </resources>
