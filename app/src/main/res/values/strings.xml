@@ -591,4 +591,6 @@
     <string name="permission_dnd_purpose">The “Quiet” shortcut switches Do not disturb on and off</string>
     <string name="crash_notification_title">WEWEWE crashed</string>
     <string name="crash_notification_text">Tap to share the report; it helps fix the cause.</string>
+    <string name="setting_island_mascot">Mascot</string>
+    <string name="setting_island_mascot_description">The wewewe figure beside the camera: breathes and blinks at rest, bobs to music, is glad about notifications.</string>
 </resources>

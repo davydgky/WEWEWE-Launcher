@@ -84,6 +84,8 @@ data class LauncherPrefs(
     val islandPillHeight: Float = 0f,
     /** Moves the island up (negative) or down, in dp, where the camera is reported a little off. */
     val islandOffset: Float = 0f,
+    /** The wewewe mascot beside the camera. */
+    val islandMascot: Boolean = true,
 )
 
 class LauncherSettings(private val dataStore: DataStore<Preferences>) {
@@ -132,6 +134,7 @@ class LauncherSettings(private val dataStore: DataStore<Preferences>) {
                 islandToggles = prefs[IslandTogglesKey]?.split(',')?.filter { it.isNotBlank() },
                 islandPillHeight = prefs[IslandPillHeightKey] ?: 0f,
                 islandOffset = prefs[IslandOffsetKey] ?: 0f,
+                islandMascot = prefs[IslandMascotKey] ?: true,
             )
         }
         .distinctUntilChanged()
@@ -246,8 +249,10 @@ class LauncherSettings(private val dataStore: DataStore<Preferences>) {
         toggles: List<String>? = null,
         pillHeight: Float? = null,
         offset: Float? = null,
+        mascot: Boolean? = null,
     ) {
         dataStore.edit {
+            mascot?.let { v -> it[IslandMascotKey] = v }
             toggles?.let { v -> it[IslandTogglesKey] = v.joinToString(",") }
             pillHeight?.let { v -> it[IslandPillHeightKey] = v }
             offset?.let { v -> it[IslandOffsetKey] = v }
@@ -313,6 +318,7 @@ class LauncherSettings(private val dataStore: DataStore<Preferences>) {
             p.islandToggles?.let { put("islandToggles", it) }
             put("islandPillHeight", p.islandPillHeight.toDouble())
             put("islandOffset", p.islandOffset.toDouble())
+            put("islandMascot", p.islandMascot)
         }
     }
 
@@ -349,6 +355,7 @@ class LauncherSettings(private val dataStore: DataStore<Preferences>) {
             (values["islandToggles"] as? List<*>)?.let { list -> prefs[IslandTogglesKey] = list.filterIsInstance<String>().joinToString(",") }
             (values["islandPillHeight"] as? Number)?.let { prefs[IslandPillHeightKey] = it.toFloat() }
             (values["islandOffset"] as? Number)?.let { prefs[IslandOffsetKey] = it.toFloat() }
+            (values["islandMascot"] as? Boolean)?.let { prefs[IslandMascotKey] = it }
             (values["appLabels"] as? Map<*, *>)?.let { map ->
                 prefs[AppLabelsKey] = map.mapNotNull { (k, v) -> if (k is String && v is String) "$k\t$v" else null }.toSet()
             }
@@ -398,6 +405,7 @@ class LauncherSettings(private val dataStore: DataStore<Preferences>) {
         val IslandTogglesKey = stringPreferencesKey("island_toggles")
         val IslandPillHeightKey = floatPreferencesKey("island_pill_height")
         val IslandOffsetKey = floatPreferencesKey("island_offset")
+        val IslandMascotKey = booleanPreferencesKey("island_mascot")
         const val MAX_RECENT = 6
         val LastUpdateCheckKey = longPreferencesKey("last_update_check")
     }

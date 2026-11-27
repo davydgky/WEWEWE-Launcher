@@ -36,7 +36,9 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
@@ -137,13 +139,16 @@ private sealed interface Shown {
 }
 
 /** Sizes of the island's shapes in dp, from where the camera is. */
-private class IslandSizes(g: IslandGeometry, sideWidth: Dp) {
+private class IslandSizes(g: IslandGeometry, sideWidth: Dp, mascot: Boolean) {
     val density = g.density
     val pillTop = (g.pillTop / density).dp
     val pillHeight = (g.pillHeight / density).dp
     /** Room left free around the camera, between the left and the right half of the island. */
     val holeGap = ((g.holeWidth / density) + 8f).dp
-    val idleWidth = maxOf(pillHeight, holeGap)
+    /** Room for the mascot beside the camera. */
+    val mascotSlot = pillHeight * 1.15f + 6.dp
+    /** At rest: the ring around the camera, or the mascot beside it (the pill stays centred on the camera). */
+    val idleWidth = if (mascot) holeGap + mascotSlot * 2 else maxOf(pillHeight, holeGap)
     /** Width on each side of the camera; narrow enough by default to leave the status bar's icons free. */
     val side = sideWidth
     val compactWidth = holeGap + side * 2
@@ -166,7 +171,7 @@ fun IslandContent(controller: IslandController) {
     val geometry = controller.geometry ?: return
     val hub = controller.hub
     val context = LocalContext.current
-    val sizes = remember(geometry, controller.sideWidth) { IslandSizes(geometry, controller.sideWidth.dp) }
+    val sizes = remember(geometry, controller.sideWidth, controller.mascot) { IslandSizes(geometry, controller.sideWidth.dp, controller.mascot) }
 
     val live by hub.liveItems.collectAsState()
     val media by hub.media.current.collectAsState()
@@ -364,15 +369,20 @@ private fun IslandSurface(
         label = "island",
     ) { target ->
         when {
+            target == IslandMode.Idle.name && controller.mascot -> SplitRow(
+                sizes, Modifier.size(sizes.idleWidth, sizes.pillHeight), startPadding = 4.dp, endPadding = 4.dp,
+                left = { MascotInPill(sizes.pillHeight, MascotMood.Idle) },
+                right = {},
+            )
             target == IslandMode.Idle.name || target == IslandMode.Hidden.name -> Box(Modifier.size(sizes.idleWidth, sizes.pillHeight))
             target == IslandMode.Expanded.name -> ExpandedIsland(controller, sizes)
             target.startsWith("compact:") -> {
                 val item = shown.firstOrNull { "compact:" + it.key == target }
-                if (item != null) CompactIsland(item, sizes) else Box(Modifier.size(sizes.compactWidth, sizes.pillHeight))
+                if (item != null) CompactIsland(item, sizes, controller.mascot) else Box(Modifier.size(sizes.compactWidth, sizes.pillHeight))
             }
             target.startsWith("peek:") -> {
                 val current = peek?.takeIf { "peek:" + it.id == target }
-                if (current != null) PeekIsland(current, sizes) else Box(Modifier.size(sizes.idleWidth, sizes.pillHeight))
+                if (current != null) PeekIsland(current, sizes, controller.mascot) else Box(Modifier.size(sizes.idleWidth, sizes.pillHeight))
             }
         }
     }
@@ -474,12 +484,33 @@ private fun calendarIntent(time: Long): Intent = Intent(Intent.ACTION_VIEW)
 // region Compact
 
 @Composable
-private fun CompactIsland(shown: Shown, sizes: IslandSizes) {
+private fun CompactIsland(shown: Shown, sizes: IslandSizes, mascot: Boolean) {
+    // With music the mascot bobs beside the camera and pastel waves run on the other side.
+    val music = mascot && shown is Shown.Media
     SplitRow(sizes, Modifier.width(sizes.compactWidth).height(sizes.pillHeight), startPadding = 6.dp, endPadding = 8.dp, left = {
-        Leading(shown, size = (sizes.pillHeight - 8.dp).coerceAtMost(22.dp))
+        if (music) {
+            MascotInPill(sizes.pillHeight, if ((shown as Shown.Media).info.playing) MascotMood.Music else MascotMood.Idle)
+        } else {
+            Leading(shown, size = (sizes.pillHeight - 8.dp).coerceAtMost(22.dp))
+        }
     }, right = {
-        Trailing(shown)
+        if (music && (shown as Shown.Media).info.playing) Equalizer(MascotWaveColors) else Trailing(shown)
     })
+}
+
+/**
+ * The mascot in the pill, in its tight crop and a little larger than the pill, flush with its lower edge:
+ * the pill cuts the feet, the dome and the upper W arches show.
+ */
+@Composable
+private fun MascotInPill(height: Dp, mood: MascotMood, bounce: Any? = null) {
+    Box(Modifier.size(width = height * 1.15f, height = height), contentAlignment = Alignment.TopCenter) {
+        Mascot(
+            mood,
+            Modifier.requiredSize(width = height * 1.15f, height = height * 1.2f).offset(y = height * 0.12f),
+            bounce = bounce,
+        )
+    }
 }
 
 /** Left and right of the camera, with the camera itself left free. */
@@ -578,7 +609,11 @@ private fun Bubble(shown: Shown, sizes: IslandSizes, modifier: Modifier, onTap: 
 
 /** Four bars that move to the music, in the colour of the artwork. */
 @Composable
-private fun Equalizer(color: Color) {
+private fun Equalizer(color: Color) = Equalizer(List(4) { color })
+
+/** Four bars that move to the music, each in its own colour. */
+@Composable
+private fun Equalizer(colors: List<Color>) {
     val transition = rememberInfiniteTransition(label = "equalizer")
     val bars = listOf(420, 300, 520, 360).map { duration ->
         transition.animateFloat(0.25f, 1f, infiniteRepeatable(tween(duration), RepeatMode.Reverse), label = "bar")
@@ -588,7 +623,7 @@ private fun Equalizer(color: Color) {
         bars.forEachIndexed { index, bar ->
             val h = size.height * bar.value
             drawLine(
-                color = color,
+                color = colors[index % colors.size],
                 start = Offset(width * (index * 2 + 0.5f), size.height / 2 + h / 2),
                 end = Offset(width * (index * 2 + 0.5f), size.height / 2 - h / 2),
                 strokeWidth = width,
@@ -621,7 +656,7 @@ private fun ProgressRing(progress: Float?, color: Color, size: Dp) {
 // region Peek
 
 @Composable
-private fun PeekIsland(peek: Peek, sizes: IslandSizes) {
+private fun PeekIsland(peek: Peek, sizes: IslandSizes, mascot: Boolean) {
     if (peek.style() == PeekStyle.Notification) {
         Column(Modifier.width(sizes.peekWidth)) {
             SplitRow(sizes, Modifier.fillMaxWidth().height(sizes.pillHeight + 6.dp), left = {
@@ -631,7 +666,8 @@ private fun PeekIsland(peek: Peek, sizes: IslandSizes) {
                     IslandText(peek.title, Color.White, 14.sp, weight = FontWeight.SemiBold)
                 }
             }, right = {
-                IslandText(stringResource(R.string.island_now), Secondary, 12.sp)
+                // The mascot is glad about every notification; without it, "now".
+                if (mascot) MascotInPill(sizes.pillHeight + 6.dp, MascotMood.Happy, bounce = peek.id) else IslandText(stringResource(R.string.island_now), Secondary, 12.sp)
             })
             if (peek.text.isNotBlank()) {
                 Text(
@@ -688,8 +724,14 @@ private fun ExpandedIsland(controller: IslandController, sizes: IslandSizes) {
     val locked by hub.locked.collectAsState()
     // Black of its own as well: whatever the surface around it does, the opened island is never see-through.
     Column(Modifier.width(sizes.expandedWidth).background(Surface).padding(bottom = 14.dp)) {
-        // The row around the camera stays empty: the status bar's clock and battery lie below it.
-        Spacer(Modifier.height(sizes.pillHeight + 6.dp))
+        // The row around the camera: the mascot, glad the island was opened; else empty.
+        if (controller.mascot) {
+            SplitRow(sizes, Modifier.fillMaxWidth().height(sizes.pillHeight + 6.dp), startPadding = 12.dp, left = {
+                MascotInPill(sizes.pillHeight + 6.dp, MascotMood.Happy, bounce = Unit)
+            }, right = {})
+        } else {
+            Spacer(Modifier.height(sizes.pillHeight + 6.dp))
+        }
         Column(Modifier.padding(horizontal = 12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             // A handful at most; more would push the toggles off the screen.
             live.take(MAX_LIVE_ROWS).forEach { LiveRow(controller, it) }

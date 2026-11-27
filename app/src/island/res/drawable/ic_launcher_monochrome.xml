@@ -1,8 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Themed icon: the mascot's lines only, in the system's colour. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
-    android:viewportWidth="108"
-    android:viewportHeight="108">
-    <path android:fillColor="#FF000000" android:pathData="M39,43h30a11,11 0,0 1,0 22h-30a11,11 0,0 1,0 -22z M67,49.5a4.5,4.5 0,1 0,0 9a4.5,4.5 0,1 0,0 -9z" android:fillType="evenOdd" />
+    android:viewportWidth="768"
+    android:viewportHeight="768">
+    <group android:translateX="128" android:translateY="128">
+        <path android:pathData="M150,278 C144,166 190,108 256,108 C322,108 360,156 354,274 L256,324 Z" android:strokeColor="#FF000000" android:strokeWidth="16" android:strokeLineJoin="round" android:strokeLineCap="round" />
+        <path android:pathData="M225.5,192 A10.5,10.5 0 1,0 246.5,192 A10.5,10.5 0 1,0 225.5,192 Z" android:fillColor="#FF000000" />
+        <path android:pathData="M285.5,190 A10.5,10.5 0 1,0 306.5,190 A10.5,10.5 0 1,0 285.5,190 Z" android:fillColor="#FF000000" />
+        <path android:pathData="M184,286 C174,314 144,326 121,318" android:strokeColor="#FF000000" android:strokeWidth="16" android:strokeLineCap="round" />
+        <path android:pathData="M184,286 C208,240 272,240 298,294 L342,224 A42.2,42.2 0 1,1 410,274 C386,307 372,344 348,376 C326,405 284,412 256,368 C230,416 166,412 128,334 C102,281 92,224 132,218 C164,214 182,246 184,286 Z" android:strokeColor="#FF000000" android:strokeWidth="16" android:strokeLineJoin="round" android:strokeLineCap="round" />
+    </group>
 </vector>

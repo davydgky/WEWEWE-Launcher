@@ -101,6 +101,9 @@ class IslandController(
     /** Width of the compact island on each side of the camera, in dp (a setting: narrow, normal, wide). */
     var sideWidth by mutableStateOf(SIDE_NARROW)
 
+    /** The wewewe mascot beside the camera (a setting). */
+    var mascot by mutableStateOf(true)
+
     /** The shortcuts of the opened island, in order. */
     var toggles by mutableStateOf(QuickToggle.DEFAULT)
 

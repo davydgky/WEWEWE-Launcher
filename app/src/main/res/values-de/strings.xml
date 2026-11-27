@@ -590,4 +590,6 @@
     <string name="permission_dnd_purpose">Der Schnellzugriff „Ruhe“ schaltet „Nicht stören“ ein und aus</string>
     <string name="crash_notification_title">WEWEWE ist abgestürzt</string>
     <string name="crash_notification_text">Tippen, um den Bericht zu teilen; damit lässt sich die Ursache beheben.</string>
+    <string name="setting_island_mascot">Maskottchen</string>
+    <string name="setting_island_mascot_description">Die wewewe-Figur neben der Kamera: atmet und blinzelt in Ruhe, wippt zur Musik, freut sich über Benachrichtigungen.</string>
 </resources>
