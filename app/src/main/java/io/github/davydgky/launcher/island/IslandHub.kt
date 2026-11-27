@@ -284,6 +284,8 @@ class IslandHub(private val context: Context, private val scope: CoroutineScope)
             updatedAt = sbn.postTime,
             // A paused timer shows its time without a running chronometer.
             running = kind != LiveKind.Timer || chronometer,
+            // Calls in the call style always get a chip; other apps' activities when Android promotes them.
+            systemChip = promoted || template.contains("CallStyle"),
         )
     }
 

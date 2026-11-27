@@ -115,6 +115,32 @@ class ContextCardsTest {
         save("peek-2-landed.png")
     }
 
+    @Test
+    fun theIslandMakesRoomForSystemChips() {
+        val controller = IslandController(app.island, NoActions, CoroutineScope(SupervisorJob() + Dispatchers.Main)).apply {
+            geometry = IslandGeometry(1080, 2400, 540, 70, 70, 20, 80, 2.625f)
+        }
+        fun call(chip: Boolean) = LiveItem("call", LiveKind.Call, "com.google.android.dialer", "Mama", "", null, 0, null,
+            chronometer = System.currentTimeMillis() - 323_000, updatedAt = System.currentTimeMillis(), systemChip = chip)
+        fun timer(chip: Boolean) = LiveItem("timer", LiveKind.Timer, "com.google.android.deskclock", "Timer", "", null, 0, null,
+            chronometer = System.currentTimeMillis() + 300_000, countDown = true, updatedAt = System.currentTimeMillis(), systemChip = chip)
+        // Without chips of Android's own: the call beside the camera, its time in full, the timer beside it.
+        app.island.setLiveForTest(listOf(call(chip = false), timer(chip = false)))
+        compose.setContent {
+            Box(Modifier.size(411.dp, 200.dp).background(Color(0xFF6B8F5E)).testTag("screen")) { IslandContent(controller) }
+        }
+        compose.mainClock.advanceTimeBy(1_500)
+        save("call-island.png")
+        val wide = controller.windowRequest!!.width
+        // Android shows both as chips itself: the island leaves them the room, only the ring stays.
+        app.island.setLiveForTest(listOf(call(chip = true), timer(chip = true)))
+        compose.mainClock.advanceTimeBy(1_500)
+        save("call-system-chips.png")
+        org.junit.Assert.assertTrue("the island is small beside system chips", controller.windowRequest!!.width < wide / 2)
+        app.island.setLiveForTest(emptyList())
+        compose.mainClock.advanceTimeBy(1_000)
+    }
+
     private fun save(name: String) {
         val image = compose.onNodeWithTag("screen").captureToImage().asAndroidBitmap()
         File("build/mascot").apply { mkdirs() }.resolve(name).outputStream().use { image.compress(Bitmap.CompressFormat.PNG, 100, it) }

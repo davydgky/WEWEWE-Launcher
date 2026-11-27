@@ -80,9 +80,11 @@ import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -182,8 +184,6 @@ fun IslandContent(controller: IslandController) {
     val geometry = controller.geometry ?: return
     val hub = controller.hub
     val context = LocalContext.current
-    val sizes = remember(geometry, controller.sideWidth, controller.mascot) { IslandSizes(geometry, controller.sideWidth.dp, controller.mascot) }
-
     val live by hub.liveItems.collectAsState()
     val media by hub.media.current.collectAsState()
     val peek by hub.peek.collectAsState()
@@ -199,9 +199,26 @@ fun IslandContent(controller: IslandController) {
 
     val organizer by context.launcherApp.organizer.organizer.collectAsState()
     val todos = organizer?.todos.orEmpty()
-    val shown = remember(live, media, event, torch, keepAwake, todos, now) { shownActivities(live, media, event, torch, keepAwake, todos, now) }
+    val all = remember(live, media, event, torch, keepAwake, todos, now) { shownActivities(live, media, event, torch, keepAwake, todos, now) }
+    // While Android shows chips of its own beside the camera (a call, a timer as a Live Update), the island
+    // makes room for them: only the ring around the camera, everything else when it is opened. Beside the
+    // chips it would show the same thing a second time and lie over them.
+    val systemChips = live.any { it.systemChip }
+    val shown = if (systemChips) emptyList() else all
     val primary = shown.firstOrNull()
     val secondary = shown.getOrNull(1)
+    val mascotAtRest = controller.mascot && !systemChips
+
+    // Text on the right (a running call, a timer, "in 5 Min.") widens the island just enough to fit.
+    val german = LocalConfiguration.current.locales[0].language == "de"
+    val sample = trailingSample(primary, now, german, context)
+    val measurer = rememberTextMeasurer()
+    val localDensity = LocalDensity.current
+    val textWidth = remember(sample, localDensity) {
+        sample?.let { with(localDensity) { measurer.measure(it, TrailingStyle).size.width.toDp() } }
+    }
+    val side = textWidth?.let { (it + TrailingPadding + 6.dp).coerceIn(controller.sideWidth.dp, MaxTextSide) } ?: controller.sideWidth.dp
+    val sizes = remember(geometry, side, mascotAtRest) { IslandSizes(geometry, side, mascotAtRest) }
     val currentPeek = peek
     val mode = when {
         controller.hidden -> IslandMode.Hidden
@@ -239,11 +256,11 @@ fun IslandContent(controller: IslandController) {
             Box(Modifier.align(Alignment.TopCenter).padding(top = sizes.pillTop).then(width)) {
                 // At rest with the mascot the pill sits to the camera's left (see IslandSizes.idleShift).
                 val shift by animateDpAsState(
-                    if (display == IslandMode.Idle && controller.mascot) sizes.idleShift else 0.dp,
+                    if (display == IslandMode.Idle && mascotAtRest) sizes.idleShift else 0.dp,
                     spring(dampingRatio = 0.8f, stiffness = 420f),
                     label = "islandShift",
                 )
-                IslandSurface(controller, sizes, display, primary, currentPeek, shown, Modifier.align(Alignment.TopCenter).offset(x = shift))
+                IslandSurface(controller, sizes, display, primary, currentPeek, shown, mascotAtRest, Modifier.align(Alignment.TopCenter).offset(x = shift))
                 if (bubble && secondary != null) {
                     Bubble(secondary, sizes, Modifier.align(Alignment.TopEnd), onTap = controller::expand)
                 }
@@ -330,6 +347,7 @@ private fun IslandSurface(
     primary: Shown?,
     peek: Peek?,
     shown: List<Shown>,
+    mascotAtRest: Boolean,
     modifier: Modifier = Modifier,
 ) {
     val shape = RoundedCornerShape(sizes.corner)
@@ -386,7 +404,7 @@ private fun IslandSurface(
         label = "island",
     ) { target ->
         when {
-            target == IslandMode.Idle.name && controller.mascot -> Row(
+            target == IslandMode.Idle.name && mascotAtRest -> Row(
                 Modifier.size(sizes.idleMascotWidth, sizes.pillHeight),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -507,7 +525,7 @@ private fun calendarIntent(time: Long): Intent = Intent(Intent.ACTION_VIEW)
 private fun CompactIsland(shown: Shown, sizes: IslandSizes, mascot: Boolean) {
     // With music the mascot bobs beside the camera and pastel waves run on the other side.
     val music = mascot && shown is Shown.Media
-    SplitRow(sizes, Modifier.width(sizes.compactWidth).height(sizes.pillHeight), startPadding = 6.dp, endPadding = 8.dp, left = {
+    SplitRow(sizes, Modifier.width(sizes.compactWidth).height(sizes.pillHeight), startPadding = 6.dp, endPadding = TrailingPadding, left = {
         if (music) {
             MascotInPill(sizes.pillHeight, if ((shown as Shown.Media).info.playing) MascotMood.Music else MascotMood.Idle)
         } else {
@@ -587,6 +605,36 @@ private fun LiveTrailing(item: LiveItem) {
         item.indeterminate -> ProgressRing(null, accent, 18.dp)
         else -> IslandText(item.shortText ?: item.text.ifBlank { item.title }, accent, 12.sp, weight = FontWeight.SemiBold)
     }
+}
+
+/** Room right of the text on the compact island, to its round end. */
+private val TrailingPadding = 8.dp
+
+/** Widest the compact island gets on each side for its text; beyond that the status bar's icons are covered. */
+private val MaxTextSide = 76.dp
+
+private val TrailingStyle = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.SemiBold, fontFeatureSettings = "tnum")
+
+/**
+ * The longest text the compact island shows right of the camera for [shown], to make it wide enough;
+ * null where it shows a glyph or bars. A running clock reserves room for its next digit: this is measured
+ * every 15 seconds, the clock ticks every second.
+ */
+private fun trailingSample(shown: Shown?, now: Long, german: Boolean, context: android.content.Context): String? = when (shown) {
+    is Shown.Live -> {
+        val item = shown.item
+        val base = item.chronometer
+        when {
+            base != null && item.running -> if ((if (item.countDown) base - now else now - base) >= 50 * 60_000L) "0:00:00" else "00:00"
+            item.progress != null || item.indeterminate -> null
+            else -> item.shortText ?: item.text.ifBlank { item.title }
+        }
+    }
+    is Shown.Event -> Durations.until(shown.event.begin - now, german = german)
+    is Shown.Reminder -> Durations.until((shown.todo.dueAtMillis ?: 0L) - now, german = german)
+    Shown.Torch -> context.getString(R.string.island_on)
+    Shown.Awake -> context.getString(R.string.island_awake_short)
+    is Shown.Media, null -> null
 }
 
 @Composable
