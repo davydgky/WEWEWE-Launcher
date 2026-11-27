@@ -56,6 +56,8 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <!-- Reminders remind at their exact time (granted to reminder apps without asking). -->
     <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+    <!-- The island's "Quiet" shortcut switches Do not disturb (granted by the user on a system page). -->
+    <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY" />
 
     <queries>
         <intent>

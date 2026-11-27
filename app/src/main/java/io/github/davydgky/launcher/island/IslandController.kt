@@ -26,6 +26,9 @@ interface IslandActions {
     fun toggleTorch()
     fun openNotificationAccess()
     fun openReminders()
+
+    /** Runs a shortcut of the opened island that is not a switch of the island itself. */
+    fun perform(toggle: QuickToggle)
 }
 
 /** Where the island is on the screen, in pixels; computed from the display cutout. */
@@ -97,6 +100,9 @@ class IslandController(
 
     /** Width of the compact island on each side of the camera, in dp (a setting: narrow, normal, wide). */
     var sideWidth by mutableStateOf(SIDE_NARROW)
+
+    /** The shortcuts of the opened island, in order. */
+    var toggles by mutableStateOf(QuickToggle.DEFAULT)
 
     /** The size the window needs for what the island shows; set by the island's content. */
     var windowRequest by mutableStateOf<WindowRequest?>(null)

@@ -65,6 +65,8 @@ class LauncherApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         crashGuard.install()
+        // A crash last time: the report, one tap away to share.
+        io.github.davydgky.launcher.crash.CrashNotifier.showIfNew(this, crashGuard)
         // An updated app may come with a new icon.
         appScope.launch { apps.refreshedPackages.collect(icons::evictPackage) }
         appScope.launch { settings.prefs.collect { icons.setThemed(it.themedIcons) } }

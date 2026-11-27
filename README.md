@@ -150,8 +150,18 @@ sich mit einem Tippen oder wenn man sie nach unten zieht.
   10 Minuten“, exakter Wecker über `USE_EXACT_ALARM`) und in der Island, wo sie ab 15 Minuten vorher
   neben der Kamera steht. Die Island-App hat dafür ein eigenes Symbol „Erinnerungen“.
   Launcher und Island-App teilen dieselben Erinnerungen: Jede App meldet jede Änderung der anderen
-  (`OrganizerProvider`, nur für Apps mit demselben Signaturschlüssel), die neuere gewinnt. Erinnern tut
-  nur eine, die Island-App, wenn sie installiert ist.
+  (`OrganizerProvider`, nur für Apps mit demselben Signaturschlüssel), die sie Erinnerung für Erinnerung
+  zusammenführt (`OrganizerMerge`: eindeutige IDs, die neuere Fassung gewinnt, Gelöschtes bleibt
+  gelöscht); ersetzt wird nie ein ganzer Stand. Erinnern tut nur eine, die Island-App, wenn sie
+  installiert ist.
+- **Schnellzugriffe** in der geöffneten Island frei wählbar und sortierbar (bis zu 12): Kamera,
+  Taschenlampe, Nicht stören, Wach bleiben, Bildschirmtext, Screenshot, Erinnerung, Sperren, WLAN,
+  Bluetooth, Lautstärke, Timer, Wecker, Schnelleinstellungen, Letzte Apps. „Nicht stören“ braucht den
+  Zugriff darauf (Einstellungen › Berechtigungen).
+- **Keine doppelten Benachrichtigungen**: Was Android selbst als Banner zeigt, zeigt die Island nicht;
+  ist für eine App „Pop-up“ aus, kommen ihre Benachrichtigungen in die Island.
+- **Höhe und Position der Pille** lassen sich einstellen, falls die gemeldete Kamera-Aussparung nicht
+  genau passt. Nach einem Absturz bietet eine Benachrichtigung an, den Bericht zu teilen.
 - **Größe**: Die Pille ist höchstens 30 dp hoch, auch wenn das System eine größere Aussparung meldet;
   die Breite neben der Kamera ist einstellbar (Schmal lässt VPN- und andere Symbole der Statusleiste frei).
 

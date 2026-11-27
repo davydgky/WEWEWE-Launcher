@@ -23,7 +23,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.res.painterResource
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -97,9 +101,19 @@ internal fun LazyListScope.islandSettings(prefs: LauncherPrefs, notificationAcce
             HorizontalDivider()
             IslandWidthRow(prefs.islandWidth, enabled = prefs.islandEnabled) { scope.launch { app.settings.setIsland(width = it) } }
             HorizontalDivider()
+            PillTuningRows(prefs, enabled = prefs.islandEnabled) { height, offset -> scope.launch { app.settings.setIsland(pillHeight = height, offset = offset) } }
+            HorizontalDivider()
             SwitchRow(R.string.setting_island_idle, R.string.setting_island_idle_description, prefs.islandIdleVisible, enabled = prefs.islandEnabled) {
                 scope.launch { app.settings.setIsland(idleVisible = it) }
             }
+        }
+    }
+    item {
+        val context = LocalContext.current
+        val scope = rememberCoroutineScope()
+        val chosen = io.github.davydgky.launcher.island.QuickToggle.fromIds(prefs.islandToggles ?: io.github.davydgky.launcher.island.QuickToggle.DEFAULT.map { it.id })
+        Group(stringResource(R.string.setting_island_toggles)) {
+            TogglePicker(chosen) { list -> scope.launch { context.launcherApp.settings.setIsland(toggles = list.map { it.id }) } }
         }
     }
     item {
@@ -155,6 +169,108 @@ private fun addTile(context: Context) {
         Icon.createWithResource(context, R.drawable.ic_search),
         context.mainExecutor,
     ) { }
+}
+
+/**
+ * Height and position of the pill, for phones whose camera is reported a little off. The island follows
+ * every change at once, so it can be lined up with the camera while looking at it.
+ */
+@Composable
+private fun PillTuningRows(prefs: LauncherPrefs, enabled: Boolean, onChange: (height: Float, offset: Float) -> Unit) {
+    var height by remember(prefs.islandPillHeight) { mutableFloatStateOf(prefs.islandPillHeight) }
+    var offset by remember(prefs.islandOffset) { mutableFloatStateOf(prefs.islandOffset) }
+    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(stringResource(R.string.setting_island_pill_height), style = MaterialTheme.typography.titleMedium)
+                Text(stringResource(R.string.setting_island_pill_height_description), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Spacer(Modifier.width(8.dp))
+            androidx.compose.material3.FilterChip(
+                selected = height == 0f,
+                onClick = {
+                    height = if (height == 0f) 28f else 0f
+                    onChange(height, offset)
+                },
+                enabled = enabled,
+                label = { Text(stringResource(R.string.island_automatic)) },
+            )
+        }
+        if (height > 0f) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                androidx.compose.material3.Slider(
+                    value = height,
+                    onValueChange = { height = Math.round(it).toFloat() },
+                    onValueChangeFinished = { onChange(height, offset) },
+                    valueRange = 18f..44f,
+                    steps = 25,
+                    enabled = enabled,
+                    modifier = Modifier.weight(1f),
+                )
+                Text("${height.toInt()} dp", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.width(52.dp).padding(start = 8.dp))
+            }
+        }
+        Spacer(Modifier.size(12.dp))
+        Text(stringResource(R.string.setting_island_offset), style = MaterialTheme.typography.titleMedium)
+        Text(stringResource(R.string.setting_island_offset_description), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            androidx.compose.material3.Slider(
+                value = offset,
+                onValueChange = { offset = Math.round(it * 2) / 2f },
+                onValueChangeFinished = { onChange(height, offset) },
+                valueRange = -12f..12f,
+                steps = 47,
+                enabled = enabled,
+                modifier = Modifier.weight(1f),
+            )
+            Text(
+                (if (offset > 0) "+" else "") + (if (offset % 1f == 0f) offset.toInt().toString() else offset.toString()) + " dp",
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.width(64.dp).padding(start = 8.dp),
+            )
+        }
+        if (offset != 0f || height != 0f) {
+            androidx.compose.material3.TextButton(onClick = {
+                height = 0f
+                offset = 0f
+                onChange(0f, 0f)
+            }) { Text(stringResource(R.string.island_reset)) }
+        }
+    }
+}
+
+/** The opened island's shortcuts: the chosen ones in order (up, down, off), the others to switch on. */
+@Composable
+private fun TogglePicker(chosen: List<io.github.davydgky.launcher.island.QuickToggle>, onChange: (List<io.github.davydgky.launcher.island.QuickToggle>) -> Unit) {
+    val all = io.github.davydgky.launcher.island.QuickToggle.entries
+    Text(
+        stringResource(R.string.setting_island_toggles_description),
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 4.dp),
+    )
+    (chosen + all.filter { it !in chosen }).forEach { toggle ->
+        val index = chosen.indexOf(toggle)
+        val on = index >= 0
+        Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            androidx.compose.material3.Checkbox(
+                checked = on,
+                enabled = on || chosen.size < io.github.davydgky.launcher.island.QuickToggle.MAX,
+                onCheckedChange = { checked -> onChange(if (checked) chosen + toggle else chosen - toggle) },
+            )
+            androidx.compose.material3.Icon(painterResource(toggle.icon), null, Modifier.size(20.dp))
+            Spacer(Modifier.width(12.dp))
+            Text(stringResource(toggle.label), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+            if (on) {
+                androidx.compose.material3.IconButton(enabled = index > 0, onClick = {
+                    onChange(chosen.toMutableList().apply { add(index - 1, removeAt(index)) })
+                }) { androidx.compose.material3.Icon(painterResource(R.drawable.ic_arrow_up), null) }
+                androidx.compose.material3.IconButton(enabled = index < chosen.size - 1, onClick = {
+                    onChange(chosen.toMutableList().apply { add(index + 1, removeAt(index)) })
+                }) { androidx.compose.material3.Icon(painterResource(R.drawable.ic_arrow_down), null) }
+            }
+        }
+    }
 }
 
 /** How far the compact island reaches beside the camera; narrow leaves the status bar's icons free. */

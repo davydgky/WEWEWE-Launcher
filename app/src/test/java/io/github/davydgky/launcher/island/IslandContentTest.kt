@@ -41,6 +41,8 @@ class IslandContentTest {
         override fun toggleTorch() = Unit
         override fun openNotificationAccess() = Unit
         override fun openReminders() = Unit
+        val performed = mutableListOf<QuickToggle>()
+        override fun perform(toggle: QuickToggle) { performed += toggle }
     }
 
     private fun controller(actions: IslandActions = Recorder()): IslandController {
@@ -117,6 +119,16 @@ class IslandContentTest {
         organizer.toggleDone(soon)
         compose.mainClock.advanceTimeBy(1_000)
         controller.collapse()
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+    }
+
+    @Test
+    fun everyShortcutRendersInTheOpenedIsland() {
+        val controller = controller()
+        controller.toggles = QuickToggle.entries.take(QuickToggle.MAX)
+        compose.setContent { IslandContent(controller) }
+        controller.expand()
         compose.mainClock.advanceTimeBy(1_000)
         compose.waitForIdle()
     }

@@ -45,35 +45,36 @@ class OrganizerRepository(private val context: Context, private val scope: Corou
         val current = state.value ?: return
         val next = runCatching { change(current) }.onFailure { Log.w(TAG, "Edit failed", it) }.getOrNull() ?: return
         if (next == current) return
-        state.value = next.copy(modifiedAt = maxOf(System.currentTimeMillis(), current.modifiedAt + 1))
+        state.value = OrganizerMerge.stamp(current, next, System.currentTimeMillis())
         scheduleSave(share = true)
     }
 
     /**
-     * Reminders from the other app (launcher or island app), taken if they are newer than these. Not sent
-     * back: they came from there.
+     * Reminders from the other app (launcher or island app), merged in one by one: what is new or newer
+     * there comes over, nothing here is lost (see [OrganizerMerge]). Not sent back: they came from there.
      */
-    fun takeFromPeer(peer: OrganizerState): Boolean {
+    fun mergeFromPeer(peer: OrganizerState): Boolean {
         val current = state.value ?: return false
-        if (peer.modifiedAt <= current.modifiedAt) return false
-        state.value = peer
+        val merged = OrganizerMerge.merge(current, peer)
+        if (merged == current) return false
+        state.value = merged
         scheduleSave(share = false)
         return true
     }
 
     /**
-     * Compares with the other app: whichever has the newer reminders wins. Once loaded, and whenever the
-     * reminders are opened, in case the other app could not reach this one (Android grants the shared
-     * permission only to an app installed after the one that defines it, until the next update).
+     * Merges with the other app both ways: once loaded, and whenever the reminders are opened, in case the
+     * other app could not reach this one (Android grants the shared permission only to an app installed
+     * after the one that defines it, until the next update).
      */
     fun syncWithPeer() {
         scope.launch {
-            val local = state.value ?: return@launch
+            if (state.value == null) return@launch
             val peer = withContext(Dispatchers.IO) { OrganizerSync.fetch(context) } ?: return@launch
-            when {
-                peer.modifiedAt > local.modifiedAt -> takeFromPeer(peer)
-                local.modifiedAt > peer.modifiedAt -> withContext(Dispatchers.IO) { OrganizerSync.send(context, local) }
-            }
+            mergeFromPeer(peer)
+            val merged = state.value ?: return@launch
+            // The other app gets what only this one had.
+            if (OrganizerMerge.merge(peer, merged) != peer) withContext(Dispatchers.IO) { OrganizerSync.send(context, merged) }
         }
     }
 

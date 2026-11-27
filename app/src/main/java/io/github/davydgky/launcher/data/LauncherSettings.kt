@@ -78,6 +78,12 @@ data class LauncherPrefs(
     val islandIdleVisible: Boolean = true,
     /** Width of the compact island beside the camera: 0 narrow (status bar icons stay free), 1 normal, 2 wide. */
     val islandWidth: Int = 0,
+    /** The shortcuts in the opened island, in order (ids of QuickToggle); null for the default ones. */
+    val islandToggles: List<String>? = null,
+    /** Height of the pill in dp; 0 follows the camera. */
+    val islandPillHeight: Float = 0f,
+    /** Moves the island up (negative) or down, in dp, where the camera is reported a little off. */
+    val islandOffset: Float = 0f,
 )
 
 class LauncherSettings(private val dataStore: DataStore<Preferences>) {
@@ -123,6 +129,9 @@ class LauncherSettings(private val dataStore: DataStore<Preferences>) {
                 islandSystemEvents = prefs[IslandSystemEventsKey] ?: true,
                 islandIdleVisible = prefs[IslandIdleVisibleKey] ?: true,
                 islandWidth = prefs[IslandWidthKey] ?: 0,
+                islandToggles = prefs[IslandTogglesKey]?.split(',')?.filter { it.isNotBlank() },
+                islandPillHeight = prefs[IslandPillHeightKey] ?: 0f,
+                islandOffset = prefs[IslandOffsetKey] ?: 0f,
             )
         }
         .distinctUntilChanged()
@@ -228,8 +237,20 @@ class LauncherSettings(private val dataStore: DataStore<Preferences>) {
         dataStore.edit { it[ThemedIconsKey] = enabled }
     }
 
-    suspend fun setIsland(enabled: Boolean? = null, notifications: Boolean? = null, systemEvents: Boolean? = null, idleVisible: Boolean? = null, width: Int? = null) {
+    suspend fun setIsland(
+        enabled: Boolean? = null,
+        notifications: Boolean? = null,
+        systemEvents: Boolean? = null,
+        idleVisible: Boolean? = null,
+        width: Int? = null,
+        toggles: List<String>? = null,
+        pillHeight: Float? = null,
+        offset: Float? = null,
+    ) {
         dataStore.edit {
+            toggles?.let { v -> it[IslandTogglesKey] = v.joinToString(",") }
+            pillHeight?.let { v -> it[IslandPillHeightKey] = v }
+            offset?.let { v -> it[IslandOffsetKey] = v }
             width?.let { v -> it[IslandWidthKey] = v }
             enabled?.let { v -> it[IslandEnabledKey] = v }
             notifications?.let { v -> it[IslandNotificationsKey] = v }
@@ -289,6 +310,9 @@ class LauncherSettings(private val dataStore: DataStore<Preferences>) {
             put("islandSystemEvents", p.islandSystemEvents)
             put("islandIdleVisible", p.islandIdleVisible)
             put("islandWidth", p.islandWidth)
+            p.islandToggles?.let { put("islandToggles", it) }
+            put("islandPillHeight", p.islandPillHeight.toDouble())
+            put("islandOffset", p.islandOffset.toDouble())
         }
     }
 
@@ -322,6 +346,9 @@ class LauncherSettings(private val dataStore: DataStore<Preferences>) {
             (values["islandSystemEvents"] as? Boolean)?.let { prefs[IslandSystemEventsKey] = it }
             (values["islandIdleVisible"] as? Boolean)?.let { prefs[IslandIdleVisibleKey] = it }
             (values["islandWidth"] as? Int)?.let { prefs[IslandWidthKey] = it }
+            (values["islandToggles"] as? List<*>)?.let { list -> prefs[IslandTogglesKey] = list.filterIsInstance<String>().joinToString(",") }
+            (values["islandPillHeight"] as? Number)?.let { prefs[IslandPillHeightKey] = it.toFloat() }
+            (values["islandOffset"] as? Number)?.let { prefs[IslandOffsetKey] = it.toFloat() }
             (values["appLabels"] as? Map<*, *>)?.let { map ->
                 prefs[AppLabelsKey] = map.mapNotNull { (k, v) -> if (k is String && v is String) "$k\t$v" else null }.toSet()
             }
@@ -368,6 +395,9 @@ class LauncherSettings(private val dataStore: DataStore<Preferences>) {
         val IslandSystemEventsKey = booleanPreferencesKey("island_system_events")
         val IslandIdleVisibleKey = booleanPreferencesKey("island_idle_visible")
         val IslandWidthKey = intPreferencesKey("island_width")
+        val IslandTogglesKey = stringPreferencesKey("island_toggles")
+        val IslandPillHeightKey = floatPreferencesKey("island_pill_height")
+        val IslandOffsetKey = floatPreferencesKey("island_offset")
         const val MAX_RECENT = 6
         val LastUpdateCheckKey = longPreferencesKey("last_update_check")
     }
