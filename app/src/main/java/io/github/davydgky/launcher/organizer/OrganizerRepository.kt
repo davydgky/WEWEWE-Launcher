@@ -24,6 +24,7 @@ class OrganizerRepository(private val context: Context, private val scope: Corou
     val organizer: StateFlow<OrganizerState?> = state.asStateFlow()
     private var saveJob: Job? = null
     private var started = false
+    val backups = OrganizerBackups(context.filesDir)
 
     fun start() {
         if (started) return
@@ -37,8 +38,32 @@ class OrganizerRepository(private val context: Context, private val scope: Corou
     private fun load(): OrganizerState? {
         if (!file.baseFile.exists()) return null
         return runCatching { OrganizerCodec.decode(file.readFully().decodeToString()) }
-            .onFailure { e -> Log.e(TAG, "Reminders unreadable", e) }
+            .onFailure { e ->
+                Log.e(TAG, "Reminders unreadable", e)
+                // Kept aside before the empty start overwrites it: it can be restored from the settings.
+                backups.unreadable(file.baseFile)
+            }
             .getOrNull()
+    }
+
+    /**
+     * Brings back the reminders of a copy, as a change made now: the other app takes them over instead of
+     * removing them again for having been removed there before.
+     */
+    fun restore(entry: OrganizerBackups.Entry): Boolean {
+        val copy = backups.read(entry.file) ?: return false
+        val current = state.value ?: return false
+        val now = System.currentTimeMillis()
+        val revived = copy.copy(
+            todos = copy.todos.map { it.copy(updatedAt = now) },
+            lists = copy.lists.map { it.copy(updatedAt = now) },
+            deleted = emptyMap(),
+        )
+        // Merged into what is there, so nothing made since the copy is lost either.
+        val merged = OrganizerMerge.merge(current.copy(deleted = current.deleted - revived.todos.map { it.uid }.toSet()), revived, now)
+        state.value = merged.copy(modifiedAt = now)
+        scheduleSave(share = true)
+        return true
     }
 
     private fun update(change: (OrganizerState) -> OrganizerState) {
@@ -57,6 +82,11 @@ class OrganizerRepository(private val context: Context, private val scope: Corou
         val current = state.value ?: return false
         val merged = OrganizerMerge.merge(current, peer)
         if (merged == current) return false
+        // A merge that leaves fewer open reminders is kept as a copy first, to undo it if it was wrong.
+        if (merged.todos.count { !it.done } < current.todos.count { !it.done }) {
+            val before = OrganizerCodec.encode(current)
+            scope.launch(Dispatchers.IO) { backups.beforeSync(before) }
+        }
         state.value = merged
         scheduleSave(share = false)
         return true
@@ -177,6 +207,7 @@ class OrganizerRepository(private val context: Context, private val scope: Corou
             val text = OrganizerCodec.encode(current)
             withContext(Dispatchers.IO) {
                 write(text)
+                backups.daily(text)
                 // The other app (launcher or island app) gets the same reminders.
                 if (share) OrganizerSync.send(context, current)
             }

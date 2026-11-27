@@ -592,4 +592,13 @@
     <string name="crash_notification_text">Tippen, um den Bericht zu teilen; damit lässt sich die Ursache beheben.</string>
     <string name="setting_island_mascot">Maskottchen</string>
     <string name="setting_island_mascot_description">Die wewewe-Figur neben der Kamera: atmet und blinzelt in Ruhe, wippt zur Musik, freut sich über Benachrichtigungen.</string>
+    <string name="reminders_now">%1$d offen, %2$d insgesamt</string>
+    <string name="reminders_restore">Sicherung wiederherstellen</string>
+    <string name="reminders_no_backups">Noch keine Sicherungen</string>
+    <string name="reminders_restore_one">Wiederherstellen</string>
+    <string name="reminders_restored">Erinnerungen wiederhergestellt</string>
+    <string name="reminders_restore_failed">Diese Sicherung lässt sich nicht lesen</string>
+    <string name="backup_daily">Tägliche Sicherung</string>
+    <string name="backup_before_sync">Vor einem Abgleich mit der anderen App</string>
+    <string name="backup_unreadable">Gespeicherte Datei, die nicht lesbar war</string>
 </resources>
