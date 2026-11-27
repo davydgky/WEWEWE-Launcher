@@ -34,6 +34,9 @@ enum class Permission(
     /** Notification access: music, timers and notifications in the island, dots, messages in the search. */
     NotificationAccess,
 
+    /** "Do not disturb" access: the island's "Quiet" shortcut. */
+    DoNotDisturb,
+
     /** Home screen role. */
     DefaultLauncher(launcherOnly = true),
 
@@ -88,6 +91,7 @@ object SystemPages {
         Permission.Accessibility -> LockService.isEnabled(context)
         Permission.NotificationAccess ->
             context.getSystemService(NotificationManager::class.java).isNotificationListenerAccessGranted(ComponentName(context, NotificationListener::class.java))
+        Permission.DoNotDisturb -> context.getSystemService(NotificationManager::class.java).isNotificationPolicyAccessGranted
         Permission.DefaultLauncher -> context.getSystemService(RoleManager::class.java).isRoleHeld(RoleManager.ROLE_HOME)
         Permission.Assistant -> context.getSystemService(RoleManager::class.java).let { it.isRoleAvailable(RoleManager.ROLE_ASSISTANT) && it.isRoleHeld(RoleManager.ROLE_ASSISTANT) }
         Permission.AllFiles -> Environment.isExternalStorageManager()
@@ -121,6 +125,7 @@ object SystemPages {
                     .putExtra(Settings.EXTRA_NOTIFICATION_LISTENER_COMPONENT_NAME, ComponentName(context, NotificationListener::class.java).flattenToString()),
                 Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS),
             )
+            Permission.DoNotDisturb -> listOf(Intent(Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS))
             Permission.DefaultLauncher -> listOf(Intent(Settings.ACTION_HOME_SETTINGS), Intent(Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS))
             // Android does not let apps ask for the assistant role; this page is where it is chosen.
             Permission.Assistant -> listOf(Intent(Settings.ACTION_VOICE_INPUT_SETTINGS), Intent(Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS))

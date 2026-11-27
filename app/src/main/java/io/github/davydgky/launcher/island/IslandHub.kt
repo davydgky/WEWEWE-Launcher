@@ -101,7 +101,7 @@ class IslandHub(private val context: Context, private val scope: CoroutineScope)
         registerReceivers()
         audio.registerAudioDeviceCallback(audioDevices, main)
         media.start()
-        listener?.let { dndState.value = it.currentInterruptionFilter.isDnd() }
+        readDnd()
         lockedState.value = keyguard.isKeyguardLocked
         watchEvents()
     }
@@ -170,11 +170,20 @@ class IslandHub(private val context: Context, private val scope: CoroutineScope)
 
     /** Switches "Do not disturb" between "priority only" and off; false without notification access. */
     fun toggleDoNotDisturb(): Boolean {
-        val service = listener ?: return false
-        val on = service.currentInterruptionFilter.isDnd()
-        service.requestInterruptionFilter(if (on) NotificationListenerService.INTERRUPTION_FILTER_ALL else NotificationListenerService.INTERRUPTION_FILTER_PRIORITY)
+        val manager = context.getSystemService(NotificationManager::class.java)
+        // Needs "Do not disturb access"; without it Android ignores the request (it did not work before).
+        if (!manager.isNotificationPolicyAccessGranted) return false
+        val on = dndState.value
+        runCatching {
+            manager.setInterruptionFilter(if (on) NotificationManager.INTERRUPTION_FILTER_ALL else NotificationManager.INTERRUPTION_FILTER_PRIORITY)
+        }.onFailure { Log.w(TAG, "Cannot switch Do not disturb", it) }
         dndState.value = !on
         return true
+    }
+
+    private fun readDnd() {
+        val filter = context.getSystemService(NotificationManager::class.java).currentInterruptionFilter
+        dndState.value = filter != NotificationManager.INTERRUPTION_FILTER_ALL && filter != NotificationManager.INTERRUPTION_FILTER_UNKNOWN
     }
 
     /** Removes a notification that asks for it once it was opened, as the shade does. */
@@ -194,6 +203,9 @@ class IslandHub(private val context: Context, private val scope: CoroutineScope)
         val ranking = NotificationListenerService.Ranking()
         if (rankingMap?.getRanking(sbn.key, ranking) == true) {
             if (ranking.importance < NotificationManager.IMPORTANCE_DEFAULT || !ranking.matchesInterruptionFilter() || ranking.isSuspended) return
+            // Android shows these itself as a banner (pop-up): the island would show them twice. With pop-ups
+            // switched off for an app, its notifications come here instead.
+            if (ranking.importance >= NotificationManager.IMPORTANCE_HIGH) return
         }
         val extras = n.extras
         val title = extras.getCharSequence(Notification.EXTRA_CONVERSATION_TITLE)?.toString()
@@ -201,7 +213,8 @@ class IslandHub(private val context: Context, private val scope: CoroutineScope)
         val text = (extras.getCharSequence(Notification.EXTRA_TEXT) ?: extras.getCharSequence(Notification.EXTRA_BIG_TEXT))?.toString().orEmpty()
         if (title.isBlank() && text.isBlank()) return
         val label = appLabel(sbn.packageName)
-        val secret = lockedState.value || n.visibility == Notification.VISIBILITY_SECRET
+        // Asked now, not remembered: a missed "unlocked" broadcast must not hide every notification's content.
+        val secret = keyguard.isKeyguardLocked || n.visibility == Notification.VISIBILITY_SECRET
         val image = if (secret) appIcon(sbn.packageName) else (bitmapOf(n.getLargeIcon()) ?: appIcon(sbn.packageName))
         showPeek(
             Peek(
@@ -364,6 +377,7 @@ class IslandHub(private val context: Context, private val scope: CoroutineScope)
                     watchEvents()
                 }
                 Intent.ACTION_USER_PRESENT -> lockedState.value = false
+                NotificationManager.ACTION_INTERRUPTION_FILTER_CHANGED -> readDnd()
             }
         }
     }
@@ -377,6 +391,7 @@ class IslandHub(private val context: Context, private val scope: CoroutineScope)
             addAction(Intent.ACTION_SCREEN_OFF)
             addAction(Intent.ACTION_SCREEN_ON)
             addAction(Intent.ACTION_USER_PRESENT)
+            addAction(NotificationManager.ACTION_INTERRUPTION_FILTER_CHANGED)
         }
         context.registerReceiver(receiver, filter, Context.RECEIVER_NOT_EXPORTED)
     }

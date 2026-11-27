@@ -16,8 +16,8 @@ import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * The launcher and the island app share one set of reminders. Each keeps its own copy and tells the other
- * of every change; the newer copy wins (see [OrganizerState.modifiedAt]). They talk through
- * [OrganizerProvider], which only an app signed with the same key may call.
+ * of every change, which merges it in reminder by reminder ([OrganizerMerge]); nothing is replaced as a
+ * whole. They talk through [OrganizerProvider], which only an app signed with the same key may call.
  */
 object OrganizerSync {
 
@@ -71,7 +71,7 @@ class OrganizerProvider : ContentProvider() {
             OrganizerSync.METHOD_PUT -> {
                 val incoming = extras?.getString(OrganizerSync.KEY_STATE)?.let { runCatching { OrganizerCodec.decode(it) }.getOrNull() } ?: return null
                 // The repository lives on the main thread.
-                android.os.Handler(android.os.Looper.getMainLooper()).post { repository.takeFromPeer(incoming) }
+                android.os.Handler(android.os.Looper.getMainLooper()).post { repository.mergeFromPeer(incoming) }
                 Bundle.EMPTY
             }
             else -> null

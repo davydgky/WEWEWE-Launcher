@@ -4,7 +4,19 @@ import org.json.JSONArray
 import org.json.JSONObject
 
 /** A tab above the todo list, as the "Lists" in Apple Reminders. */
-data class TodoList(val id: Long, val name: String, val colorIndex: Int, val order: Int)
+data class TodoList(
+    val id: Long,
+    val name: String,
+    val colorIndex: Int,
+    val order: Int,
+    /** The same list in the launcher and in the island app; [id] is only this app's number for it. */
+    val uid: String = newUid(),
+    /** When it last changed here or in the other app, to keep the newer of two copies. */
+    val updatedAt: Long = 0L,
+)
+
+/** A name for a reminder or a list that is the same in both apps and never taken twice. */
+fun newUid(): String = java.util.UUID.randomUUID().toString()
 
 /**
  * A reminder with an optional due date, as in Apple Reminders: a bare date shows as an all-day task, a
@@ -22,6 +34,10 @@ data class Todo(
     val doneAtMillis: Long? = null,
     val createdAtMillis: Long = System.currentTimeMillis(),
     val order: Int = 0,
+    /** The same reminder in the launcher and in the island app; [id] is only this app's number for it. */
+    val uid: String = newUid(),
+    /** When it last changed here or in the other app, to keep the newer of two copies. */
+    val updatedAt: Long = 0L,
 )
 
 /**
@@ -66,8 +82,10 @@ data class OrganizerState(
     /** The page's parts from top to bottom ([OrganizerSections]). */
     val sections: List<String> = OrganizerSections.DEFAULT,
     val hiddenSections: Set<String> = emptySet(),
-    /** When the reminders last changed (wall time), so the launcher and the island app keep the newer ones. */
+    /** When the reminders last changed (wall time). */
     val modifiedAt: Long = 0L,
+    /** Reminders and lists removed (uid to the time), so the other app removes them too instead of bringing them back. */
+    val deleted: Map<String, Long> = emptyMap(),
 ) {
 
     fun list(id: Long): TodoList? = lists.firstOrNull { it.id == id }
@@ -78,7 +96,8 @@ data class OrganizerState(
 
         /** The default list every fresh install starts with. */
         fun initial(defaultListName: String) = OrganizerState(
-            lists = listOf(TodoList(id = 1, name = defaultListName, colorIndex = 0, order = 0)),
+            // Named after its name, so the default lists of the launcher and the island app are one list.
+            lists = listOf(TodoList(id = 1, name = defaultListName, colorIndex = 0, order = 0, uid = "list:" + defaultListName.trim().lowercase())),
             nextId = 2,
         )
     }
@@ -99,6 +118,8 @@ object OrganizerCodec {
                         put("name", list.name)
                         put("color", list.colorIndex)
                         put("order", list.order)
+                        put("uid", list.uid)
+                        put("updatedAt", list.updatedAt)
                     },
                 )
             }
@@ -117,6 +138,8 @@ object OrganizerCodec {
                         if (todo.doneAtMillis != null) put("doneAt", todo.doneAtMillis)
                         put("createdAt", todo.createdAtMillis)
                         put("order", todo.order)
+                        put("uid", todo.uid)
+                        put("updatedAt", todo.updatedAt)
                     },
                 )
             }
@@ -141,6 +164,7 @@ object OrganizerCodec {
         put("sections", JSONArray(state.sections))
         put("hidden", JSONArray(state.hiddenSections.sorted()))
         put("modifiedAt", state.modifiedAt)
+        put("deleted", JSONObject().apply { state.deleted.forEach { (uid, at) -> put(uid, at) } })
     }.toString()
 
     fun decode(text: String): OrganizerState {
@@ -148,7 +172,13 @@ object OrganizerCodec {
         val lists = root.optJSONArray("lists")?.let { arr ->
             (0 until arr.length()).map { i ->
                 val o = arr.getJSONObject(i)
-                TodoList(id = o.getLong("id"), name = o.getString("name"), colorIndex = o.optInt("color"), order = o.optInt("order"))
+                val name = o.getString("name")
+                TodoList(
+                    id = o.getLong("id"), name = name, colorIndex = o.optInt("color"), order = o.optInt("order"),
+                    // Lists saved before sharing: the same name is the same list in both apps.
+                    uid = o.optString("uid").ifEmpty { "list:" + name.trim().lowercase() },
+                    updatedAt = o.optLong("updatedAt"),
+                )
             }
         }.orEmpty()
         val todos = root.optJSONArray("todos")?.let { arr ->
@@ -165,6 +195,9 @@ object OrganizerCodec {
                     doneAtMillis = if (o.has("doneAt")) o.getLong("doneAt") else null,
                     createdAtMillis = o.optLong("createdAt", System.currentTimeMillis()),
                     order = o.optInt("order"),
+                    // Reminders saved before sharing get a name from what never changes about them.
+                    uid = o.optString("uid").ifEmpty { "todo:" + o.optLong("createdAt") + ":" + o.getLong("id") + ":" + o.getString("title").hashCode() },
+                    updatedAt = o.optLong("updatedAt"),
                 )
             }
         }.orEmpty()
@@ -193,6 +226,7 @@ object OrganizerCodec {
             sections = OrganizerSections.normalized(root.optJSONArray("sections").strings()),
             hiddenSections = root.optJSONArray("hidden").strings().filterTo(HashSet()) { it in OrganizerSections.DEFAULT },
             modifiedAt = root.optLong("modifiedAt"),
+            deleted = root.optJSONObject("deleted")?.let { o -> o.keys().asSequence().associateWith { o.getLong(it) } }.orEmpty(),
         )
     }
 

@@ -22,6 +22,8 @@ import io.github.davydgky.launcher.BuildConfig
 import io.github.davydgky.launcher.R
 import io.github.davydgky.launcher.island.IslandActions
 import io.github.davydgky.launcher.island.IslandController
+import io.github.davydgky.launcher.island.QuickToggle
+import android.provider.MediaStore
 import io.github.davydgky.launcher.island.IslandWindow
 import io.github.davydgky.launcher.island.QuickNoteActivity
 import io.github.davydgky.launcher.island.ScreenText
@@ -77,13 +79,18 @@ class LockService : AccessibilityService(), IslandActions {
         }
         scope.launch {
             combine(app.settings.prefs, islandAppInstalled) { prefs, otherApp ->
-                IslandPrefs(prefs.islandEnabled && !otherApp, prefs.islandNotifications, prefs.islandSystemEvents, prefs.islandIdleVisible, prefs.islandWidth)
+                IslandPrefs(
+                    prefs.islandEnabled && !otherApp, prefs.islandNotifications, prefs.islandSystemEvents, prefs.islandIdleVisible, prefs.islandWidth,
+                    QuickToggle.fromIds(prefs.islandToggles ?: QuickToggle.DEFAULT.map { it.id }), prefs.islandPillHeight, prefs.islandOffset,
+                )
             }
                 .distinctUntilChanged()
                 .collect { prefs ->
                     app.island.notificationPeeks = prefs.notifications
                     app.island.systemPeeks = prefs.systemEvents
                     window.controller.idleVisible = prefs.idleVisible
+                    window.controller.toggles = prefs.toggles
+                    window.setTuning(prefs.pillHeight, prefs.offset)
                     window.controller.sideWidth = when (prefs.width) {
                         2 -> IslandController.SIDE_WIDE
                         1 -> IslandController.SIDE_NORMAL
@@ -98,7 +105,16 @@ class LockService : AccessibilityService(), IslandActions {
     private fun isIslandAppInstalled(): Boolean =
         runCatching { packageManager.getPackageInfo(BuildConfig.ISLAND_PACKAGE, 0) }.isSuccess
 
-    private data class IslandPrefs(val enabled: Boolean, val notifications: Boolean, val systemEvents: Boolean, val idleVisible: Boolean, val width: Int)
+    private data class IslandPrefs(
+        val enabled: Boolean,
+        val notifications: Boolean,
+        val systemEvents: Boolean,
+        val idleVisible: Boolean,
+        val width: Int,
+        val toggles: List<QuickToggle>,
+        val pillHeight: Float,
+        val offset: Float,
+    )
 
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
@@ -161,6 +177,37 @@ class LockService : AccessibilityService(), IslandActions {
     }
 
     override fun quickNote() = startSafely(Intent(this, QuickNoteActivity::class.java))
+
+    override fun perform(toggle: QuickToggle) {
+        when (toggle) {
+            QuickToggle.Camera -> {
+                // Over the lock screen the camera opens without unlocking, as with the power button.
+                val locked = getSystemService(android.app.KeyguardManager::class.java).isKeyguardLocked
+                startSafely(Intent(if (locked) MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA_SECURE else MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA))
+            }
+            QuickToggle.Screenshot -> {
+                // The island closes first, so it is not in the picture.
+                island?.hideForScreenshot(true)
+                main.postDelayed({
+                    performGlobalAction(GLOBAL_ACTION_TAKE_SCREENSHOT)
+                    main.postDelayed({ island?.hideForScreenshot(false) }, SCREENSHOT_DELAY_MS)
+                }, SCREENSHOT_DELAY_MS)
+            }
+            QuickToggle.ScreenText -> readScreen()
+            QuickToggle.Reminder -> quickNote()
+            QuickToggle.Lock -> lock()
+            QuickToggle.Wifi -> startSafely(Intent(Settings.Panel.ACTION_WIFI))
+            QuickToggle.Bluetooth -> startSafely(Intent(Settings.ACTION_BLUETOOTH_SETTINGS))
+            QuickToggle.Volume -> getSystemService(android.media.AudioManager::class.java)
+                .adjustStreamVolume(android.media.AudioManager.STREAM_MUSIC, android.media.AudioManager.ADJUST_SAME, android.media.AudioManager.FLAG_SHOW_UI)
+            QuickToggle.Timer -> startSafely(Intent(android.provider.AlarmClock.ACTION_SET_TIMER))
+            QuickToggle.Alarm -> startSafely(Intent(android.provider.AlarmClock.ACTION_SHOW_ALARMS))
+            QuickToggle.QuickSettings -> performGlobalAction(GLOBAL_ACTION_QUICK_SETTINGS)
+            QuickToggle.Recents -> performGlobalAction(GLOBAL_ACTION_RECENTS)
+            // Switches of the island itself, handled there.
+            QuickToggle.Torch, QuickToggle.DoNotDisturb, QuickToggle.Awake -> Unit
+        }
+    }
 
     override fun openReminders() = startSafely(Intent(this, io.github.davydgky.launcher.organizer.OrganizerActivity::class.java))
 

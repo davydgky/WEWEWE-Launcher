@@ -429,7 +429,7 @@
     <string name="island_notification_access">Musik, Timer und Benachrichtigungen</string>
     <string name="island_notification_access_description">Was spielt, läuft und ankommt, liest die Island aus den Benachrichtigungen. Sie bleiben im Arbeitsspeicher und gehen nirgendwohin.</string>
     <string name="setting_island_notifications">Benachrichtigungen zeigen</string>
-    <string name="setting_island_notifications_description">Neue Benachrichtigungen verbreitern die Island für ein paar Sekunden, ein Tippen öffnet sie. Auf dem Sperrbildschirm steht nur die App. Android zeigt eventuell zusätzlich sein eigenes Banner; das lässt sich je App unter Benachrichtigungen › Pop-up abschalten.</string>
+    <string name="setting_island_notifications_description">Benachrichtigungen, die Android ohne Banner zeigt, erscheinen für ein paar Sekunden in der Island; ein Tippen öffnet sie. Die mit Banner überlässt die Island Android, damit nichts doppelt kommt. Willst du die einer App stattdessen in der Island, schalte bei ihr in den Android-Einstellungen „Pop-up“ aus.</string>
     <string name="setting_island_system">Laden, Ton und Kopfhörer</string>
     <string name="setting_island_system_description">Einstecken, Lautlos und verbundene Kopfhörer zeigt die Island kurz an</string>
     <string name="setting_island_idle">Ring um die Kamera</string>
@@ -568,4 +568,26 @@
     <string name="reminder_tomorrow">Morgen</string>
     <string name="reminders_more">+%1$d weitere</string>
     <string name="reminder_time">Uhrzeit</string>
+    <string name="toggle_camera">Kamera</string>
+    <string name="toggle_screenshot">Screenshot</string>
+    <string name="toggle_reminder">Erinnerung</string>
+    <string name="toggle_wifi">WLAN</string>
+    <string name="toggle_bluetooth">Bluetooth</string>
+    <string name="toggle_volume">Lautstärke</string>
+    <string name="toggle_timer">Timer</string>
+    <string name="toggle_alarm">Wecker</string>
+    <string name="toggle_quick_settings">Schnelleinst.</string>
+    <string name="toggle_recents">Letzte Apps</string>
+    <string name="setting_island_toggles">Schnellzugriffe</string>
+    <string name="setting_island_toggles_description">Welche Schnellzugriffe die geöffnete Island zeigt, in dieser Reihenfolge. Bis zu 12, sechs pro Zeile.</string>
+    <string name="setting_island_pill_height">Höhe der Pille</string>
+    <string name="setting_island_pill_height_description">Automatisch folgt der Kamera; von Hand einstellen, wenn sie ein wenig daneben sitzt.</string>
+    <string name="setting_island_offset">Position</string>
+    <string name="setting_island_offset_description">Verschiebt die Island um die Kamera nach oben oder unten.</string>
+    <string name="island_automatic">Automatisch</string>
+    <string name="island_reset">Zurücksetzen</string>
+    <string name="permission_dnd">Zugriff auf „Nicht stören“</string>
+    <string name="permission_dnd_purpose">Der Schnellzugriff „Ruhe“ schaltet „Nicht stören“ ein und aus</string>
+    <string name="crash_notification_title">WEWEWE ist abgestürzt</string>
+    <string name="crash_notification_text">Tippen, um den Bericht zu teilen; damit lässt sich die Ursache beheben.</string>
 </resources>

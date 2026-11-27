@@ -46,6 +46,7 @@ private val Permission.title: Int
     get() = when (this) {
         Permission.Accessibility -> R.string.permission_accessibility
         Permission.NotificationAccess -> R.string.permission_notification_access
+        Permission.DoNotDisturb -> R.string.permission_dnd
         Permission.DefaultLauncher -> R.string.permission_default_launcher
         Permission.Assistant -> R.string.permission_assistant
         Permission.Calendar -> R.string.permission_calendar
@@ -63,6 +64,7 @@ private val Permission.purpose: Int
     get() = when (this) {
         Permission.Accessibility -> R.string.permission_accessibility_purpose
         Permission.NotificationAccess -> R.string.permission_notification_access_purpose
+        Permission.DoNotDisturb -> R.string.permission_dnd_purpose
         Permission.DefaultLauncher -> R.string.permission_default_launcher_purpose
         Permission.Assistant -> R.string.permission_assistant_purpose
         Permission.Calendar -> R.string.permission_calendar_purpose

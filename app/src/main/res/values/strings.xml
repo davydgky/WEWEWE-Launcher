@@ -430,7 +430,7 @@
     <string name="island_notification_access">Music, timers and notifications</string>
     <string name="island_notification_access_description">The island reads what plays, what runs and what arrives from the notifications. They stay in memory and are never sent anywhere.</string>
     <string name="setting_island_notifications">Show notifications</string>
-    <string name="setting_island_notifications_description">New notifications widen the island for a few seconds; a tap opens them. On the lock screen only the app is shown. Android may show its own banner as well; switch it off per app under Notifications › Pop on screen.</string>
+    <string name="setting_island_notifications_description">Notifications that Android shows without a banner appear in the island for a few seconds; a tap opens them. Those with a banner are left to Android, so nothing shows twice. To have an app’s notifications in the island instead, switch off “Pop on screen” for it in the Android settings.</string>
     <string name="setting_island_system">Charging, ringer and headphones</string>
     <string name="setting_island_system_description">Plugging in, switching to silent and connecting headphones show briefly in the island</string>
     <string name="setting_island_idle">Ring around the camera</string>
@@ -569,4 +569,26 @@
     <string name="reminder_tomorrow">Tomorrow</string>
     <string name="reminders_more">+%1$d more</string>
     <string name="reminder_time">Time</string>
+    <string name="toggle_camera">Camera</string>
+    <string name="toggle_screenshot">Screenshot</string>
+    <string name="toggle_reminder">Reminder</string>
+    <string name="toggle_wifi">Wi-Fi</string>
+    <string name="toggle_bluetooth">Bluetooth</string>
+    <string name="toggle_volume">Volume</string>
+    <string name="toggle_timer">Timer</string>
+    <string name="toggle_alarm">Alarm</string>
+    <string name="toggle_quick_settings">Quick Settings</string>
+    <string name="toggle_recents">Recent apps</string>
+    <string name="setting_island_toggles">Shortcuts</string>
+    <string name="setting_island_toggles_description">Which shortcuts the opened island shows, in this order. Up to 12, six to a row.</string>
+    <string name="setting_island_pill_height">Height of the pill</string>
+    <string name="setting_island_pill_height_description">Automatic follows the camera; set by hand if it sits a little off.</string>
+    <string name="setting_island_offset">Position</string>
+    <string name="setting_island_offset_description">Moves the island up or down around the camera.</string>
+    <string name="island_automatic">Automatic</string>
+    <string name="island_reset">Reset</string>
+    <string name="permission_dnd">Do not disturb access</string>
+    <string name="permission_dnd_purpose">The “Quiet” shortcut switches Do not disturb on and off</string>
+    <string name="crash_notification_title">WEWEWE crashed</string>
+    <string name="crash_notification_text">Tap to share the report; it helps fix the cause.</string>
 </resources>

@@ -145,6 +145,17 @@ class IslandWindow(
         if (lifecycleRegistry.currentState.isAtLeast(Lifecycle.State.CREATED)) lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_DESTROY)
     }
 
+    private var pillHeightDp = 0f
+    private var offsetDp = 0f
+
+    /** Height of the pill (0: follows the camera) and how far it is moved down, both in dp. */
+    fun setTuning(heightDp: Float, offsetDp: Float) {
+        if (heightDp == pillHeightDp && offsetDp == this.offsetDp) return
+        pillHeightDp = heightDp
+        this.offsetDp = offsetDp
+        updateGeometry()
+    }
+
     fun onConfigurationChanged() {
         updateGeometry()
         updateHidden()
@@ -192,8 +203,10 @@ class IslandWindow(
         val maxHole = (MAX_HOLE_DP * density).roundToInt()
         val holeHeight = if (centred) minOf(hole.height(), hole.width(), maxHole) else 0
         val holeWidth = if (centred) minOf(hole.width(), maxHole) else 0
-        val pillHeight = (holeHeight + 2 * pad).coerceIn((MIN_PILL_DP * density).roundToInt(), (MAX_PILL_DP * density).roundToInt())
-        val centerY = if (centred) hole.centerY() else statusBar / 2
+        val automatic = (holeHeight + 2 * pad).coerceIn((MIN_PILL_DP * density).roundToInt(), (MAX_PILL_DP * density).roundToInt())
+        // Set by hand in the settings where the camera is reported a little off.
+        val pillHeight = if (pillHeightDp > 0f) (pillHeightDp * density).roundToInt() else automatic
+        val centerY = (if (centred) hole.centerY() else statusBar / 2) + (offsetDp * density).roundToInt()
         controller.geometry = IslandGeometry(
             screenWidth = width,
             screenHeight = height,

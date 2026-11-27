@@ -1005,27 +1005,42 @@ private fun Toggles(controller: IslandController, locked: Boolean) {
     val torch by context.launcherApp.torch.isOn.collectAsState()
     val awake by hub.keepAwake.collectAsState()
     val dnd by hub.doNotDisturb.collectAsState()
-    Row(Modifier.fillMaxWidth().padding(vertical = 2.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
-        Toggle(R.drawable.ic_flashlight_filled, stringResource(R.string.island_torch), torch, Yellow) { controller.actions.toggleTorch() }
-        Toggle(R.drawable.ic_coffee, stringResource(R.string.island_awake), awake, Orange) { hub.keepAwake.value = !awake }
-        Toggle(R.drawable.ic_dnd, stringResource(R.string.island_dnd), dnd, Indigo) {
-            if (!hub.toggleDoNotDisturb()) {
-                controller.collapse()
-                controller.actions.openNotificationAccess()
+    // On the lock screen only what works without unlocking.
+    val shown = controller.toggles.filter { !locked || it in LockScreenToggles }
+    shown.chunked(TOGGLES_PER_ROW).forEach { row ->
+        Row(Modifier.fillMaxWidth().padding(vertical = 2.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
+            row.forEach { toggle ->
+                val active = when (toggle) {
+                    QuickToggle.Torch -> torch
+                    QuickToggle.Awake -> awake
+                    QuickToggle.DoNotDisturb -> dnd
+                    else -> false
+                }
+                Toggle(toggle.icon, stringResource(toggle.label), active, Color(toggle.color)) {
+                    when (toggle) {
+                        QuickToggle.Torch -> controller.actions.toggleTorch()
+                        QuickToggle.Awake -> hub.keepAwake.value = !awake
+                        QuickToggle.DoNotDisturb -> if (!hub.toggleDoNotDisturb()) {
+                            // Android lets apps switch Do not disturb only with this access.
+                            controller.collapse()
+                            controller.actions.startIntent(Intent(android.provider.Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS))
+                        }
+                        else -> {
+                            controller.collapse()
+                            controller.actions.perform(toggle)
+                        }
+                    }
+                }
             }
-        }
-        if (!locked) {
-            Toggle(R.drawable.ic_text_scan, stringResource(R.string.island_read_screen), false, Blue) {
-                controller.collapse()
-                controller.actions.readScreen()
-            }
-        }
-        Toggle(R.drawable.ic_lock_filled, stringResource(R.string.island_lock), false, Color.White) {
-            controller.collapse()
-            controller.actions.lock()
+            // Short rows keep the same spacing as full ones.
+            repeat(TOGGLES_PER_ROW - row.size) { Spacer(Modifier.width(56.dp)) }
         }
     }
 }
+
+private const val TOGGLES_PER_ROW = 6
+
+private val LockScreenToggles = setOf(QuickToggle.Camera, QuickToggle.Torch, QuickToggle.DoNotDisturb, QuickToggle.Awake, QuickToggle.Volume, QuickToggle.Lock)
 
 @Composable
 private fun Toggle(icon: Int, label: String, active: Boolean, activeColor: Color, onClick: () -> Unit) {
