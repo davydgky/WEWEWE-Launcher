@@ -8,6 +8,7 @@ import android.provider.CalendarContract
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -153,6 +154,12 @@ private class IslandSizes(g: IslandGeometry, sideWidth: Dp, mascot: Boolean) {
     val mascotSlot = pillHeight * 1.15f + 6.dp
     /** At rest: the ring around the camera, or the mascot beside it (the pill stays centred on the camera). */
     val idleWidth = if (mascot) holeGap + mascotSlot * 2 else maxOf(pillHeight, holeGap)
+    /**
+     * At rest with the mascot the pill only reaches out on the mascot's side: on the other it ends round
+     * around the camera, nothing empty beside it. [idleShift] moves it so the camera stays in its place.
+     */
+    val idleMascotWidth = mascotSlot + holeGap / 2 + pillHeight / 2
+    val idleShift = (pillHeight / 2 - mascotSlot - holeGap / 2) / 2
     /** Width on each side of the camera; narrow enough by default to leave the status bar's icons free. */
     val side = sideWidth
     val compactWidth = holeGap + side * 2
@@ -230,7 +237,13 @@ fun IslandContent(controller: IslandController) {
             // and the bubble beside it is inside the box (touches outside a layout's bounds do not reach it).
             val width = if (bubble) Modifier.width(sizes.compactWidth + (sizes.bubbleGap + sizes.bubble) * 2) else Modifier
             Box(Modifier.align(Alignment.TopCenter).padding(top = sizes.pillTop).then(width)) {
-                IslandSurface(controller, sizes, display, primary, currentPeek, shown, Modifier.align(Alignment.TopCenter))
+                // At rest with the mascot the pill sits to the camera's left (see IslandSizes.idleShift).
+                val shift by animateDpAsState(
+                    if (display == IslandMode.Idle && controller.mascot) sizes.idleShift else 0.dp,
+                    spring(dampingRatio = 0.8f, stiffness = 420f),
+                    label = "islandShift",
+                )
+                IslandSurface(controller, sizes, display, primary, currentPeek, shown, Modifier.align(Alignment.TopCenter).offset(x = shift))
                 if (bubble && secondary != null) {
                     Bubble(secondary, sizes, Modifier.align(Alignment.TopEnd), onTap = controller::expand)
                 }
@@ -373,11 +386,14 @@ private fun IslandSurface(
         label = "island",
     ) { target ->
         when {
-            target == IslandMode.Idle.name && controller.mascot -> SplitRow(
-                sizes, Modifier.size(sizes.idleWidth, sizes.pillHeight), startPadding = 4.dp, endPadding = 4.dp,
-                left = { MascotInPill(sizes.pillHeight, MascotMood.Idle) },
-                right = {},
-            )
+            target == IslandMode.Idle.name && controller.mascot -> Row(
+                Modifier.size(sizes.idleMascotWidth, sizes.pillHeight),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(Modifier.width(sizes.mascotSlot).fillMaxHeight().padding(start = 4.dp), contentAlignment = Alignment.CenterStart) {
+                    MascotInPill(sizes.pillHeight, MascotMood.Idle)
+                }
+            }
             target == IslandMode.Idle.name || target == IslandMode.Hidden.name -> Box(Modifier.size(sizes.idleWidth, sizes.pillHeight))
             target == IslandMode.Expanded.name -> ExpandedIsland(controller, sizes)
             target.startsWith("compact:") -> {
@@ -673,7 +689,8 @@ private fun PeekIsland(peek: Peek, sizes: IslandSizes, mascot: Boolean) {
         }
         Column(Modifier.width(sizes.peekWidth).padding(bottom = 16.dp)) {
             // The row around the camera: the mascot on the left (where it sits at rest), the app on the right.
-            SplitRow(sizes, Modifier.fillMaxWidth().height(sizes.pillHeight + 4.dp), startPadding = 18.dp, endPadding = 22.dp, left = {
+            // The row's ends lie in the island's round corners: they keep well clear of the curve.
+            SplitRow(sizes, Modifier.fillMaxWidth().height(sizes.pillHeight + 4.dp).padding(top = 4.dp), startPadding = 26.dp, endPadding = 34.dp, left = {
                 if (mascot) {
                     MascotInPill(sizes.pillHeight + 4.dp, MascotMood.Happy, bounce = peek.id)
                 } else {

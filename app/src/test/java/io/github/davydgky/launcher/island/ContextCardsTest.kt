@@ -99,7 +99,8 @@ class ContextCardsTest {
         compose.setContent {
             Box(Modifier.size(411.dp, 300.dp).background(Color(0xFF6B8F5E)).testTag("screen")) { IslandContent(controller) }
         }
-        compose.mainClock.advanceTimeBy(500)
+        compose.mainClock.advanceTimeBy(1_000)
+        save("idle.png")
         // The picture mid-throw: the clock only moves when told.
         compose.mainClock.autoAdvance = false
         app.island.showPeek(
