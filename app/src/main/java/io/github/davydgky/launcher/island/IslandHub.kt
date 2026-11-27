@@ -125,6 +125,16 @@ class IslandHub(private val context: Context, private val scope: CoroutineScope)
 
     /** For tests: live activities as if they came from notifications. */
     @androidx.annotation.VisibleForTesting
+    /**
+     * Asks Android again whether the screen is locked. The broadcasts alone are not enough: when one is
+     * missed, the opened island would stay in its lock screen form (no reminders, no search) while unlocked.
+     */
+    fun refreshLocked() = safely("locked") { lockedState.value = keyguard.isKeyguardLocked }
+
+    internal fun setLockedForTest(locked: Boolean) {
+        lockedState.value = locked
+    }
+
     internal fun setLiveForTest(items: List<LiveItem>) {
         live.value = items
     }
@@ -263,6 +273,7 @@ class IslandHub(private val context: Context, private val scope: CoroutineScope)
             promoted -> LiveKind.Other
             else -> return null
         }
+        val endsAt = n.`when`.takeIf { kind == LiveKind.Timer && !chronometer && it > System.currentTimeMillis() + 1_000 }
         val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString()?.takeIf { it.isNotBlank() } ?: appLabel(sbn.packageName)
         val text = (extras.getCharSequence(Notification.EXTRA_TEXT) ?: extras.getCharSequence(Notification.EXTRA_SUB_TEXT))?.toString().orEmpty()
         val progress = if (max > 0) (extras.getInt(Notification.EXTRA_PROGRESS).toFloat() / max).coerceIn(0f, 1f) else null
@@ -277,13 +288,18 @@ class IslandHub(private val context: Context, private val scope: CoroutineScope)
             color = n.color,
             progress = progress,
             indeterminate = indeterminate && progress == null,
-            chronometer = if (chronometer || kind == LiveKind.Call) n.`when`.takeIf { it > 0 } else null,
-            countDown = countDown,
+            chronometer = when {
+                chronometer || kind == LiveKind.Call -> n.`when`.takeIf { it > 0 }
+                // A timer that draws its clock itself (the Clock app) but gives its end as the time.
+                endsAt != null -> endsAt
+                else -> null
+            },
+            countDown = countDown || endsAt != null,
             shortText = shortText,
             contentIntent = n.contentIntent,
             updatedAt = sbn.postTime,
             // A paused timer shows its time without a running chronometer.
-            running = kind != LiveKind.Timer || chronometer,
+            running = kind != LiveKind.Timer || chronometer || endsAt != null,
             // Calls in the call style always get a chip; other apps' activities when Android promotes them.
             systemChip = promoted || template.contains("CallStyle"),
         )

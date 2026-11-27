@@ -112,6 +112,7 @@ class IslandController(
 
     fun expand() {
         if (hidden) return
+        hub.refreshLocked()
         hub.dismissPeek()
         expanded = true
     }
