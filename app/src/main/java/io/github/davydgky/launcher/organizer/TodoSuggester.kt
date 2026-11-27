@@ -27,10 +27,10 @@ class TodoSuggester(
     private var worker: Job? = null
 
     /** The home screen is in use: look through the messages that came since last time, then wait for more. */
-    fun resume() {
+    fun resume(startDelayMs: Long = START_DELAY_MS) {
         if (worker?.isActive == true) return
         worker = scope.launch {
-            delay(START_DELAY_MS)
+            delay(startDelayMs)
             while (true) {
                 val seen = messages.version.value
                 if (!work()) break

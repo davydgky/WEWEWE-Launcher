@@ -623,4 +623,5 @@
     <string name="isr_suggestions">Vorschläge</string>
     <string name="isr_nothing">Nichts offen. Genieß den Tag.</string>
     <string name="isr_list">Liste</string>
+    <string name="isr_suggestions_count">%1$d Vorschläge von Gemini</string>
 </resources>

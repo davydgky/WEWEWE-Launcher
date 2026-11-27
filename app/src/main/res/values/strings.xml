@@ -624,4 +624,5 @@
     <string name="isr_suggestions">Suggestions</string>
     <string name="isr_nothing">Nothing open. Enjoy the day.</string>
     <string name="isr_list">List</string>
+    <string name="isr_suggestions_count">%1$d suggestions from Gemini</string>
 </resources>
