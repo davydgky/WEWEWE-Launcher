@@ -544,7 +544,7 @@ private fun CompactIsland(shown: Shown, sizes: IslandSizes, mascot: Boolean) {
  * the pill cuts the feet, the dome and the upper W arches show.
  */
 @Composable
-private fun MascotInPill(height: Dp, mood: MascotMood, bounce: Any? = null) {
+internal fun MascotInPill(height: Dp, mood: MascotMood, bounce: Any? = null) {
     Box(Modifier.size(width = height * 1.15f, height = height), contentAlignment = Alignment.TopCenter) {
         Mascot(
             mood,
@@ -1079,7 +1079,7 @@ private fun ReminderRow(todo: Todo, now: Long, onToggle: () -> Unit, onOpen: () 
 }
 
 /** "14:30", "Morgen 9:00", "Fr., 12:00", "28. Nov.": short enough for one line beside the title. */
-private fun dueLabel(context: android.content.Context, due: Long, hasTime: Boolean): String {
+internal fun dueLabel(context: android.content.Context, due: Long, hasTime: Boolean): String {
     val zone = java.time.ZoneId.systemDefault()
     val date = java.time.Instant.ofEpochMilli(due).atZone(zone).toLocalDate()
     val today = java.time.LocalDate.now(zone)

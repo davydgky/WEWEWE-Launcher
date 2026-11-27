@@ -131,6 +131,18 @@ class IslandHub(private val context: Context, private val scope: CoroutineScope)
      */
     fun refreshLocked() = safely("locked") { lockedState.value = keyguard.isKeyguardLocked }
 
+    /** Where the island is on the screen, for the screens that open out of it; null while it is off. */
+    @Volatile var geometry: IslandGeometry? = null
+
+    private val coveredState = MutableStateFlow(false)
+
+    /** A screen that opened out of the island (the reminders) is in its place: the island steps aside. */
+    val covered: StateFlow<Boolean> = coveredState.asStateFlow()
+
+    fun cover(on: Boolean) {
+        coveredState.value = on
+    }
+
     internal fun setLockedForTest(locked: Boolean) {
         lockedState.value = locked
     }

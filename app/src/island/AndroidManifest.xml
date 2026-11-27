@@ -11,13 +11,13 @@
         <activity android:name=".MainActivity" tools:node="remove" />
         <activity android:name=".home.AddShortcutActivity" tools:node="remove" />
 
-        <!-- The reminders and the calendar get an icon of their own in the island app. -->
+        <!-- The reminders get an icon of their own in the island app, opening out of the island. -->
         <activity-alias
             android:name=".Reminders"
             android:exported="true"
             android:icon="@mipmap/ic_launcher"
             android:label="@string/reminders_label"
-            android:targetActivity=".organizer.OrganizerActivity">
+            android:targetActivity=".island.IslandRemindersActivity">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />

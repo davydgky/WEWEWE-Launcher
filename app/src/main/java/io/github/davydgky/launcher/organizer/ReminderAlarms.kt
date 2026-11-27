@@ -125,7 +125,7 @@ object ReminderAlarms {
         val open = PendingIntent.getActivity(
             context,
             id,
-            Intent(context, OrganizerActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            Intent(context, io.github.davydgky.launcher.island.IslandRemindersActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
         val time = todo.dueAtMillis?.let { DateFormat.getTimeFormat(context).format(it) }.orEmpty()

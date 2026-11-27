@@ -211,7 +211,10 @@ class LockService : AccessibilityService(), IslandActions {
         }
     }
 
-    override fun openReminders() = startSafely(Intent(this, io.github.davydgky.launcher.organizer.OrganizerActivity::class.java))
+    override fun openReminders() = startSafely(
+        Intent(this, io.github.davydgky.launcher.island.IslandRemindersActivity::class.java)
+            .putExtra(io.github.davydgky.launcher.island.IslandRemindersActivity.EXTRA_MODE, io.github.davydgky.launcher.island.IslandRemindersActivity.MODE_ALL),
+    )
 
     override fun openNotificationAccess() {
         SystemPages.open(this, Permission.NotificationAccess)
