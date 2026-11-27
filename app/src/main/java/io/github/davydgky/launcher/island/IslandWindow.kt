@@ -76,6 +76,9 @@ class IslandWindow(
         title = "WEWEWE Island"
         // Opens and closes with the island's own animation, not the window's.
         windowAnimations = 0
+        // The window moves when it changes between the wide open island and the narrow pill. Android would
+        // animate that move, and the island slid in from the side again after it had closed.
+        setCanPlayMoveAnimation(false)
     }
 
     val isShowing: Boolean get() = root != null

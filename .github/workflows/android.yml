@@ -1,10 +1,12 @@
 name: Android CI
 
-# Build minutes are limited: a push to a work branch only compiles and runs the unit tests. The release
-# build, lint, the emulator test and the release happen on main, or on demand ("Run workflow").
+# Build minutes are limited: the full build, lint, the emulator test and the release happen on main, or
+# on demand ("Run workflow"); a run started by hand on a work branch only compiles and runs the tests.
+# Builds run for main (every push there becomes a release) and on demand ("Run workflow"). Work branches
+# collect several changes without a build each, to save Actions minutes.
 on:
   push:
-    branches: ["**"]
+    branches: ["main"]
     paths-ignore: ["**.md", "docs/**"]
   workflow_dispatch:
 

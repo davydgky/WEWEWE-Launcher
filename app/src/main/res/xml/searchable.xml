@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The WEWEWE search as a searchable activity: it takes the words of a search from Android and other apps. -->
+<searchable xmlns:android="http://schemas.android.com/apk/res/android"
+    android:hint="@string/widget_search_hint"
+    android:includeInGlobalSearch="true"
+    android:label="@string/search_activity_label"
+    android:voiceSearchMode="showVoiceSearchButton|launchRecognizer" />
