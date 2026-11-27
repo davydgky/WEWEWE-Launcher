@@ -121,6 +121,10 @@ open class IslandRemindersActivity : ComponentActivity() {
             statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
             navigationBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
         )
+        // Drawn up to the camera and around it, where the island is.
+        window.attributes = window.attributes.apply {
+            layoutInDisplayCutoutMode = android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
+        }
         val app = launcherApp
         app.organizer.start()
         val add = startMode == MODE_ADD
@@ -137,8 +141,21 @@ open class IslandRemindersActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        hideStatusBar()
         launcherApp.island.cover(true)
         launcherApp.organizer.syncWithPeer()
+    }
+
+    /**
+     * The panel takes the island's place around the camera, where the status bar is. The status bar would
+     * be drawn over it (an app's window lies below it, the island's above): it goes while this is open, a
+     * swipe from the top brings it back for a moment.
+     */
+    private fun hideStatusBar() {
+        window.insetsController?.let {
+            it.systemBarsBehavior = android.view.WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            it.hide(android.view.WindowInsets.Type.statusBars())
+        }
     }
 
     override fun onPause() {
@@ -195,6 +212,7 @@ internal fun IslandRemindersScreen(
     val g = geometry ?: remember(view) { fallbackGeometry(view, density.density) }
     val pillTop = with(density) { g.pillTop.toDp() }
     val pillHeight = with(density) { g.pillHeight.toDp() }
+    val holeGap = with(density) { g.holeWidth.toDp() } + 16.dp
 
     // Grows out of the camera as the island does, and goes back into it.
     val appear = remember { Animatable(0f) }
@@ -243,25 +261,34 @@ internal fun IslandRemindersScreen(
                     .pointerTaps {}
                     .animateContentSize(spring(dampingRatio = 0.85f, stiffness = 500f)),
             ) {
-                // The row around the camera, as in the opened island: the mascot, glad, and what this is.
+                // The row around the camera, as in the opened island: the mascot left of it, what this is right
+                // of it, the camera itself left free.
                 Row(
-                    Modifier.fillMaxWidth().height(pillHeight + 10.dp).padding(start = 20.dp, end = 20.dp),
+                    Modifier.fillMaxWidth().height(pillHeight + 10.dp).padding(start = 20.dp, end = 22.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    MascotInPill(pillHeight + 6.dp, MascotMood.Happy, bounce = bounce)
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        stringResource(if (adding) R.string.quick_note_title else R.string.reminders_label),
-                        color = Color.White,
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                    Spacer(Modifier.weight(1f))
-                    if (!adding) {
-                        val state by repository.organizer.collectAsState()
-                        val open = state?.todos.orEmpty().count { !it.done }
-                        Text(stringResource(R.string.isr_open, open), color = Muted, fontSize = 13.sp)
+                    Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
+                        MascotInPill(pillHeight + 6.dp, MascotMood.Happy, bounce = bounce)
                     }
+                    Spacer(Modifier.width(holeGap))
+                    Box(Modifier.weight(1f), contentAlignment = Alignment.CenterEnd) {
+                        if (adding) {
+                            Text(stringResource(R.string.quick_note_title), color = Muted, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        } else {
+                            val state by repository.organizer.collectAsState()
+                            val open = state?.todos.orEmpty().count { !it.done }
+                            Text(stringResource(R.string.isr_open, open), color = Muted, fontSize = 13.sp, maxLines = 1)
+                        }
+                    }
+                }
+                if (!adding) {
+                    Text(
+                        stringResource(R.string.reminders_label),
+                        color = Color.White,
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(start = 22.dp, top = 2.dp, bottom = 12.dp),
+                    )
                 }
                 if (adding) {
                     Composer(repository, onCancel = close) {
