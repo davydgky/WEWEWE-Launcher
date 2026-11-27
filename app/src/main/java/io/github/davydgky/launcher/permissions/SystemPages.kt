@@ -80,7 +80,11 @@ object SystemPages {
         }
     }
 
-    fun isGranted(context: Context, permission: Permission): Boolean = when (permission) {
+    /** Whether [permission] is granted; a check the system refuses counts as "not granted", never as a crash. */
+    fun isGranted(context: Context, permission: Permission): Boolean =
+        runCatching { check(context, permission) }.onFailure { Log.w(TAG, "Cannot check $permission", it) }.getOrDefault(false)
+
+    private fun check(context: Context, permission: Permission): Boolean = when (permission) {
         Permission.Accessibility -> LockService.isEnabled(context)
         Permission.NotificationAccess ->
             context.getSystemService(NotificationManager::class.java).isNotificationListenerAccessGranted(ComponentName(context, NotificationListener::class.java))

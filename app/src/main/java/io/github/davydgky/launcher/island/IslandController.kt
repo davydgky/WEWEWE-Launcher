@@ -8,6 +8,7 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.AndroidUiDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.launch
@@ -24,6 +25,7 @@ interface IslandActions {
     fun quickNote()
     fun toggleTorch()
     fun openNotificationAccess()
+    fun openReminders()
 }
 
 /** Where the island is on the screen, in pixels; computed from the display cutout. */
@@ -93,6 +95,9 @@ class IslandController(
     /** The island is shown as the small ring when idle (else invisible but still touchable). */
     var idleVisible by mutableStateOf(true)
 
+    /** Width of the compact island on each side of the camera, in dp (a setting: narrow, normal, wide). */
+    var sideWidth by mutableStateOf(SIDE_NARROW)
+
     /** The size the window needs for what the island shows; set by the island's content. */
     var windowRequest by mutableStateOf<WindowRequest?>(null)
 
@@ -126,7 +131,7 @@ class IslandController(
 
     fun dragBy(dy: Float) {
         // Undispatched: the stretch follows the finger in the same frame, not one later.
-        scope.launch(start = CoroutineStart.UNDISPATCHED) { drag.snapTo(drag.value + dy) }
+        scope.launch(AndroidUiDispatcher.Main, start = CoroutineStart.UNDISPATCHED) { drag.snapTo(drag.value + dy) }
     }
 
     /**
@@ -148,7 +153,9 @@ class IslandController(
         }
         openedByDrag = false
         if (mode == IslandMode.Peek) hub.releasePeek()
-        scope.launch {
+        // The spring needs the frame clock of the UI thread: without it the animation throws, and the island
+        // app crashed every time a drag was let go.
+        scope.launch(AndroidUiDispatcher.Main) {
             // Also when the spring is interrupted (a new touch): a drag that never ends would keep the
             // window large, and the large window would swallow every touch meant for the app below.
             try {
@@ -163,6 +170,10 @@ class IslandController(
     fun searchArmed(): Boolean = drag.value > SEARCH_DP * (geometry?.density ?: 1f)
 
     companion object {
+        const val SIDE_NARROW = 34f
+        const val SIDE_NORMAL = 46f
+        const val SIDE_WIDE = 64f
+
         /** Travel that opens or closes the island. */
         const val OPEN_DP = 36f
 

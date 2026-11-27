@@ -89,6 +89,7 @@ import io.github.davydgky.launcher.core.IslandPicker
 import io.github.davydgky.launcher.core.LiveCandidate
 import io.github.davydgky.launcher.core.LiveKind
 import io.github.davydgky.launcher.launcherApp
+import io.github.davydgky.launcher.organizer.Todo
 import kotlin.math.abs
 import kotlin.math.min
 import kotlin.math.roundToInt
@@ -128,17 +129,23 @@ private sealed interface Shown {
     data object Awake : Shown {
         override val key get() = "awake"
     }
+
+    /** A reminder with a time that is due soon or just was. */
+    data class Reminder(val todo: Todo) : Shown {
+        override val key get() = "reminder:" + todo.id
+    }
 }
 
 /** Sizes of the island's shapes in dp, from where the camera is. */
-private class IslandSizes(g: IslandGeometry) {
+private class IslandSizes(g: IslandGeometry, sideWidth: Dp) {
     val density = g.density
     val pillTop = (g.pillTop / density).dp
     val pillHeight = (g.pillHeight / density).dp
     /** Room left free around the camera, between the left and the right half of the island. */
-    val holeGap = ((g.holeWidth / density) + 14f).dp
+    val holeGap = ((g.holeWidth / density) + 8f).dp
     val idleWidth = maxOf(pillHeight, holeGap)
-    val side = 64.dp
+    /** Width on each side of the camera; narrow enough by default to leave the status bar's icons free. */
+    val side = sideWidth
     val compactWidth = holeGap + side * 2
     val bubble = pillHeight
     val bubbleGap = 6.dp
@@ -152,14 +159,14 @@ private class IslandSizes(g: IslandGeometry) {
 
 private enum class PeekStyle { Notification, System }
 
-private fun Peek.style() = if (kind == PeekKind.Notification) PeekStyle.Notification else PeekStyle.System
+private fun Peek.style() = if (kind == PeekKind.Notification || kind == PeekKind.Reminder) PeekStyle.Notification else PeekStyle.System
 
 @Composable
 fun IslandContent(controller: IslandController) {
     val geometry = controller.geometry ?: return
     val hub = controller.hub
     val context = LocalContext.current
-    val sizes = remember(geometry) { IslandSizes(geometry) }
+    val sizes = remember(geometry, controller.sideWidth) { IslandSizes(geometry, controller.sideWidth.dp) }
 
     val live by hub.liveItems.collectAsState()
     val media by hub.media.current.collectAsState()
@@ -174,7 +181,9 @@ fun IslandContent(controller: IslandController) {
         }
     }
 
-    val shown = remember(live, media, event, torch, keepAwake, now) { shownActivities(live, media, event, torch, keepAwake, now) }
+    val organizer by context.launcherApp.organizer.organizer.collectAsState()
+    val todos = organizer?.todos.orEmpty()
+    val shown = remember(live, media, event, torch, keepAwake, todos, now) { shownActivities(live, media, event, torch, keepAwake, todos, now) }
     val primary = shown.firstOrNull()
     val secondary = shown.getOrNull(1)
     val currentPeek = peek
@@ -266,6 +275,7 @@ private fun shownActivities(
     event: SoonEvent?,
     torch: Boolean,
     keepAwake: Boolean,
+    todos: List<Todo>,
     now: Long,
 ): List<Shown> {
     val all = buildList<Pair<Shown, LiveCandidate>> {
@@ -275,6 +285,10 @@ private fun shownActivities(
             add(Shown.Media(media) to LiveCandidate("media", LiveKind.Media, media.changedAt, media.playing))
         }
         if (event != null && event.begin - now <= SOON_EVENT_MS) add(Shown.Event(event) to LiveCandidate("event", LiveKind.Event, event.begin))
+        // A reminder sits next to the camera from 15 minutes before its time until 10 minutes after.
+        todos.filter { !it.done && it.hasTime && (it.dueAtMillis ?: 0L) - now in -REMINDER_AFTER_MS..SOON_EVENT_MS }
+            .minByOrNull { it.dueAtMillis!! }
+            ?.let { add(Shown.Reminder(it) to LiveCandidate("reminder:" + it.id, LiveKind.Event, it.dueAtMillis!!)) }
         if (torch) add(Shown.Torch to LiveCandidate("torch", LiveKind.Other, 0))
         if (keepAwake) add(Shown.Awake to LiveCandidate("awake", LiveKind.Other, 0))
     }
@@ -284,6 +298,7 @@ private fun shownActivities(
 
 private const val PAUSED_MEDIA_MS = 120_000L
 private const val SOON_EVENT_MS = 15 * 60_000L
+private const val REMINDER_AFTER_MS = 10 * 60_000L
 
 @Composable
 private fun IslandSurface(
@@ -430,7 +445,10 @@ private fun Modifier.islandGestures(
 }
 
 private fun openPeek(controller: IslandController, peek: Peek) {
-    if (peek.kind == PeekKind.Notification) {
+    if (peek.kind == PeekKind.Reminder) {
+        controller.hub.dismissPeek()
+        controller.actions.openReminders()
+    } else if (peek.kind == PeekKind.Notification) {
         controller.actions.send(peek.contentIntent)
         if (peek.autoCancel) peek.notificationKey?.let(controller.hub::cancelNotification)
         controller.hub.dismissPeek()
@@ -446,6 +464,7 @@ private fun openShown(controller: IslandController, shown: Shown) {
         is Shown.Event -> controller.actions.startIntent(calendarIntent(shown.event.begin))
         Shown.Torch -> controller.actions.toggleTorch()
         Shown.Awake -> controller.hub.keepAwake.value = false
+        is Shown.Reminder -> controller.actions.openReminders()
     }
 }
 
@@ -456,7 +475,7 @@ private fun calendarIntent(time: Long): Intent = Intent(Intent.ACTION_VIEW)
 
 @Composable
 private fun CompactIsland(shown: Shown, sizes: IslandSizes) {
-    SplitRow(sizes, Modifier.width(sizes.compactWidth).height(sizes.pillHeight), left = {
+    SplitRow(sizes, Modifier.width(sizes.compactWidth).height(sizes.pillHeight), startPadding = 6.dp, endPadding = 8.dp, left = {
         Leading(shown, size = (sizes.pillHeight - 8.dp).coerceAtMost(22.dp))
     }, right = {
         Trailing(shown)
@@ -465,11 +484,18 @@ private fun CompactIsland(shown: Shown, sizes: IslandSizes) {
 
 /** Left and right of the camera, with the camera itself left free. */
 @Composable
-private fun SplitRow(sizes: IslandSizes, modifier: Modifier, left: @Composable () -> Unit, right: @Composable () -> Unit) {
+private fun SplitRow(
+    sizes: IslandSizes,
+    modifier: Modifier,
+    startPadding: Dp = 8.dp,
+    endPadding: Dp = 11.dp,
+    left: @Composable () -> Unit,
+    right: @Composable () -> Unit,
+) {
     Row(modifier, verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.weight(1f).fillMaxHeight().padding(start = 8.dp), contentAlignment = Alignment.CenterStart) { left() }
+        Box(Modifier.weight(1f).fillMaxHeight().padding(start = startPadding), contentAlignment = Alignment.CenterStart) { left() }
         Spacer(Modifier.width(sizes.holeGap))
-        Box(Modifier.weight(1f).fillMaxHeight().padding(end = 11.dp), contentAlignment = Alignment.CenterEnd) { right() }
+        Box(Modifier.weight(1f).fillMaxHeight().padding(end = endPadding), contentAlignment = Alignment.CenterEnd) { right() }
     }
 }
 
@@ -481,6 +507,7 @@ private fun Leading(shown: Shown, size: Dp) {
         is Shown.Event -> Glyph(R.drawable.ic_event, Color(shown.event.color).takeIf { shown.event.color != 0 } ?: Orange, size)
         Shown.Torch -> Glyph(R.drawable.ic_flashlight_filled, Yellow, size)
         Shown.Awake -> Glyph(R.drawable.ic_coffee, Orange, size)
+        is Shown.Reminder -> Glyph(R.drawable.ic_bell, Yellow, size)
     }
 }
 
@@ -493,9 +520,10 @@ private fun Trailing(shown: Shown) {
             Glyph(R.drawable.ic_pause, Secondary, 16.dp)
         }
         is Shown.Live -> LiveTrailing(shown.item)
-        is Shown.Event -> IslandText(shortUntil(shown.event.begin), colorOf(shown.event), 13.sp, weight = FontWeight.SemiBold)
-        Shown.Torch -> IslandText(stringResource(R.string.island_on), Yellow, 13.sp, weight = FontWeight.SemiBold)
-        Shown.Awake -> IslandText(stringResource(R.string.island_awake_short), Orange, 13.sp, weight = FontWeight.SemiBold)
+        is Shown.Event -> IslandText(shortUntil(shown.event.begin), colorOf(shown.event), 12.sp, weight = FontWeight.SemiBold)
+        Shown.Torch -> IslandText(stringResource(R.string.island_on), Yellow, 12.sp, weight = FontWeight.SemiBold)
+        Shown.Awake -> IslandText(stringResource(R.string.island_awake_short), Orange, 12.sp, weight = FontWeight.SemiBold)
+        is Shown.Reminder -> IslandText(shortUntil(shown.todo.dueAtMillis ?: 0L), Yellow, 12.sp, weight = FontWeight.SemiBold)
     }
 }
 
@@ -503,10 +531,10 @@ private fun Trailing(shown: Shown) {
 private fun LiveTrailing(item: LiveItem) {
     val accent = accentOf(item)
     when {
-        item.chronometer != null && item.running -> IslandText(chronometerText(item), accent, 14.sp, weight = FontWeight.SemiBold, tabular = true)
+        item.chronometer != null && item.running -> IslandText(chronometerText(item), accent, 12.sp, weight = FontWeight.SemiBold, tabular = true)
         item.progress != null -> ProgressRing(item.progress, accent, 18.dp)
         item.indeterminate -> ProgressRing(null, accent, 18.dp)
-        else -> IslandText(item.shortText ?: item.text.ifBlank { item.title }, accent, 13.sp, weight = FontWeight.SemiBold)
+        else -> IslandText(item.shortText ?: item.text.ifBlank { item.title }, accent, 12.sp, weight = FontWeight.SemiBold)
     }
 }
 
@@ -663,9 +691,11 @@ private fun ExpandedIsland(controller: IslandController, sizes: IslandSizes) {
         // The row around the camera stays empty: the status bar's clock and battery lie below it.
         Spacer(Modifier.height(sizes.pillHeight + 6.dp))
         Column(Modifier.padding(horizontal = 12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            media?.let { MediaCard(controller, it) }
             // A handful at most; more would push the toggles off the screen.
             live.take(MAX_LIVE_ROWS).forEach { LiveRow(controller, it) }
+            // Reminders before everything else that can wait: they are what the island is opened for most.
+            if (!locked) RemindersCard(controller)
+            media?.let { MediaCard(controller, it) }
             event?.let { e -> EventRow(e) { controller.collapse(); controller.actions.startIntent(calendarIntent(e.begin)) } }
             if (!locked && shelf.isNotEmpty()) ShelfRow(controller, shelf)
             Toggles(controller, locked)
@@ -675,6 +705,120 @@ private fun ExpandedIsland(controller: IslandController, sizes: IslandSizes) {
 }
 
 private const val MAX_LIVE_ROWS = 4
+
+/**
+ * The open reminders of the organizer, as on the launcher's page: overdue and today's first, then the
+ * next ones; a tap on the circle ticks one off, "+" adds one, "All" opens the organizer.
+ */
+@Composable
+private fun RemindersCard(controller: IslandController) {
+    val context = LocalContext.current
+    val repository = context.launcherApp.organizer
+    val state by repository.organizer.collectAsState()
+    val now by produceState(System.currentTimeMillis()) {
+        while (true) {
+            delay(30_000)
+            value = System.currentTimeMillis()
+        }
+    }
+    val todos = state?.todos.orEmpty()
+    val endOfToday = remember(now) { java.time.LocalDate.now().plusDays(1).atStartOfDay(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli() }
+    val open = remember(todos) {
+        todos.filter { !it.done }.sortedWith(compareBy<Todo>({ it.dueAtMillis == null }, { it.dueAtMillis ?: Long.MAX_VALUE }, { it.order }))
+    }
+    val dueCount = open.count { (it.dueAtMillis ?: Long.MAX_VALUE) < endOfToday }
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(Tile).padding(start = 14.dp, end = 6.dp, top = 6.dp, bottom = 8.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Glyph(R.drawable.ic_bell, Yellow, 16.dp)
+            Spacer(Modifier.width(8.dp))
+            IslandText(stringResource(R.string.reminders_label), Color.White, 15.sp, weight = FontWeight.SemiBold)
+            if (dueCount > 0) {
+                Spacer(Modifier.width(8.dp))
+                IslandText(dueCount.toString(), Yellow, 13.sp, weight = FontWeight.SemiBold)
+            }
+            Spacer(Modifier.weight(1f))
+            RoundButton(R.drawable.ic_add, stringResource(R.string.reminder_add), 36.dp, Color.Transparent, Yellow) {
+                controller.collapse()
+                controller.actions.quickNote()
+            }
+            Text(
+                stringResource(R.string.reminders_all),
+                color = Yellow,
+                fontSize = 14.sp,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(10.dp))
+                    .combinedClickable(onClick = {
+                        controller.collapse()
+                        controller.actions.openReminders()
+                    })
+                    .padding(horizontal = 8.dp, vertical = 6.dp),
+            )
+        }
+        if (open.isEmpty()) {
+            IslandText(stringResource(R.string.reminders_none), Secondary, 13.sp, modifier = Modifier.padding(top = 2.dp, bottom = 4.dp))
+        }
+        open.take(MAX_REMINDERS).forEach { todo ->
+            ReminderRow(todo, now, onToggle = { repository.toggleDone(todo.id) }) {
+                controller.collapse()
+                controller.actions.openReminders()
+            }
+        }
+        if (open.size > MAX_REMINDERS) {
+            IslandText(
+                stringResource(R.string.reminders_more, open.size - MAX_REMINDERS),
+                Secondary, 12.sp, modifier = Modifier.padding(start = 34.dp, top = 2.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun ReminderRow(todo: Todo, now: Long, onToggle: () -> Unit, onOpen: () -> Unit) {
+    val context = LocalContext.current
+    val due = todo.dueAtMillis
+    val overdue = due != null && (if (todo.hasTime) due < now else due < java.time.LocalDate.now().atStartOfDay(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli())
+    val label = remember(due, todo.hasTime) { due?.let { dueLabel(context, it, todo.hasTime) } }
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).combinedClickable(onClick = onOpen).padding(vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        // The circle ticks it off, as in Apple Reminders and on the organizer page.
+        Box(
+            Modifier.size(28.dp).clip(CircleShape).combinedClickable(onClick = onToggle),
+            contentAlignment = Alignment.Center,
+        ) {
+            Canvas(Modifier.size(18.dp)) {
+                drawCircle(if (overdue) Color(0xFFFF453A) else Secondary, style = Stroke(1.6.dp.toPx()))
+            }
+        }
+        Spacer(Modifier.width(6.dp))
+        Text(todo.title, color = Color.White, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+        if (label != null) {
+            Spacer(Modifier.width(8.dp))
+            IslandText(label, if (overdue) Color(0xFFFF453A) else Secondary, 12.sp, modifier = Modifier.padding(end = 8.dp))
+        }
+    }
+}
+
+/** "14:30", "Morgen 9:00", "Fr., 12:00", "28. Nov.": short enough for one line beside the title. */
+private fun dueLabel(context: android.content.Context, due: Long, hasTime: Boolean): String {
+    val zone = java.time.ZoneId.systemDefault()
+    val date = java.time.Instant.ofEpochMilli(due).atZone(zone).toLocalDate()
+    val today = java.time.LocalDate.now(zone)
+    val time = if (hasTime) android.text.format.DateFormat.getTimeFormat(context).format(due) else ""
+    val day = when (date) {
+        today -> if (hasTime) "" else context.getString(R.string.reminder_today)
+        today.plusDays(1) -> context.getString(R.string.reminder_tomorrow)
+        else -> android.text.format.DateUtils.formatDateTime(
+            context, due,
+            if (date.isBefore(today.plusDays(7)) && date.isAfter(today)) android.text.format.DateUtils.FORMAT_SHOW_WEEKDAY or android.text.format.DateUtils.FORMAT_ABBREV_WEEKDAY
+            else android.text.format.DateUtils.FORMAT_SHOW_DATE or android.text.format.DateUtils.FORMAT_ABBREV_MONTH or android.text.format.DateUtils.FORMAT_NO_YEAR,
+        )
+    }
+    return listOf(day, time).filter { it.isNotBlank() }.joinToString(" ")
+}
+
+private const val MAX_REMINDERS = 5
 
 @Composable
 private fun MediaCard(controller: IslandController, info: MediaInfo) {
@@ -872,10 +1016,6 @@ private fun Toggles(controller: IslandController, locked: Boolean) {
             Toggle(R.drawable.ic_text_scan, stringResource(R.string.island_read_screen), false, Blue) {
                 controller.collapse()
                 controller.actions.readScreen()
-            }
-            Toggle(R.drawable.ic_note, stringResource(R.string.island_note), false, Yellow) {
-                controller.collapse()
-                controller.actions.quickNote()
             }
         }
         Toggle(R.drawable.ic_lock_filled, stringResource(R.string.island_lock), false, Color.White) {

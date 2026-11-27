@@ -82,6 +82,10 @@ android {
         }
     }
 
+    testOptions {
+        unitTests.isIncludeAndroidResources = true
+    }
+
     lint {
         abortOnError = true
         checkReleaseBuilds = false
@@ -117,6 +121,12 @@ dependencies {
     implementation(libs.mlkit.genai.prompt)
 
     testImplementation(libs.junit)
+    // The island, the search and the settings rendered on the JVM, to catch crashes before a phone does.
+    testImplementation(libs.robolectric)
+    testImplementation(libs.androidx.test.core)
+    testImplementation(platform(libs.androidx.compose.bom))
+    testImplementation(libs.androidx.compose.ui.test.junit4)
+    debugImplementation(libs.androidx.compose.ui.test.manifest)
     // Real org.json for JVM unit tests (android.jar only contains stubs).
     testImplementation(libs.org.json)
 }

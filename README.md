@@ -143,7 +143,14 @@ sich mit einem Tippen oder wenn man sie nach unten zieht.
 - **Ablage**: „Teilen“ → „In die Island“ legt Text und Links ab (Links ohne Tracking-Parameter). Dazu
   „Link ohne Tracking kopieren“ als eigenes Teilen-Ziel (`UrlCleaner`: `utm_*`, `fbclid`, `si` bei
   YouTube und Spotify …).
-- **Notiz**: eine Zeile, die als Erinnerung in der ersten Liste des Organizers landet.
+- **Erinnerungen wie im Launcher**: Die geöffnete Island zeigt die offenen Erinnerungen des Organizers
+  (überfällige und heutige zuerst), ein Tippen auf den Kreis hakt ab, „+“ legt eine neue an (mit Heute,
+  Morgen und Uhrzeit), „Alle“ öffnet den Organizer mit Kalender, Agenda und den Vorschlägen von Gemini
+  Nano. Eine Erinnerung mit Uhrzeit meldet sich zur Zeit: als Benachrichtigung (mit „Erledigt“ und „In
+  10 Minuten“, exakter Wecker über `USE_EXACT_ALARM`) und in der Island, wo sie ab 15 Minuten vorher
+  neben der Kamera steht. Die Island-App hat dafür ein eigenes Symbol „Erinnerungen“.
+- **Größe**: Die Pille ist höchstens 30 dp hoch, auch wenn das System eine größere Aussparung meldet;
+  die Breite neben der Kamera ist einstellbar (Schmal lässt VPN- und andere Symbole der Statusleiste frei).
 
 Technisch ist die Island ein `TYPE_ACCESSIBILITY_OVERLAY`, die einzige Fensterart, die eine App über
 die Statusleiste legen darf. Sie hängt am vorhandenen Bedienungshilfen-Dienst (`LockService`, jetzt
@@ -185,6 +192,13 @@ aktuellen App (`SearchActivity`, der Hintergrund wird vom System weichgezeichnet
 - das **Suchleisten-Widget** für den Pixel Launcher oder jeden anderen Startbildschirm.
 
 Alles einzurichten unter *Einstellungen › Dynamic Island*.
+
+### Tests
+
+Robolectric rendert die Island in allen Formen (mit Tippen und Ziehen), die Suche, die Einstellungen, den
+Organizer und das Anlegen von Erinnerungen auf der JVM, in beiden Apps (`testLauncherDebugUnitTest`,
+`testIslandDebugUnitTest`). So fiel der Absturz beim Loslassen nach dem Ziehen auf: die Feder brauchte die
+Bildtakt-Uhr des UI-Threads.
 
 ## Zeitbudget und Messung
 

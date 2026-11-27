@@ -21,6 +21,7 @@ import android.widget.Toast
 import io.github.davydgky.launcher.BuildConfig
 import io.github.davydgky.launcher.R
 import io.github.davydgky.launcher.island.IslandActions
+import io.github.davydgky.launcher.island.IslandController
 import io.github.davydgky.launcher.island.IslandWindow
 import io.github.davydgky.launcher.island.QuickNoteActivity
 import io.github.davydgky.launcher.island.ScreenText
@@ -76,13 +77,18 @@ class LockService : AccessibilityService(), IslandActions {
         }
         scope.launch {
             combine(app.settings.prefs, islandAppInstalled) { prefs, otherApp ->
-                IslandPrefs(prefs.islandEnabled && !otherApp, prefs.islandNotifications, prefs.islandSystemEvents, prefs.islandIdleVisible)
+                IslandPrefs(prefs.islandEnabled && !otherApp, prefs.islandNotifications, prefs.islandSystemEvents, prefs.islandIdleVisible, prefs.islandWidth)
             }
                 .distinctUntilChanged()
                 .collect { prefs ->
                     app.island.notificationPeeks = prefs.notifications
                     app.island.systemPeeks = prefs.systemEvents
                     window.controller.idleVisible = prefs.idleVisible
+                    window.controller.sideWidth = when (prefs.width) {
+                        2 -> IslandController.SIDE_WIDE
+                        1 -> IslandController.SIDE_NORMAL
+                        else -> IslandController.SIDE_NARROW
+                    }
                     // After a crash loop the app starts in safe mode: then the island stays away until the next start.
                     if (prefs.enabled && !app.crashGuard.safeMode) window.show() else window.hide()
                 }
@@ -92,7 +98,7 @@ class LockService : AccessibilityService(), IslandActions {
     private fun isIslandAppInstalled(): Boolean =
         runCatching { packageManager.getPackageInfo(BuildConfig.ISLAND_PACKAGE, 0) }.isSuccess
 
-    private data class IslandPrefs(val enabled: Boolean, val notifications: Boolean, val systemEvents: Boolean, val idleVisible: Boolean)
+    private data class IslandPrefs(val enabled: Boolean, val notifications: Boolean, val systemEvents: Boolean, val idleVisible: Boolean, val width: Int)
 
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
@@ -155,6 +161,8 @@ class LockService : AccessibilityService(), IslandActions {
     }
 
     override fun quickNote() = startSafely(Intent(this, QuickNoteActivity::class.java))
+
+    override fun openReminders() = startSafely(Intent(this, io.github.davydgky.launcher.organizer.OrganizerActivity::class.java))
 
     override fun openNotificationAccess() {
         SystemPages.open(this, Permission.NotificationAccess)

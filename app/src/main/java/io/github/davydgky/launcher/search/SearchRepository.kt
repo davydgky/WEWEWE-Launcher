@@ -140,11 +140,21 @@ class SearchRepository(private val app: LauncherApplication, private val scope: 
         }
     }
 
-    private fun isActive(source: SearchSource) = source.id !in prefs.disabledSources && source.missing(app) == null
+    private fun isActive(source: SearchSource) = source.id !in prefs.disabledSources && missingOf(source) == null
+
+    /**
+     * What [source] lacks. A check that fails (a package manager call some systems refuse) must not take
+     * the whole search down: Velo then counts as not installed, any other source as available.
+     */
+    private fun missingOf(source: SearchSource): Requirement? =
+        runCatching { source.missing(app) }.getOrElse { error ->
+            Log.w("SearchRepository", "Cannot check ${source.id}", error)
+            Requirement.VeloInstall.takeIf { source.id == io.github.davydgky.launcher.sources.VeloSource.ID }
+        }
 
     private fun applyAvailability() {
         for (source in sources) {
-            val missing = source.missing(app)
+            val missing = missingOf(source)
             val active = source.id !in prefs.disabledSources && missing == null
             updateStatus(source.id) {
                 SourceStatus(

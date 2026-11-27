@@ -76,6 +76,8 @@ data class LauncherPrefs(
     val islandSystemEvents: Boolean = true,
     /** With nothing to show, a small ring around the camera marks where the island is. */
     val islandIdleVisible: Boolean = true,
+    /** Width of the compact island beside the camera: 0 narrow (status bar icons stay free), 1 normal, 2 wide. */
+    val islandWidth: Int = 0,
 )
 
 class LauncherSettings(private val dataStore: DataStore<Preferences>) {
@@ -120,6 +122,7 @@ class LauncherSettings(private val dataStore: DataStore<Preferences>) {
                 islandNotifications = prefs[IslandNotificationsKey] ?: true,
                 islandSystemEvents = prefs[IslandSystemEventsKey] ?: true,
                 islandIdleVisible = prefs[IslandIdleVisibleKey] ?: true,
+                islandWidth = prefs[IslandWidthKey] ?: 0,
             )
         }
         .distinctUntilChanged()
@@ -225,8 +228,9 @@ class LauncherSettings(private val dataStore: DataStore<Preferences>) {
         dataStore.edit { it[ThemedIconsKey] = enabled }
     }
 
-    suspend fun setIsland(enabled: Boolean? = null, notifications: Boolean? = null, systemEvents: Boolean? = null, idleVisible: Boolean? = null) {
+    suspend fun setIsland(enabled: Boolean? = null, notifications: Boolean? = null, systemEvents: Boolean? = null, idleVisible: Boolean? = null, width: Int? = null) {
         dataStore.edit {
+            width?.let { v -> it[IslandWidthKey] = v }
             enabled?.let { v -> it[IslandEnabledKey] = v }
             notifications?.let { v -> it[IslandNotificationsKey] = v }
             systemEvents?.let { v -> it[IslandSystemEventsKey] = v }
@@ -284,6 +288,7 @@ class LauncherSettings(private val dataStore: DataStore<Preferences>) {
             put("islandNotifications", p.islandNotifications)
             put("islandSystemEvents", p.islandSystemEvents)
             put("islandIdleVisible", p.islandIdleVisible)
+            put("islandWidth", p.islandWidth)
         }
     }
 
@@ -316,6 +321,7 @@ class LauncherSettings(private val dataStore: DataStore<Preferences>) {
             (values["islandNotifications"] as? Boolean)?.let { prefs[IslandNotificationsKey] = it }
             (values["islandSystemEvents"] as? Boolean)?.let { prefs[IslandSystemEventsKey] = it }
             (values["islandIdleVisible"] as? Boolean)?.let { prefs[IslandIdleVisibleKey] = it }
+            (values["islandWidth"] as? Int)?.let { prefs[IslandWidthKey] = it }
             (values["appLabels"] as? Map<*, *>)?.let { map ->
                 prefs[AppLabelsKey] = map.mapNotNull { (k, v) -> if (k is String && v is String) "$k\t$v" else null }.toSet()
             }
@@ -361,6 +367,7 @@ class LauncherSettings(private val dataStore: DataStore<Preferences>) {
         val IslandNotificationsKey = booleanPreferencesKey("island_notifications")
         val IslandSystemEventsKey = booleanPreferencesKey("island_system_events")
         val IslandIdleVisibleKey = booleanPreferencesKey("island_idle_visible")
+        val IslandWidthKey = intPreferencesKey("island_width")
         const val MAX_RECENT = 6
         val LastUpdateCheckKey = longPreferencesKey("last_update_check")
     }

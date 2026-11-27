@@ -7,7 +7,6 @@
     <string name="island_service_needed">Needs “WEWEWE Island” in the accessibility settings, the only way Android lets apps draw around the camera.</string>
     <string name="settings_group_without_launcher">Search from anywhere</string>
     <string name="without_launcher_description">The island works with the Pixel Launcher or any other home screen. Besides pulling the island down, these open the search:</string>
-    <string name="quick_note_hint">Kept in the island\'s tray</string>
     <string name="update_up_to_date">WEWEWE Island is up to date (%1$s)</string>
     <string name="update_needs_permission">Allow WEWEWE Island to install apps, then tap again</string>
     <string name="update_scheduled">%1$s installs by itself while the phone is not in use</string>

@@ -58,7 +58,7 @@ data class MediaInfo(
     }
 }
 
-enum class PeekKind { Notification, Charging, BatteryLow, Ringer, Device, Done }
+enum class PeekKind { Notification, Reminder, Charging, BatteryLow, Ringer, Device, Done }
 
 /** A short message that widens the island for a few seconds, like a notification arriving. */
 data class Peek(

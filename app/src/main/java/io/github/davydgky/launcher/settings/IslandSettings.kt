@@ -95,6 +95,8 @@ internal fun LazyListScope.islandSettings(prefs: LauncherPrefs, notificationAcce
                 scope.launch { app.settings.setIsland(systemEvents = it) }
             }
             HorizontalDivider()
+            IslandWidthRow(prefs.islandWidth, enabled = prefs.islandEnabled) { scope.launch { app.settings.setIsland(width = it) } }
+            HorizontalDivider()
             SwitchRow(R.string.setting_island_idle, R.string.setting_island_idle_description, prefs.islandIdleVisible, enabled = prefs.islandEnabled) {
                 scope.launch { app.settings.setIsland(idleVisible = it) }
             }
@@ -153,6 +155,26 @@ private fun addTile(context: Context) {
         Icon.createWithResource(context, R.drawable.ic_search),
         context.mainExecutor,
     ) { }
+}
+
+/** How far the compact island reaches beside the camera; narrow leaves the status bar's icons free. */
+@Composable
+private fun IslandWidthRow(selected: Int, enabled: Boolean, onSelect: (Int) -> Unit) {
+    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)) {
+        Text(stringResource(R.string.setting_island_width), style = MaterialTheme.typography.titleMedium)
+        Text(stringResource(R.string.setting_island_width_description), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.size(8.dp))
+        Row(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)) {
+            listOf(R.string.island_width_narrow, R.string.island_width_normal, R.string.island_width_wide).forEachIndexed { index, label ->
+                androidx.compose.material3.FilterChip(
+                    selected = selected == index,
+                    onClick = { onSelect(index) },
+                    enabled = enabled,
+                    label = { Text(stringResource(label)) },
+                )
+            }
+        }
+    }
 }
 
 @Composable

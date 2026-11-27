@@ -28,7 +28,6 @@ import androidx.savedstate.SavedStateRegistryController
 import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import kotlin.math.abs
-import kotlin.math.max
 import kotlin.math.roundToInt
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -187,16 +186,19 @@ class IslandWindow(
         val hole = cutout?.boundingRectTop?.takeIf { !it.isEmpty && it.top < statusBar }
         // A camera in a corner cannot be surrounded by the island: then it sits in the middle, as on Macs without a notch.
         val centred = hole != null && abs(hole.centerX() - width / 2) < 48 * density
-        val pad = (5 * density).roundToInt()
-        val minHeight = (26 * density).roundToInt()
-        val holeHeight = if (centred) hole.height() else 0
-        val pillHeight = max(holeHeight + 2 * pad, minHeight).coerceAtMost(max(statusBar - (2 * density).roundToInt(), minHeight))
+        // The reported cutout is often larger than the camera itself (on Pixels nearly the whole status bar):
+        // the island stays a slim pill around the lens, as tall as the status bar's icons, never taller.
+        val pad = (4 * density).roundToInt()
+        val maxHole = (MAX_HOLE_DP * density).roundToInt()
+        val holeHeight = if (centred) minOf(hole.height(), hole.width(), maxHole) else 0
+        val holeWidth = if (centred) minOf(hole.width(), maxHole) else 0
+        val pillHeight = (holeHeight + 2 * pad).coerceIn((MIN_PILL_DP * density).roundToInt(), (MAX_PILL_DP * density).roundToInt())
         val centerY = if (centred) hole.centerY() else statusBar / 2
         controller.geometry = IslandGeometry(
             screenWidth = width,
             screenHeight = height,
             centerX = if (centred) hole.centerX() else width / 2,
-            holeWidth = if (centred) hole.width() else 0,
+            holeWidth = holeWidth,
             holeHeight = holeHeight,
             pillTop = (centerY - pillHeight / 2).coerceAtLeast((2 * density).roundToInt()),
             pillHeight = pillHeight,
@@ -238,6 +240,11 @@ class IslandWindow(
     private companion object {
         /** Longer than the island's spring takes to settle, so the window never cuts it off while it shrinks. */
         const val SHRINK_DELAY_MS = 650L
+
+        /** A front camera's lens is about 3 to 4 mm; a larger cutout is padding around it. */
+        const val MAX_HOLE_DP = 24f
+        const val MIN_PILL_DP = 24f
+        const val MAX_PILL_DP = 30f
 
         /** A full-screen app keeps the status bar hidden at least this long before the island goes. */
         const val FULL_SCREEN_DELAY_MS = 600L

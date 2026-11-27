@@ -487,11 +487,11 @@
     <string name="screen_text_none">Kein Text auf dem Bildschirm</string>
     <string name="screen_text_failed">Der Bildschirm ließ sich nicht lesen</string>
 
-    <string name="quick_note_title">Notiz</string>
-    <string name="quick_note_hint">Landet als Erinnerung in deiner ersten Liste im Organizer</string>
+    <string name="quick_note_title">Neue Erinnerung</string>
+    <string name="quick_note_hint">Landet in deiner ersten Erinnerungsliste; mit Uhrzeit meldet sie sich dann</string>
     <string name="quick_note_cancel">Abbrechen</string>
     <string name="quick_note_save">Speichern</string>
-    <string name="quick_note_saved">Notiz gespeichert</string>
+    <string name="quick_note_saved">Erinnerung gespeichert</string>
     <string name="quick_note_not_ready">Der Organizer lädt noch, versuch es gleich nochmal</string>
 
     <string name="share_tray_label">In die Island</string>
@@ -544,7 +544,7 @@
     <string name="permission_usage">Nutzungsdatenzugriff</string>
     <string name="permission_usage_purpose">Vorschläge nach Nutzung der Apps, auch außerhalb von WEWEWE</string>
     <string name="permission_post_notifications">Benachrichtigungen</string>
-    <string name="permission_post_notifications_purpose">„Update bereit“ und „Als Bubble öffnen“</string>
+    <string name="permission_post_notifications_purpose">Erinnerungen zur Uhrzeit, „Update bereit“, „Als Bubble öffnen“</string>
     <string name="permission_install">Updates installieren</string>
     <string name="permission_install_purpose">Neue Versionen installieren sich selbst</string>
     <string name="permission_velo">Velo</string>
@@ -552,4 +552,20 @@
     <string name="update_channel">Updates</string>
     <string name="update_ready_title">Update %1$s ist bereit</string>
     <string name="update_ready_text">Zum Installieren tippen. Android fragt einmal, danach installieren sich Updates von selbst.</string>
+    <string name="reminders_label">Erinnerungen</string>
+    <string name="setting_island_width">Breite neben der Kamera</string>
+    <string name="setting_island_width_description">Wie weit Musik, Timer und Co. neben die Kamera reichen. Schmal lässt die Symbole der Statusleiste (VPN, Nicht stören) frei.</string>
+    <string name="island_width_narrow">Schmal</string>
+    <string name="island_width_normal">Normal</string>
+    <string name="island_width_wide">Breit</string>
+    <string name="reminder_due_now">Jetzt</string>
+    <string name="reminder_done">Erledigt</string>
+    <string name="reminder_snooze">In 10 Minuten</string>
+    <string name="reminder_add">Neue Erinnerung</string>
+    <string name="reminders_all">Alle</string>
+    <string name="reminders_none">Keine offenen Erinnerungen</string>
+    <string name="reminder_today">Heute</string>
+    <string name="reminder_tomorrow">Morgen</string>
+    <string name="reminders_more">+%1$d weitere</string>
+    <string name="reminder_time">Uhrzeit</string>
 </resources>

@@ -123,6 +123,12 @@ class IslandHub(private val context: Context, private val scope: CoroutineScope)
 
     // region Notifications
 
+    /** For tests: live activities as if they came from notifications. */
+    @androidx.annotation.VisibleForTesting
+    internal fun setLiveForTest(items: List<LiveItem>) {
+        live.value = items
+    }
+
     internal fun listenerConnected(service: NotificationListenerService) = safely("listener") { connect(service) }
 
     private fun connect(service: NotificationListenerService) {

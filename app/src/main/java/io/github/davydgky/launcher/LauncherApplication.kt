@@ -73,11 +73,11 @@ class LauncherApplication : Application() {
         // Updates are looked for every few hours, also when no screen of the app is opened.
         io.github.davydgky.launcher.update.UpdateJob.schedule(this)
         search.start()
-        // The island app has no home screen to arrange; its notes go to the island's tray.
-        if (BuildConfig.IS_LAUNCHER) {
-            workspace.start()
-            organizer.start()
-        }
+        // The island app has no home screen to arrange; the reminders it has as well.
+        if (BuildConfig.IS_LAUNCHER) workspace.start()
+        organizer.start()
+        // Reminders with a time remind at that time, with a notification and in the island.
+        io.github.davydgky.launcher.organizer.ReminderAlarms.watch(this)
     }
 }
 

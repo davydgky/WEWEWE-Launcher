@@ -35,11 +35,11 @@ jobs:
 
       - name: Compile and unit tests
         if: steps.mode.outputs.full != 'true'
-        run: ./gradlew --stacktrace :core:test compileLauncherDebugKotlin compileIslandDebugKotlin testLauncherDebugUnitTest
+        run: ./gradlew --stacktrace :core:test compileLauncherDebugKotlin compileIslandDebugKotlin testLauncherDebugUnitTest testIslandDebugUnitTest
 
       - name: Build, unit tests and lint
         if: steps.mode.outputs.full == 'true'
-        run: ./gradlew --stacktrace :core:test assembleLauncherDebug assembleLauncherRelease assembleIslandRelease testLauncherDebugUnitTest lintLauncherDebug lintIslandDebug
+        run: ./gradlew --stacktrace :core:test assembleLauncherDebug assembleLauncherRelease assembleIslandRelease testLauncherDebugUnitTest testIslandDebugUnitTest lintLauncherDebug lintIslandDebug
 
       # Searches never leave the device: the updater is the only code that may open connections.
       - name: Check that only the updater and the Play Store results use the network

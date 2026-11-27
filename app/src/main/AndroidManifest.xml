@@ -44,6 +44,8 @@
     <uses-permission android:name="com.android.alarm.permission.SET_ALARM" />
     <!-- The periodic update check (update/UpdateJob.kt) survives a reboot. -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- Reminders remind at their exact time (granted to reminder apps without asking). -->
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
 
     <queries>
         <intent>
@@ -121,6 +123,16 @@
         <receiver
             android:name=".update.InstallResultReceiver"
             android:exported="false" />
+
+        <!-- The time of a reminder, its "Done" and "In 10 minutes", and a restart (the app sets the alarm again). -->
+        <receiver
+            android:name=".organizer.ReminderReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
 
         <!-- Looks for updates every few hours; the island app has no home screen that would. -->
         <service
@@ -234,6 +246,14 @@
             android:exported="false"
             android:taskAffinity="io.github.davydgky.launcher.island"
             android:theme="@style/Theme.Settings" />
+
+        <!-- The organizer (calendar and reminders) as a screen of its own, for the island and the island app. -->
+        <activity
+            android:name=".organizer.OrganizerActivity"
+            android:exported="false"
+            android:label="@string/reminders_label"
+            android:taskAffinity="io.github.davydgky.launcher.organizer"
+            android:theme="@style/Theme.Launcher" />
 
         <!-- A quick note from the island, saved as a reminder in the organizer. -->
         <activity

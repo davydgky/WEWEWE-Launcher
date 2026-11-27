@@ -1,9 +1,11 @@
 package io.github.davydgky.launcher.island
 
+import android.app.TimePickerDialog
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Intent
 import android.os.Bundle
+import android.text.format.DateFormat
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -26,6 +28,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
@@ -47,38 +50,38 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
-import io.github.davydgky.launcher.BuildConfig
 import io.github.davydgky.launcher.R
 import io.github.davydgky.launcher.core.UrlCleaner
 import io.github.davydgky.launcher.launcherApp
 import io.github.davydgky.launcher.ui.LauncherTheme
 
 /**
- * A quick note from the island: one line, saved as a reminder in the first list of the organizer, so
- * it is found again on the organizer page and in the search.
+ * A new reminder from the island, as on the organizer page: a title, and if wanted a day (today,
+ * tomorrow) and a time. It goes into the first list of the organizer; with a time it reminds then.
  */
 class QuickNoteActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        launcherApp.organizer.start()
         setContent {
             LauncherTheme {
                 var text by rememberSaveable { mutableStateOf("") }
+                // 0 no day, 1 today, 2 tomorrow.
+                var day by rememberSaveable { mutableStateOf(0) }
+                var minutes by rememberSaveable { mutableStateOf<Int?>(null) }
                 val focus = remember { FocusRequester() }
                 LaunchedEffect(Unit) { focus.requestFocus() }
                 val save = {
                     val title = text.trim()
-                    if (title.isNotEmpty() && !BuildConfig.IS_LAUNCHER) {
-                        // The island app has no organizer page: the note is kept in the tray, where it is seen.
-                        launcherApp.island.addToShelf(title)
-                        launcherApp.island.confirm(getString(R.string.quick_note_saved), R.drawable.ic_note)
-                    } else if (title.isNotEmpty()) {
+                    if (title.isNotEmpty()) {
                         val organizer = launcherApp.organizer
                         val list = organizer.organizer.value?.lists?.minByOrNull { it.order }
                         if (list != null) {
-                            organizer.addTodo(list.id, title, dueAtMillis = null, hasTime = false)
-                            launcherApp.island.confirm(getString(R.string.quick_note_saved), R.drawable.ic_note)
+                            val due = dueOf(day, minutes)
+                            organizer.addTodo(list.id, title, dueAtMillis = due, hasTime = due != null && minutes != null)
+                            launcherApp.island.confirm(getString(R.string.quick_note_saved), R.drawable.ic_bell)
                         } else {
                             Toast.makeText(this, R.string.quick_note_not_ready, Toast.LENGTH_SHORT).show()
                         }
@@ -112,8 +115,30 @@ class QuickNoteActivity : ComponentActivity() {
                                 modifier = Modifier.fillMaxWidth().focusRequester(focus),
                                 keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, imeAction = ImeAction.Done),
                                 keyboardActions = KeyboardActions(onDone = { save() }),
-                                minLines = 2,
+                                singleLine = true,
                             )
+                            Row(Modifier.fillMaxWidth().padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                FilterChip(selected = day == 1, onClick = { day = if (day == 1) 0 else 1 }, label = { Text(stringResource(R.string.reminder_today)) })
+                                FilterChip(selected = day == 2, onClick = { day = if (day == 2) 0 else 2 }, label = { Text(stringResource(R.string.reminder_tomorrow)) })
+                                val timeLabel = minutes?.let { m -> DateFormat.getTimeFormat(this@QuickNoteActivity).format(java.util.Date(dueOf(1, m)!!)) }
+                                FilterChip(
+                                    selected = minutes != null,
+                                    onClick = {
+                                        val now = java.time.LocalTime.now().plusHours(1)
+                                        TimePickerDialog(
+                                            this@QuickNoteActivity,
+                                            { _, hour, minute ->
+                                                minutes = hour * 60 + minute
+                                                if (day == 0) day = 1
+                                            },
+                                            minutes?.div(60) ?: now.hour,
+                                            minutes?.rem(60) ?: 0,
+                                            DateFormat.is24HourFormat(this@QuickNoteActivity),
+                                        ).show()
+                                    },
+                                    label = { Text(timeLabel ?: stringResource(R.string.reminder_time)) },
+                                )
+                            }
                             Row(Modifier.fillMaxWidth().padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)) {
                                 TextButton(onClick = { finish() }) { Text(stringResource(R.string.quick_note_cancel)) }
                                 Button(onClick = { save() }, enabled = text.isNotBlank()) { Text(stringResource(R.string.quick_note_save)) }
@@ -123,6 +148,23 @@ class QuickNoteActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    /**
+     * The due time: [day] 1 today, 2 tomorrow, 0 none; [minutes] after midnight or null for the whole day.
+     * A time today that has passed already means tomorrow.
+     */
+    private fun dueOf(day: Int, minutes: Int?): Long? {
+        if (day == 0 && minutes == null) return null
+        val zone = java.time.ZoneId.systemDefault()
+        var date = java.time.LocalDate.now(zone).plusDays(if (day == 2) 1 else 0)
+        if (minutes == null) return date.atStartOfDay(zone).toInstant().toEpochMilli()
+        var at = date.atTime(minutes / 60, minutes % 60).atZone(zone).toInstant().toEpochMilli()
+        if (day != 2 && at < System.currentTimeMillis()) {
+            date = date.plusDays(1)
+            at = date.atTime(minutes / 60, minutes % 60).atZone(zone).toInstant().toEpochMilli()
+        }
+        return at
     }
 }
 

@@ -488,11 +488,11 @@
     <string name="screen_text_none">No text on the screen</string>
     <string name="screen_text_failed">The screen could not be read</string>
 
-    <string name="quick_note_title">Note</string>
-    <string name="quick_note_hint">Saved as a reminder in your first list on the organizer page</string>
+    <string name="quick_note_title">New reminder</string>
+    <string name="quick_note_hint">Goes into your first list of reminders; with a time it reminds you then</string>
     <string name="quick_note_cancel">Cancel</string>
     <string name="quick_note_save">Save</string>
-    <string name="quick_note_saved">Note saved</string>
+    <string name="quick_note_saved">Reminder saved</string>
     <string name="quick_note_not_ready">The organizer is still loading, try again</string>
 
     <string name="share_tray_label">Into the island</string>
@@ -545,7 +545,7 @@
     <string name="permission_usage">Usage access</string>
     <string name="permission_usage_purpose">Suggestions from how often you use apps, also outside WEWEWE</string>
     <string name="permission_post_notifications">Notifications</string>
-    <string name="permission_post_notifications_purpose">“Update ready” and “Open as bubble”</string>
+    <string name="permission_post_notifications_purpose">Reminders at their time, “Update ready”, “Open as bubble”</string>
     <string name="permission_install">Install updates</string>
     <string name="permission_install_purpose">New versions install themselves</string>
     <string name="permission_velo">Velo</string>
@@ -553,4 +553,20 @@
     <string name="update_channel">Updates</string>
     <string name="update_ready_title">Update %1$s is ready</string>
     <string name="update_ready_text">Tap to install. Android asks once; later updates install by themselves.</string>
+    <string name="reminders_label">Reminders</string>
+    <string name="setting_island_width">Width beside the camera</string>
+    <string name="setting_island_width_description">How far music, timers and the like reach beside the camera. Narrow keeps the status bar\'s icons (VPN, Do not disturb) free.</string>
+    <string name="island_width_narrow">Narrow</string>
+    <string name="island_width_normal">Normal</string>
+    <string name="island_width_wide">Wide</string>
+    <string name="reminder_due_now">Now</string>
+    <string name="reminder_done">Done</string>
+    <string name="reminder_snooze">In 10 minutes</string>
+    <string name="reminder_add">New reminder</string>
+    <string name="reminders_all">All</string>
+    <string name="reminders_none">No open reminders</string>
+    <string name="reminder_today">Today</string>
+    <string name="reminder_tomorrow">Tomorrow</string>
+    <string name="reminders_more">+%1$d more</string>
+    <string name="reminder_time">Time</string>
 </resources>
