@@ -103,6 +103,10 @@ internal fun LazyListScope.islandSettings(prefs: LauncherPrefs, notificationAcce
             HorizontalDivider()
             PillTuningRows(prefs, enabled = prefs.islandEnabled) { height, offset -> scope.launch { app.settings.setIsland(pillHeight = height, offset = offset) } }
             HorizontalDivider()
+            SwitchRow(R.string.setting_island_mascot, R.string.setting_island_mascot_description, prefs.islandMascot, enabled = prefs.islandEnabled) {
+                scope.launch { app.settings.setIsland(mascot = it) }
+            }
+            HorizontalDivider()
             SwitchRow(R.string.setting_island_idle, R.string.setting_island_idle_description, prefs.islandIdleVisible, enabled = prefs.islandEnabled) {
                 scope.launch { app.settings.setIsland(idleVisible = it) }
             }

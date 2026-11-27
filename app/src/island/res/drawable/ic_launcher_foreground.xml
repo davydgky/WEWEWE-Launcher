@@ -1,15 +1,37 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- A Dynamic Island: a capsule around the camera, with music bars beside it; in the 66 dp safe zone. -->
+<!--
+    The wewewe.studio mascot (concept 2, monoline W arch), from the master SVG (512 x 512). The viewport is
+    768 wide so that the 512 artwork fills the adaptive icon's visible 72 dp of 108 dp; the edge marks of
+    the icon background run off the mask as in the SVG.
+-->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
-    android:viewportWidth="108"
-    android:viewportHeight="108">
-    <path android:fillColor="#FFFFFFFF" android:pathData="M39,43h30a11,11 0,0 1,0 22h-30a11,11 0,0 1,0 -22z" />
-    <path android:fillColor="#FF2F6BFF" android:pathData="M67,54m-4.5,0a4.5,4.5 0,1 1,9 0a4.5,4.5 0,1 1,-9 0" />
-    <path
-        android:strokeColor="#FF7A4DFF"
-        android:strokeWidth="3"
-        android:strokeLineCap="round"
-        android:pathData="M37,51v6 M42,48v12 M47,50v8" />
+    android:viewportWidth="768"
+    android:viewportHeight="768">
+    <group android:translateX="128" android:translateY="128">
+        <!-- Icon background marks -->
+        <path android:pathData="M332,82 A16,16 0 0,1 364,82" android:strokeColor="#2D2B38" android:strokeWidth="7" android:strokeLineCap="round" />
+        <path android:pathData="M142,436 A10,10 0 1,0 162,436 A10,10 0 1,0 142,436 Z" android:strokeColor="#2D2B38" android:strokeWidth="7" />
+        <path android:pathData="M284,512 A34,34 0 0,1 352,512" android:strokeColor="#2D2B38" android:strokeWidth="7" />
+        <path android:pathData="M512,146 A26,26 0 0,0 512,198" android:strokeColor="#2D2B38" android:strokeWidth="7" />
+        <path android:pathData="M111.5,134 A4.5,4.5 0 1,0 120.5,134 A4.5,4.5 0 1,0 111.5,134 Z" android:fillColor="#2D2B38" />
+        <path android:pathData="M196.5,74 A3.5,3.5 0 1,0 203.5,74 A3.5,3.5 0 1,0 196.5,74 Z" android:fillColor="#2D2B38" />
+        <path android:pathData="M432,360 A4,4 0 1,0 440,360 A4,4 0 1,0 432,360 Z" android:fillColor="#2D2B38" />
+
+        <!-- Head dome and eyes -->
+        <path android:pathData="M150,278 C144,166 190,108 256,108 C322,108 360,156 354,274 L256,324 Z" android:fillColor="#DDD0F8" android:strokeColor="#2D2B38" android:strokeWidth="13" android:strokeLineJoin="round" android:strokeLineCap="round" />
+        <path android:pathData="M225.5,192 A10.5,10.5 0 1,0 246.5,192 A10.5,10.5 0 1,0 225.5,192 Z" android:fillColor="#2D2B38" />
+        <path android:pathData="M285.5,190 A10.5,10.5 0 1,0 306.5,190 A10.5,10.5 0 1,0 285.5,190 Z" android:fillColor="#2D2B38" />
+
+        <!-- W body: pastel areas clipped to the silhouette, no lines between lilac and rosé -->
+        <group>
+            <clip-path android:pathData="M184,286 C208,240 272,240 298,294 L342,224 A42.2,42.2 0 1,1 410,274 C386,307 372,344 348,376 C326,405 284,412 256,368 C230,416 166,412 128,334 C102,281 92,224 132,218 C164,214 182,246 184,286 Z" />
+            <path android:pathData="M70,180 L450,180 L450,440 L70,440 Z" android:fillColor="#D3B1EC" />
+            <path android:pathData="M80,190 L195,190 L184,286 C174,314 144,326 121,318 L80,310 Z" android:fillColor="#C5B4F4" />
+            <path android:pathData="M298,294 C286,322 272,346 256,368 L256,440 L450,440 L450,180 L320,180 Z" android:fillColor="#F9A8B4" />
+        </group>
+        <path android:pathData="M184,286 C174,314 144,326 121,318" android:strokeColor="#2D2B38" android:strokeWidth="13" android:strokeLineCap="round" />
+        <path android:pathData="M184,286 C208,240 272,240 298,294 L342,224 A42.2,42.2 0 1,1 410,274 C386,307 372,344 348,376 C326,405 284,412 256,368 C230,416 166,412 128,334 C102,281 92,224 132,218 C164,214 182,246 184,286 Z" android:strokeColor="#2D2B38" android:strokeWidth="13" android:strokeLineJoin="round" android:strokeLineCap="round" />
+    </group>
 </vector>

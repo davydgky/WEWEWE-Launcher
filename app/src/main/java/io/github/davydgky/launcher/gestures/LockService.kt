@@ -81,7 +81,7 @@ class LockService : AccessibilityService(), IslandActions {
             combine(app.settings.prefs, islandAppInstalled) { prefs, otherApp ->
                 IslandPrefs(
                     prefs.islandEnabled && !otherApp, prefs.islandNotifications, prefs.islandSystemEvents, prefs.islandIdleVisible, prefs.islandWidth,
-                    QuickToggle.fromIds(prefs.islandToggles ?: QuickToggle.DEFAULT.map { it.id }), prefs.islandPillHeight, prefs.islandOffset,
+                    QuickToggle.fromIds(prefs.islandToggles ?: QuickToggle.DEFAULT.map { it.id }), prefs.islandPillHeight, prefs.islandOffset, prefs.islandMascot,
                 )
             }
                 .distinctUntilChanged()
@@ -90,6 +90,7 @@ class LockService : AccessibilityService(), IslandActions {
                     app.island.systemPeeks = prefs.systemEvents
                     window.controller.idleVisible = prefs.idleVisible
                     window.controller.toggles = prefs.toggles
+                    window.controller.mascot = prefs.mascot
                     window.setTuning(prefs.pillHeight, prefs.offset)
                     window.controller.sideWidth = when (prefs.width) {
                         2 -> IslandController.SIDE_WIDE
@@ -114,6 +115,7 @@ class LockService : AccessibilityService(), IslandActions {
         val toggles: List<QuickToggle>,
         val pillHeight: Float,
         val offset: Float,
+        val mascot: Boolean,
     )
 
     override fun onConfigurationChanged(newConfig: Configuration) {
