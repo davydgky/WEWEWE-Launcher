@@ -8,10 +8,12 @@ import android.provider.CalendarContract
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -152,6 +154,12 @@ private class IslandSizes(g: IslandGeometry, sideWidth: Dp, mascot: Boolean) {
     val mascotSlot = pillHeight * 1.15f + 6.dp
     /** At rest: the ring around the camera, or the mascot beside it (the pill stays centred on the camera). */
     val idleWidth = if (mascot) holeGap + mascotSlot * 2 else maxOf(pillHeight, holeGap)
+    /**
+     * At rest with the mascot the pill only reaches out on the mascot's side: on the other it ends round
+     * around the camera, nothing empty beside it. [idleShift] moves it so the camera stays in its place.
+     */
+    val idleMascotWidth = mascotSlot + holeGap / 2 + pillHeight / 2
+    val idleShift = (pillHeight / 2 - mascotSlot - holeGap / 2) / 2
     /** Width on each side of the camera; narrow enough by default to leave the status bar's icons free. */
     val side = sideWidth
     val compactWidth = holeGap + side * 2
@@ -159,8 +167,8 @@ private class IslandSizes(g: IslandGeometry, sideWidth: Dp, mascot: Boolean) {
     val bubbleGap = 6.dp
     /** Widest the window can be while staying centred on the camera. */
     val maxWidth = (2 * min(g.centerX, g.screenWidth - g.centerX) / density).dp
-    val peekWidth = minOf(maxWidth - 20.dp, 400.dp)
-    val systemPeekWidth = minOf(maxWidth - 20.dp, holeGap + 220.dp)
+    val peekWidth = minOf(maxWidth - 16.dp, 420.dp)
+    val systemPeekWidth = minOf(maxWidth - 20.dp, holeGap + 240.dp)
     val expandedWidth = minOf(maxWidth - 16.dp, 440.dp)
     val corner = 40.dp
 }
@@ -229,7 +237,13 @@ fun IslandContent(controller: IslandController) {
             // and the bubble beside it is inside the box (touches outside a layout's bounds do not reach it).
             val width = if (bubble) Modifier.width(sizes.compactWidth + (sizes.bubbleGap + sizes.bubble) * 2) else Modifier
             Box(Modifier.align(Alignment.TopCenter).padding(top = sizes.pillTop).then(width)) {
-                IslandSurface(controller, sizes, display, primary, currentPeek, shown, Modifier.align(Alignment.TopCenter))
+                // At rest with the mascot the pill sits to the camera's left (see IslandSizes.idleShift).
+                val shift by animateDpAsState(
+                    if (display == IslandMode.Idle && controller.mascot) sizes.idleShift else 0.dp,
+                    spring(dampingRatio = 0.8f, stiffness = 420f),
+                    label = "islandShift",
+                )
+                IslandSurface(controller, sizes, display, primary, currentPeek, shown, Modifier.align(Alignment.TopCenter).offset(x = shift))
                 if (bubble && secondary != null) {
                     Bubble(secondary, sizes, Modifier.align(Alignment.TopEnd), onTap = controller::expand)
                 }
@@ -262,7 +276,7 @@ private fun windowRequestFor(
         large -> WindowRequest(maxWidth, (geometry.screenHeight * 0.85f).roundToInt(), large = true)
         mode == IslandMode.Peek -> {
             val width = if (peekStyle == PeekStyle.Notification) sizes.peekWidth else sizes.systemPeekWidth
-            val height = sizes.pillHeight + if (peekStyle == PeekStyle.Notification) 64.dp else 0.dp
+            val height = sizes.pillHeight + if (peekStyle == PeekStyle.Notification) 96.dp else 0.dp
             request(width + margin * 2, bottom + height + margin)
         }
         mode == IslandMode.Compact -> {
@@ -372,11 +386,14 @@ private fun IslandSurface(
         label = "island",
     ) { target ->
         when {
-            target == IslandMode.Idle.name && controller.mascot -> SplitRow(
-                sizes, Modifier.size(sizes.idleWidth, sizes.pillHeight), startPadding = 4.dp, endPadding = 4.dp,
-                left = { MascotInPill(sizes.pillHeight, MascotMood.Idle) },
-                right = {},
-            )
+            target == IslandMode.Idle.name && controller.mascot -> Row(
+                Modifier.size(sizes.idleMascotWidth, sizes.pillHeight),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(Modifier.width(sizes.mascotSlot).fillMaxHeight().padding(start = 4.dp), contentAlignment = Alignment.CenterStart) {
+                    MascotInPill(sizes.pillHeight, MascotMood.Idle)
+                }
+            }
             target == IslandMode.Idle.name || target == IslandMode.Hidden.name -> Box(Modifier.size(sizes.idleWidth, sizes.pillHeight))
             target == IslandMode.Expanded.name -> ExpandedIsland(controller, sizes)
             target.startsWith("compact:") -> {
@@ -661,31 +678,68 @@ private fun ProgressRing(progress: Float?, color: Color, size: Dp) {
 @Composable
 private fun PeekIsland(peek: Peek, sizes: IslandSizes, mascot: Boolean) {
     if (peek.style() == PeekStyle.Notification) {
-        Column(Modifier.width(sizes.peekWidth)) {
-            SplitRow(sizes, Modifier.fillMaxWidth().height(sizes.pillHeight + 6.dp), left = {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    PeekImage(peek, 22.dp)
-                    Spacer(Modifier.width(8.dp))
-                    IslandText(peek.title, Color.White, 14.sp, weight = FontWeight.SemiBold)
+        // The mascot throws the notification in: it braces itself beside the camera, and a moment later the
+        // card flies from its side down into place, turning straight as it lands.
+        val thrown = remember(peek.id) { Animatable(if (mascot) 0f else 1f) }
+        LaunchedEffect(peek.id) {
+            if (mascot) {
+                delay(THROW_DELAY_MS)
+                thrown.animateTo(1f, spring(dampingRatio = 0.6f, stiffness = 190f))
+            }
+        }
+        Column(Modifier.width(sizes.peekWidth).padding(bottom = 16.dp)) {
+            // The row around the camera: the mascot on the left (where it sits at rest), the app on the right.
+            // The row's ends lie in the island's round corners: they keep well clear of the curve.
+            SplitRow(sizes, Modifier.fillMaxWidth().height(sizes.pillHeight + 4.dp).padding(top = 4.dp), startPadding = 26.dp, endPadding = 34.dp, left = {
+                if (mascot) {
+                    MascotInPill(sizes.pillHeight + 4.dp, MascotMood.Happy, bounce = peek.id)
+                } else {
+                    PeekSource(peek)
                 }
             }, right = {
-                // The mascot is glad about every notification; without it, "now".
-                if (mascot) MascotInPill(sizes.pillHeight + 6.dp, MascotMood.Happy, bounce = peek.id) else IslandText(stringResource(R.string.island_now), Secondary, 12.sp)
+                if (mascot && peek.source.isNotBlank()) {
+                    PeekSource(peek, alignEnd = true)
+                } else {
+                    IslandText(stringResource(R.string.island_now), Secondary, 12.sp)
+                }
             })
-            if (peek.text.isNotBlank()) {
-                Text(
-                    peek.text,
-                    color = Color.White.copy(alpha = 0.88f),
-                    style = TextStyle(fontSize = 14.sp, lineHeight = 18.sp),
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
-                )
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(start = 18.dp, end = 22.dp, top = 6.dp)
+                    .graphicsLayer {
+                        val t = thrown.value
+                        val left = 1f - t
+                        // From the mascot's corner, small and tilted, to its place.
+                        translationX = -left * 72.dp.toPx()
+                        translationY = -left * 38.dp.toPx()
+                        rotationZ = -left * 12f
+                        scaleX = 0.72f + 0.28f * t
+                        scaleY = 0.72f + 0.28f * t
+                        alpha = (t * 1.6f).coerceIn(0f, 1f)
+                        transformOrigin = TransformOrigin(0f, 0f)
+                    },
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                PeekAvatar(peek, 42.dp)
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f)) {
+                    IslandText(peek.title, Color.White, 15.sp, weight = FontWeight.SemiBold)
+                    if (peek.text.isNotBlank()) {
+                        Text(
+                            peek.text,
+                            color = Color.White.copy(alpha = 0.82f),
+                            style = TextStyle(fontSize = 14.sp, lineHeight = 18.sp),
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
             }
         }
     } else {
         val tint = Color(peek.tint)
-        SplitRow(sizes, Modifier.width(sizes.systemPeekWidth).height(sizes.pillHeight), left = {
+        SplitRow(sizes, Modifier.width(sizes.systemPeekWidth).height(sizes.pillHeight), startPadding = 14.dp, endPadding = 16.dp, left = {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Glyph(peek.iconRes, tint, 18.dp)
                 Spacer(Modifier.width(6.dp))
@@ -703,13 +757,36 @@ private fun PeekIsland(peek: Peek, sizes: IslandSizes, mascot: Boolean) {
     }
 }
 
+/** Delay between the mascot's jump and the card leaving its hands. */
+private const val THROW_DELAY_MS = 140L
+
+/** The sender's picture, or the app's icon, or a bell for a reminder, round. */
 @Composable
-private fun PeekImage(peek: Peek, size: Dp) {
+private fun PeekAvatar(peek: Peek, size: Dp) {
     val image = rememberImage(peek.image)
     if (image != null) {
         Image(image, null, Modifier.size(size).clip(CircleShape), contentScale = ContentScale.Crop)
     } else {
-        Glyph(R.drawable.ic_bell, Color.White, size)
+        val tint = if (peek.tint != 0) Color(peek.tint) else Color.White
+        Box(Modifier.size(size).clip(CircleShape).background(tint.copy(alpha = 0.18f)), contentAlignment = Alignment.Center) {
+            Glyph(if (peek.iconRes != 0) peek.iconRes else R.drawable.ic_bell, tint, size * 0.5f)
+        }
+    }
+}
+
+/** The app it comes from: its icon and name, small, with "now". */
+@Composable
+private fun PeekSource(peek: Peek, alignEnd: Boolean = false) {
+    val icon = rememberImage(peek.sourceIcon)
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = if (alignEnd) Arrangement.End else Arrangement.Start) {
+        if (icon != null) {
+            Image(icon, null, Modifier.size(16.dp).clip(CircleShape))
+            Spacer(Modifier.width(6.dp))
+        }
+        IslandText(
+            listOf(peek.source, stringResource(R.string.island_now)).filter { it.isNotBlank() }.joinToString(" · "),
+            Secondary, 12.sp,
+        )
     }
 }
 

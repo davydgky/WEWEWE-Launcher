@@ -100,6 +100,7 @@ object ReminderAlarms {
                     kind = PeekKind.Reminder,
                     title = todo.title,
                     text = context.getString(R.string.reminder_due_now),
+                    source = context.getString(R.string.reminders_label),
                     iconRes = R.drawable.ic_bell,
                     tint = 0xFFFFD60A.toInt(),
                     durationMs = 8_000,

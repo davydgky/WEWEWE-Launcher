@@ -224,6 +224,8 @@ class IslandHub(private val context: Context, private val scope: CoroutineScope)
                 text = if (secret) context.getString(R.string.island_new_notification) else text,
                 image = image,
                 notificationKey = sbn.key,
+                source = label,
+                sourceIcon = appIcon(sbn.packageName),
                 contentIntent = n.contentIntent,
                 autoCancel = n.flags and Notification.FLAG_AUTO_CANCEL != 0,
                 durationMs = 5_000,

@@ -77,6 +77,10 @@ data class Peek(
     /** For charging: the battery level 0..100, shown as a ring. */
     val level: Int? = null,
     val durationMs: Long = 4_000,
+    /** Where it comes from (the app's name), shown small above it. */
+    val source: String = "",
+    /** The app's icon beside [source]. */
+    val sourceIcon: Bitmap? = null,
 )
 
 /** Something parked in the island's tray, from "Share" in any app. */
