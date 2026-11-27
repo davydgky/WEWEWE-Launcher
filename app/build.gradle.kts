@@ -20,6 +20,30 @@ android {
         androidResources.localeFilters += listOf("en", "de")
         // GitHub repository whose releases the in-app updater follows.
         buildConfigField("String", "UPDATE_REPOSITORY", "\"davydgky/WEWEWE-Launcher\"")
+        // The island app: while it is installed, the launcher leaves the island to it.
+        buildConfigField("String", "ISLAND_PACKAGE", "\"io.github.davydgky.island\"")
+        // The launcher: the island app shares its reminders with it.
+        buildConfigField("String", "LAUNCHER_PACKAGE", "\"io.github.davydgky.launcher\"")
+    }
+
+    // Two apps from one code base: the launcher, and the Dynamic Island on its own for any home screen
+    // (the Pixel Launcher stays active). The island app has the island, the search and its ways in,
+    // but no home screen; both can be installed side by side.
+    flavorDimensions += "app"
+    productFlavors {
+        create("launcher") {
+            dimension = "app"
+            isDefault = true
+            buildConfigField("boolean", "IS_LAUNCHER", "true")
+            // Release assets are named <prefix>-<versionCode>.apk; each app updates from its own.
+            buildConfigField("String", "APK_PREFIX", "\"launcher\"")
+        }
+        create("island") {
+            dimension = "app"
+            applicationId = "io.github.davydgky.island"
+            buildConfigField("boolean", "IS_LAUNCHER", "false")
+            buildConfigField("String", "APK_PREFIX", "\"island\"")
+        }
     }
 
     signingConfigs {
@@ -60,6 +84,10 @@ android {
         }
     }
 
+    testOptions {
+        unitTests.isIncludeAndroidResources = true
+    }
+
     lint {
         abortOnError = true
         checkReleaseBuilds = false
@@ -95,6 +123,12 @@ dependencies {
     implementation(libs.mlkit.genai.prompt)
 
     testImplementation(libs.junit)
+    // The island, the search and the settings rendered on the JVM, to catch crashes before a phone does.
+    testImplementation(libs.robolectric)
+    testImplementation(libs.androidx.test.core)
+    testImplementation(platform(libs.androidx.compose.bom))
+    testImplementation(libs.androidx.compose.ui.test.junit4)
+    debugImplementation(libs.androidx.compose.ui.test.manifest)
     // Real org.json for JVM unit tests (android.jar only contains stubs).
     testImplementation(libs.org.json)
 }

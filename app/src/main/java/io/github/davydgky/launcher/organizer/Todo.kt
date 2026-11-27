@@ -66,6 +66,8 @@ data class OrganizerState(
     /** The page's parts from top to bottom ([OrganizerSections]). */
     val sections: List<String> = OrganizerSections.DEFAULT,
     val hiddenSections: Set<String> = emptySet(),
+    /** When the reminders last changed (wall time), so the launcher and the island app keep the newer ones. */
+    val modifiedAt: Long = 0L,
 ) {
 
     fun list(id: Long): TodoList? = lists.firstOrNull { it.id == id }
@@ -138,6 +140,7 @@ object OrganizerCodec {
         put("scannedUntil", state.scannedUntil)
         put("sections", JSONArray(state.sections))
         put("hidden", JSONArray(state.hiddenSections.sorted()))
+        put("modifiedAt", state.modifiedAt)
     }.toString()
 
     fun decode(text: String): OrganizerState {
@@ -189,6 +192,7 @@ object OrganizerCodec {
             scannedUntil = root.optLong("scannedUntil"),
             sections = OrganizerSections.normalized(root.optJSONArray("sections").strings()),
             hiddenSections = root.optJSONArray("hidden").strings().filterTo(HashSet()) { it in OrganizerSections.DEFAULT },
+            modifiedAt = root.optLong("modifiedAt"),
         )
     }
 

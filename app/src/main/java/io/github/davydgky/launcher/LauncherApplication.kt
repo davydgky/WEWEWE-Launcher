@@ -13,6 +13,7 @@ import io.github.davydgky.launcher.home.WorkspaceRepository
 import io.github.davydgky.launcher.organizer.OrganizerRepository
 import io.github.davydgky.launcher.organizer.TodoSuggester
 import io.github.davydgky.launcher.index.IndexStore
+import io.github.davydgky.launcher.island.IslandHub
 import io.github.davydgky.launcher.messages.Messages
 import io.github.davydgky.launcher.notifications.Notifications
 import io.github.davydgky.launcher.perf.PerfStats
@@ -52,6 +53,7 @@ class LauncherApplication : Application() {
     val updater: AppUpdater by lazy { AppUpdater(this, settings, appScope) }
     val torch: Torch by lazy { Torch(this) }
     val notifications: Notifications by lazy { Notifications(this) }
+    val island: IslandHub by lazy { IslandHub(this, appScope) }
     val nano: NanoAnswers by lazy { NanoAnswers(appScope) }
     val appKnowledge: AppKnowledge by lazy { AppKnowledge(this, nano, apps, appScope) }
     val playStore: PlayStore by lazy { PlayStore(this, nano) }
@@ -68,9 +70,14 @@ class LauncherApplication : Application() {
         appScope.launch { settings.prefs.collect { icons.setThemed(it.themedIcons) } }
         // Start indexing right away, before the first frame needs it.
         appKnowledge.start()
+        // Updates are looked for every few hours, also when no screen of the app is opened.
+        io.github.davydgky.launcher.update.UpdateJob.schedule(this)
         search.start()
-        workspace.start()
+        // The island app has no home screen to arrange; the reminders it has as well.
+        if (BuildConfig.IS_LAUNCHER) workspace.start()
         organizer.start()
+        // Reminders with a time remind at that time, with a notification and in the island.
+        io.github.davydgky.launcher.organizer.ReminderAlarms.watch(this)
     }
 }
 

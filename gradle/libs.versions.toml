@@ -14,6 +14,8 @@ mlkit-image-labeling = "17.0.9"
 mlkit-genai-prompt = "1.0.0-beta5"
 
 junit = "4.13.2"
+robolectric = "4.18.1"
+androidx-test-core = "1.7.0"
 org-json = "20240303"
 kyant-backdrop = "2.0.1"
 kyant-shapes = "1.2.1"
@@ -36,6 +38,10 @@ mlkit-text-recognition = { module = "com.google.mlkit:text-recognition", version
 mlkit-image-labeling = { module = "com.google.mlkit:image-labeling", version.ref = "mlkit-image-labeling" }
 mlkit-genai-prompt = { module = "com.google.mlkit:genai-prompt", version.ref = "mlkit-genai-prompt" }
 junit = { module = "junit:junit", version.ref = "junit" }
+robolectric = { module = "org.robolectric:robolectric", version.ref = "robolectric" }
+androidx-test-core = { module = "androidx.test:core", version.ref = "androidx-test-core" }
+androidx-compose-ui-test-junit4 = { module = "androidx.compose.ui:ui-test-junit4" }
+androidx-compose-ui-test-manifest = { module = "androidx.compose.ui:ui-test-manifest" }
 org-json = { module = "org.json:json", version.ref = "org-json" }
 kyant-backdrop = { module = "io.github.kyant0:backdrop", version.ref = "kyant-backdrop" }
 kyant-shapes = { module = "io.github.kyant0:shapes", version.ref = "kyant-shapes" }

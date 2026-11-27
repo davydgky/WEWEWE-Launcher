@@ -13,3 +13,5 @@
 !debug.keystore
 /core/build/
 __pycache__/
+# Signed APKs from scripts/sign_release.sh
+/dist/

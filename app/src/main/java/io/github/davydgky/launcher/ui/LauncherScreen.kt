@@ -47,6 +47,8 @@ import io.github.davydgky.launcher.home.WidgetPicker
 import io.github.davydgky.launcher.home.Workspace
 import io.github.davydgky.launcher.home.homeDragTracker
 import io.github.davydgky.launcher.launcherApp
+import io.github.davydgky.launcher.permissions.Permission
+import io.github.davydgky.launcher.permissions.SystemPages
 import io.github.davydgky.launcher.search.AppTarget
 import io.github.davydgky.launcher.search.ResultActions
 import io.github.davydgky.launcher.search.SearchViewModel
@@ -119,7 +121,7 @@ fun LauncherScreen(
         controller.doubleTapToLock = prefs.doubleTapToLock
         controller.lockUnavailable = {
             Toast.makeText(context, R.string.lock_service_needed, Toast.LENGTH_LONG).show()
-            runCatching { context.startActivity(LockService.settingsIntent()) }
+            SystemPages.open(context, Permission.Accessibility)
         }
     }
     // The dock's free place shows the most likely app that is not in the dock already.

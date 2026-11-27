@@ -78,7 +78,10 @@ import androidx.core.app.ActivityCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import io.github.davydgky.launcher.BuildConfig
 import io.github.davydgky.launcher.R
+import io.github.davydgky.launcher.permissions.Permission
+import io.github.davydgky.launcher.permissions.SystemPages
 import io.github.davydgky.launcher.ai.NanoAnswers
 import io.github.davydgky.launcher.data.Backup
 import io.github.davydgky.launcher.data.LauncherPrefs
@@ -121,13 +124,31 @@ class SettingsActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
+        // From the "update ready" notification: straight to the updates, and on with the install.
+        val fromUpdate = intent.getBooleanExtra(EXTRA_INSTALL_UPDATE, false)
+        if (fromUpdate && savedInstanceState == null) launcherApp.updater.performAction()
         setContent {
             LauncherTheme {
                 Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surfaceContainerLowest) {
-                    SettingsScreen(this)
+                    SettingsScreen(this, startOnUpdates = fromUpdate)
                 }
             }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // The installer's confirmation can only be shown over a visible app.
+        launcherApp.updater.isAppVisible = true
+    }
+
+    override fun onPause() {
+        launcherApp.updater.isAppVisible = false
+        super.onPause()
+    }
+
+    companion object {
+        const val EXTRA_INSTALL_UPDATE = "install_update"
     }
 }
 
@@ -151,7 +172,7 @@ private val SourceInfos = listOf(
 )
 
 @Composable
-private fun SettingsScreen(activity: ComponentActivity) {
+private fun SettingsScreen(activity: ComponentActivity, startOnUpdates: Boolean = false) {
     val context = LocalContext.current
     val app = context.launcherApp
     val scope = rememberCoroutineScope()
@@ -164,6 +185,8 @@ private fun SettingsScreen(activity: ComponentActivity) {
     var notificationAccess by remember { mutableStateOf(app.notifications.hasAccess()) }
 
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        // The island app has no home screen that would look for updates: its settings do.
+        if (!BuildConfig.IS_LAUNCHER) app.updater.onAppStarted()
         // Permissions may have been granted in the system settings meanwhile.
         app.search.onResume()
         app.usage.checkAccess()
@@ -205,14 +228,23 @@ private fun SettingsScreen(activity: ComponentActivity) {
             )
             Requirement.NoteFolder -> folderPicker.launch(null)
             Requirement.VeloInstall -> Unit
-            Requirement.NotificationAccess -> context.startActivity(app.notifications.accessIntent())
+            Requirement.NotificationAccess -> SystemPages.open(context, Permission.NotificationAccess)
             // A sideloaded app may first need "Allow restricted settings" in its app info; a refusal leads there.
             Requirement.Sms -> permission.launch(arrayOf(Manifest.permission.READ_SMS))
         }
     }
 
     // The overview lists the categories; each opens its own page, and back returns to the overview.
-    var page by rememberSaveable { mutableStateOf<SettingsPage?>(null) }
+    // The island app opens on the island's page; back leads to the overview.
+    var page by rememberSaveable {
+        mutableStateOf(
+            when {
+                startOnUpdates -> SettingsPage.Updates
+                BuildConfig.IS_LAUNCHER -> null
+                else -> SettingsPage.Island
+            },
+        )
+    }
     BackHandler(enabled = page != null) { page = null }
 
     AnimatedContent(
@@ -232,12 +264,16 @@ private fun SettingsScreen(activity: ComponentActivity) {
                 item {
                     Text(stringResource(R.string.settings_title), style = MaterialTheme.typography.headlineMedium, modifier = Modifier.padding(top = 8.dp))
                 }
-                if (!isDefaultLauncher) {
+                if (BuildConfig.IS_LAUNCHER && !isDefaultLauncher) {
                     item { DefaultLauncherCard { grant(Requirement.DefaultLauncher) } }
                 }
                 item {
+                    val missing = missingPermissions(resumeCount)
+                    if (missing > 0) PermissionsSummaryCard(missing) { page = SettingsPage.Permissions }
+                }
+                item {
                     Card {
-                        SettingsPage.entries.forEachIndexed { index, entry ->
+                        SettingsPage.entries.filter { BuildConfig.IS_LAUNCHER || !it.launcherOnly }.forEachIndexed { index, entry ->
                             if (index > 0) HorizontalDivider(Modifier.padding(start = 68.dp))
                             CategoryRow(entry) { page = entry }
                         }
@@ -283,7 +319,7 @@ private fun SettingsScreen(activity: ComponentActivity) {
                     }
                     item {
                         Group(stringResource(R.string.settings_group_icons)) {
-                            NotificationDotsRow(notificationAccess) { runCatching { context.startActivity(app.notifications.accessIntent()) } }
+                            NotificationDotsRow(notificationAccess) { SystemPages.open(context, Permission.NotificationAccess) }
                             HorizontalDivider()
                             SwitchRow(R.string.setting_badge_numbers, R.string.setting_badge_numbers_description, prefs.badgeNumbers) {
                                 scope.launch { app.settings.setBadgeNumbers(it) }
@@ -299,7 +335,7 @@ private fun SettingsScreen(activity: ComponentActivity) {
                             SwitchRow(R.string.setting_double_tap, R.string.setting_double_tap_description, prefs.doubleTapToLock) { enabled ->
                                 scope.launch { app.settings.setDoubleTapToLock(enabled) }
                                 // Locking needs the accessibility service, which only the user can switch on.
-                                if (enabled && !LockService.isEnabled(context)) runCatching { context.startActivity(LockService.settingsIntent()) }
+                                if (enabled && !LockService.isEnabled(context)) SystemPages.open(context, Permission.Accessibility)
                             }
                         }
                     }
@@ -368,6 +404,8 @@ private fun SettingsScreen(activity: ComponentActivity) {
                         }
                     }
                 }
+                SettingsPage.Island -> islandSettings(prefs, notificationAccess, resumeCount, openPermissions = { page = SettingsPage.Permissions })
+                SettingsPage.Permissions -> permissionsPage(resumeCount)
                 SettingsPage.Glass -> item {
                     GlassSettings(prefs.glassStyle()) { style ->
                         scope.launch {
@@ -416,12 +454,14 @@ private fun SettingsScreen(activity: ComponentActivity) {
 }
 
 /** The settings' categories, each a page of its own. */
-private enum class SettingsPage(val title: Int, val summary: Int, val icon: Int) {
-    Home(R.string.settings_home, R.string.settings_home_summary, R.drawable.ic_pages),
+private enum class SettingsPage(val title: Int, val summary: Int, val icon: Int, val launcherOnly: Boolean = false) {
+    Island(R.string.settings_island, R.string.settings_island_summary, R.drawable.ic_island),
+    Permissions(R.string.settings_permissions, R.string.settings_permissions_summary, R.drawable.ic_lock),
+    Home(R.string.settings_home, R.string.settings_home_summary, R.drawable.ic_pages, launcherOnly = true),
     Glass(R.string.settings_glass, R.string.settings_glass_summary, R.drawable.ic_image),
     Search(R.string.settings_search, R.string.settings_search_summary, R.drawable.ic_search),
     Assistant(R.string.settings_assistant, R.string.settings_assistant_summary, R.drawable.ic_sparkle),
-    Backup(R.string.settings_backup, R.string.settings_backup_summary, R.drawable.ic_history),
+    Backup(R.string.settings_backup, R.string.settings_backup_summary, R.drawable.ic_history, launcherOnly = true),
     Updates(R.string.update_section, R.string.settings_updates_summary, R.drawable.ic_download),
     Advanced(R.string.settings_advanced, R.string.settings_advanced_summary, R.drawable.ic_info),
 }
@@ -581,7 +621,7 @@ private fun UpdateGroup(
 
 /** A setting that is on or off; the whole row toggles it. */
 @Composable
-private fun SwitchRow(title: Int, description: Int, checked: Boolean, enabled: Boolean = true, onChange: (Boolean) -> Unit) {
+internal fun SwitchRow(title: Int, description: Int, checked: Boolean, enabled: Boolean = true, onChange: (Boolean) -> Unit) {
     Row(
         Modifier
             .fillMaxWidth()

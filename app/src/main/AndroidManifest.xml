@@ -38,10 +38,24 @@
     <uses-permission android:name="io.github.davydgky.browser.permission.READ_SEARCH_DATA" />
 
     <uses-permission android:name="android.permission.REQUEST_DELETE_PACKAGES" />
-    <!-- Only for "Open as bubble": a bubble is a notification, whose notification itself stays hidden. -->
+    <!-- "Update ready", and "Open as bubble" (a bubble is a notification, whose notification itself stays hidden). -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- "timer 5 min" and "wecker 7:30" in the search hand the timer or alarm to the clock app. -->
     <uses-permission android:name="com.android.alarm.permission.SET_ALARM" />
+
+    <!--
+        The launcher and the island app share their reminders. Each app defines a permission for its own
+        reminders that only an app signed with the same key gets, and asks for the other app's.
+    -->
+    <permission
+        android:name="${applicationId}.permission.REMINDERS"
+        android:protectionLevel="signature" />
+    <uses-permission android:name="io.github.davydgky.launcher.permission.REMINDERS" />
+    <uses-permission android:name="io.github.davydgky.island.permission.REMINDERS" />
+    <!-- The periodic update check (update/UpdateJob.kt) survives a reboot. -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- Reminders remind at their exact time (granted to reminder apps without asking). -->
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
 
     <queries>
         <intent>
@@ -64,6 +78,9 @@
             <action android:name="android.settings.action.APP_USAGE_SETTINGS" />
         </intent>
         <package android:name="io.github.davydgky.browser" />
+        <!-- The island app; while it is installed, the launcher does not show a second island. -->
+        <package android:name="io.github.davydgky.island" />
+        <package android:name="io.github.davydgky.launcher" />
         <package android:name="md.obsidian" />
         <!-- "Search in Google Photos" for pictures that are only in the cloud. -->
         <package android:name="com.google.android.apps.photos" />
@@ -118,6 +135,29 @@
             android:name=".update.InstallResultReceiver"
             android:exported="false" />
 
+        <!-- The reminders, for the other of the two apps (launcher and island app) only. -->
+        <provider
+            android:name=".organizer.OrganizerProvider"
+            android:authorities="${applicationId}.organizer"
+            android:exported="true"
+            android:permission="${applicationId}.permission.REMINDERS" />
+
+        <!-- The time of a reminder, its "Done" and "In 10 minutes", and a restart (the app sets the alarm again). -->
+        <receiver
+            android:name=".organizer.ReminderReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Looks for updates every few hours; the island app has no home screen that would. -->
+        <service
+            android:name=".update.UpdateJob"
+            android:exported="false"
+            android:permission="android.permission.BIND_JOB_SERVICE" />
+
         <!--
             ML Kit reports usage metrics through Google's data transport. Without a registered backend
             the events are dropped on the device. CI checks that the backend stays out.
@@ -142,7 +182,10 @@
             </intent-filter>
         </service>
 
-        <!-- Double tap to turn the screen off; off until the user switches it on in the accessibility settings. -->
+        <!--
+            Double tap to turn the screen off, and the Dynamic Island over the status bar; off until the user
+            switches it on in the accessibility settings.
+        -->
         <service
             android:name=".gestures.LockService"
             android:exported="false"
@@ -177,6 +220,122 @@
             android:resizeableActivity="true"
             android:taskAffinity="io.github.davydgky.launcher.bubble"
             android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+
+        <!--
+            The search on its own, over any app: from the Dynamic Island, as the digital assistant (swipe
+            from a bottom corner or hold the power button), from the Quick Settings tile and the widget.
+            So the search also works when the Pixel Launcher stays the home screen.
+        -->
+        <activity
+            android:name=".ui.SearchActivity"
+            android:excludeFromRecents="true"
+            android:exported="true"
+            android:label="@string/search_activity_label"
+            android:launchMode="singleTask"
+            android:taskAffinity="io.github.davydgky.launcher.search"
+            android:theme="@style/Theme.Launcher.Overlay"
+            android:windowSoftInputMode="adjustResize|stateAlwaysHidden">
+            <intent-filter>
+                <action android:name="android.intent.action.ASSIST" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+            <!--
+                Web searches of other apps and of the system ("search for …"); with these, Android can offer
+                WEWEWE where a search app is chosen.
+            -->
+            <intent-filter>
+                <action android:name="android.intent.action.WEB_SEARCH" />
+                <action android:name="android.intent.action.SEARCH" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.WEB_SEARCH" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="http" />
+                <data android:scheme="https" />
+            </intent-filter>
+            <meta-data android:name="com.android.systemui.action_assist_icon" android:resource="@drawable/ic_search" />
+        </activity>
+
+        <!-- Text read from the screen by the island, to select and copy. -->
+        <activity
+            android:name=".island.ScreenTextActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:taskAffinity="io.github.davydgky.launcher.island"
+            android:theme="@style/Theme.Settings" />
+
+        <!-- The organizer (calendar and reminders) as a screen of its own, for the island and the island app. -->
+        <activity
+            android:name=".organizer.OrganizerActivity"
+            android:exported="false"
+            android:label="@string/reminders_label"
+            android:taskAffinity="io.github.davydgky.launcher.organizer"
+            android:theme="@style/Theme.Launcher" />
+
+        <!-- A quick note from the island, saved as a reminder in the organizer. -->
+        <activity
+            android:name=".island.QuickNoteActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:taskAffinity="io.github.davydgky.launcher.island"
+            android:theme="@style/Theme.Launcher.Overlay"
+            android:windowSoftInputMode="adjustResize|stateAlwaysVisible" />
+
+        <!-- "Share" from any app: into the island's tray, or as a link without tracking to the clipboard. -->
+        <activity
+            android:name=".island.ShareActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:noHistory="true"
+            android:taskAffinity="io.github.davydgky.launcher.share"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+        <activity-alias
+            android:name=".island.ShareToTray"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher"
+            android:label="@string/share_tray_label"
+            android:targetActivity=".island.ShareActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name=".island.CleanLink"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher"
+            android:label="@string/share_clean_link_label"
+            android:targetActivity=".island.ShareActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+        </activity-alias>
+
+        <service
+            android:name=".island.SearchTileService"
+            android:exported="true"
+            android:icon="@drawable/ic_search"
+            android:label="@string/tile_search_label"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+            <meta-data android:name="android.service.quicksettings.TOGGLEABLE_TILE" android:value="false" />
+        </service>
+
+        <receiver
+            android:name=".island.SearchWidgetProvider"
+            android:exported="true"
+            android:label="@string/widget_search_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/widget_search_info" />
+        </receiver>
 
         <service
             android:name=".index.ContentIndexJob"

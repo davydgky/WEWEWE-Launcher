@@ -133,16 +133,26 @@ class NotificationListener : NotificationListenerService() {
 
     override fun onListenerConnected() {
         notifications.attach(this)
+        app.island.listenerConnected(this)
         // What is in the shade right now is kept as well (duplicates are ignored).
         runCatching { activeNotifications }.getOrNull()?.forEach { app.messages.capture(it, app.appScope) }
     }
 
-    override fun onListenerDisconnected() = notifications.detach(this)
+    override fun onListenerDisconnected() {
+        notifications.detach(this)
+        app.island.listenerDisconnected(this)
+    }
 
-    override fun onNotificationPosted(sbn: StatusBarNotification) {
+    override fun onNotificationPosted(sbn: StatusBarNotification, rankingMap: RankingMap?) {
         notifications.posted(sbn)
+        app.island.posted(sbn, rankingMap)
         app.messages.capture(sbn, app.appScope)
     }
 
-    override fun onNotificationRemoved(sbn: StatusBarNotification) = notifications.removed(sbn)
+    override fun onNotificationRemoved(sbn: StatusBarNotification) {
+        notifications.removed(sbn)
+        app.island.removed(sbn)
+    }
+
+    override fun onInterruptionFilterChanged(interruptionFilter: Int) = app.island.interruptionFilterChanged(interruptionFilter)
 }

@@ -88,6 +88,7 @@ class AppUpdater(
     /** Checks at most every few hours; downloads automatically on Wi-Fi and installs in the background. */
     fun onAppStarted() {
         cleanUpOldDownloads()
+        UpdateJob.schedule(context)
         scope.launch {
             val settings = preferences.prefs.first()
             if (!settings.autoUpdate) return@launch
@@ -95,6 +96,29 @@ class AppUpdater(
             if (System.currentTimeMillis() - last < CHECK_INTERVAL_MS) return@launch
             checkForUpdate(automatic = true)
         }
+    }
+
+    /**
+     * The periodic check of [UpdateJob]: looks for a release, downloads it on Wi-Fi and installs it on its
+     * own where Android allows that. If the user has to confirm, a notification says so. Returns when
+     * the check, the download and the scheduling are done.
+     */
+    suspend fun checkInBackground() {
+        if (!preferences.prefs.first().autoUpdate) return
+        when (_state.value) {
+            // A download or an install is already under way, or the update waits for a tap.
+            is UpdateState.Downloading, is UpdateState.Installing, is UpdateState.Scheduled -> return
+            is UpdateState.Ready, is UpdateState.NeedsPermission -> {
+                UpdateNotifier.showReady(context, releaseOf(_state.value)!!)
+                return
+            }
+            else -> Unit
+        }
+        cleanUpOldDownloads()
+        checkForUpdate(automatic = true)
+        job?.join()
+        val state = _state.value
+        if (state is UpdateState.Ready) UpdateNotifier.showReady(context, state.release)
     }
 
     /** Runs the next step for the current state: check, download or install. */
@@ -170,7 +194,7 @@ class AppUpdater(
                 else -> throw IOException("HTTP ${connection.responseCode}")
             }
             val body = connection.inputStream.bufferedReader().use { it.readText() }
-            ReleaseParser.parse(body, BuildConfig.UPDATE_REPOSITORY)
+            ReleaseParser.parse(body, BuildConfig.UPDATE_REPOSITORY, BuildConfig.APK_PREFIX)
         } finally {
             connection.disconnect()
         }
@@ -269,8 +293,10 @@ class AppUpdater(
                 _state.value = UpdateState.Ready(release)
                 return@launch
             }
+            // The launcher installs while another app is in front. The island app always has its island on the
+            // screen, so it waits until the phone lies unused (screen off) instead.
             val constraints = PackageInstaller.InstallConstraints.Builder()
-                .setAppNotForegroundRequired()
+                .apply { if (BuildConfig.IS_LAUNCHER) setAppNotForegroundRequired() else setAppNotTopVisibleRequired().setDeviceIdleRequired() }
                 .build()
             val scheduled = runCatching {
                 packageManager.packageInstaller.commitSessionAfterInstallConstraintsAreMet(
@@ -340,9 +366,13 @@ class AppUpdater(
                 } else {
                     pendingConfirmation = confirmation
                     _state.value = UpdateState.Ready(release)
+                    UpdateNotifier.showReady(context, release)
                 }
             }
-            PackageInstaller.STATUS_SUCCESS -> _state.value = UpdateState.UpToDate
+            PackageInstaller.STATUS_SUCCESS -> {
+                _state.value = UpdateState.UpToDate
+                UpdateNotifier.cancel(context)
+            }
             PackageInstaller.STATUS_FAILURE_ABORTED -> {
                 scheduledSessionId = null
                 if (release != null) _state.value = UpdateState.Ready(release)
