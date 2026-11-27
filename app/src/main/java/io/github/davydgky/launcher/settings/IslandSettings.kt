@@ -24,6 +24,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -120,6 +121,7 @@ internal fun LazyListScope.islandSettings(prefs: LauncherPrefs, notificationAcce
             TogglePicker(chosen) { list -> scope.launch { context.launcherApp.settings.setIsland(toggles = list.map { it.id }) } }
         }
     }
+    item { ReminderBackupsGroup(resumeCount) }
     item {
         Group(stringResource(R.string.settings_group_island_how)) {
             Text(
@@ -272,6 +274,59 @@ private fun TogglePicker(chosen: List<io.github.davydgky.launcher.island.QuickTo
                 androidx.compose.material3.IconButton(enabled = index < chosen.size - 1, onClick = {
                     onChange(chosen.toMutableList().apply { add(index + 1, removeAt(index)) })
                 }) { androidx.compose.material3.Icon(painterResource(R.drawable.ic_arrow_down), null) }
+            }
+        }
+    }
+}
+
+/**
+ * The reminders' copies on this device (daily, before a merge with the other app, an unreadable file),
+ * each with how many reminders it holds, to bring back what went missing.
+ */
+@Composable
+private fun ReminderBackupsGroup(resumeCount: Int) {
+    val context = LocalContext.current
+    val repository = context.launcherApp.organizer
+    var refresh by remember { androidx.compose.runtime.mutableIntStateOf(0) }
+    val entries = remember(resumeCount, refresh) { repository.backups.list() }
+    val state by repository.organizer.collectAsStateWithLifecycle()
+    var open by remember { androidx.compose.runtime.mutableStateOf(false) }
+    val format = remember { java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.MEDIUM, java.text.DateFormat.SHORT) }
+    Group(stringResource(R.string.reminders_label)) {
+        Column(Modifier.fillMaxWidth().padding(16.dp)) {
+            val todos = state?.todos.orEmpty()
+            Text(
+                stringResource(R.string.reminders_now, todos.count { !it.done }, todos.size),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            Spacer(Modifier.size(8.dp))
+            OutlinedButton(onClick = { open = !open }, enabled = entries.isNotEmpty()) {
+                Text(stringResource(if (entries.isEmpty()) R.string.reminders_no_backups else R.string.reminders_restore))
+            }
+        }
+        if (open) {
+            entries.forEach { entry ->
+                HorizontalDivider()
+                Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(format.format(java.util.Date(entry.time)), style = MaterialTheme.typography.titleSmall)
+                        val kind = when (entry.kind) {
+                            io.github.davydgky.launcher.organizer.OrganizerBackups.Kind.Daily -> R.string.backup_daily
+                            io.github.davydgky.launcher.organizer.OrganizerBackups.Kind.BeforeSync -> R.string.backup_before_sync
+                            io.github.davydgky.launcher.organizer.OrganizerBackups.Kind.Unreadable -> R.string.backup_unreadable
+                        }
+                        Text(
+                            stringResource(kind) + " · " + stringResource(R.string.reminders_now, entry.openReminders, entry.reminders),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    FilledTonalButton(onClick = {
+                        val done = repository.restore(entry)
+                        Toast.makeText(context, if (done) R.string.reminders_restored else R.string.reminders_restore_failed, Toast.LENGTH_SHORT).show()
+                        refresh++
+                    }) { Text(stringResource(R.string.reminders_restore_one)) }
+                }
             }
         }
     }

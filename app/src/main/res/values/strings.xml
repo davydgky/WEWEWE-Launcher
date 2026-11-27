@@ -593,4 +593,13 @@
     <string name="crash_notification_text">Tap to share the report; it helps fix the cause.</string>
     <string name="setting_island_mascot">Mascot</string>
     <string name="setting_island_mascot_description">The wewewe figure beside the camera: breathes and blinks at rest, bobs to music, is glad about notifications.</string>
+    <string name="reminders_now">%1$d open, %2$d in all</string>
+    <string name="reminders_restore">Restore a backup</string>
+    <string name="reminders_no_backups">No backups yet</string>
+    <string name="reminders_restore_one">Restore</string>
+    <string name="reminders_restored">Reminders restored</string>
+    <string name="reminders_restore_failed">This backup cannot be read</string>
+    <string name="backup_daily">Daily backup</string>
+    <string name="backup_before_sync">Before a merge with the other app</string>
+    <string name="backup_unreadable">Saved file that could not be read</string>
 </resources>
