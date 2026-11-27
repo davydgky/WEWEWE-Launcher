@@ -91,6 +91,29 @@ class ContextCardsTest {
         compose.waitForIdle()
     }
 
+    @Test
+    fun aNotificationIsThrownIn() {
+        val controller = IslandController(app.island, NoActions, CoroutineScope(SupervisorJob() + Dispatchers.Main)).apply {
+            geometry = IslandGeometry(1080, 2400, 540, 70, 70, 20, 80, 2.625f)
+        }
+        compose.setContent {
+            Box(Modifier.size(411.dp, 300.dp).background(Color(0xFF6B8F5E)).testTag("screen")) { IslandContent(controller) }
+        }
+        compose.mainClock.advanceTimeBy(500)
+        // The picture mid-throw: the clock only moves when told.
+        compose.mainClock.autoAdvance = false
+        app.island.showPeek(
+            Peek(
+                7, PeekKind.Notification, "Carlotta Faßbender", "Das wäre verrückt haha, lass uns das am Wochenende machen!",
+                source = "WhatsApp", durationMs = 60_000,
+            ),
+        )
+        compose.mainClock.advanceTimeBy(500)
+        save("peek-1-throw.png")
+        compose.mainClock.advanceTimeBy(1_500)
+        save("peek-2-landed.png")
+    }
+
     private fun save(name: String) {
         val image = compose.onNodeWithTag("screen").captureToImage().asAndroidBitmap()
         File("build/mascot").apply { mkdirs() }.resolve(name).outputStream().use { image.compress(Bitmap.CompressFormat.PNG, 100, it) }
