@@ -63,6 +63,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.layout.wrapContentHeight
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -80,9 +83,11 @@ import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -182,8 +187,6 @@ fun IslandContent(controller: IslandController) {
     val geometry = controller.geometry ?: return
     val hub = controller.hub
     val context = LocalContext.current
-    val sizes = remember(geometry, controller.sideWidth, controller.mascot) { IslandSizes(geometry, controller.sideWidth.dp, controller.mascot) }
-
     val live by hub.liveItems.collectAsState()
     val media by hub.media.current.collectAsState()
     val peek by hub.peek.collectAsState()
@@ -199,9 +202,26 @@ fun IslandContent(controller: IslandController) {
 
     val organizer by context.launcherApp.organizer.organizer.collectAsState()
     val todos = organizer?.todos.orEmpty()
-    val shown = remember(live, media, event, torch, keepAwake, todos, now) { shownActivities(live, media, event, torch, keepAwake, todos, now) }
+    val all = remember(live, media, event, torch, keepAwake, todos, now) { shownActivities(live, media, event, torch, keepAwake, todos, now) }
+    // While Android shows chips of its own beside the camera (a call, a timer as a Live Update), the island
+    // makes room for them: only the ring around the camera, everything else when it is opened. Beside the
+    // chips it would show the same thing a second time and lie over them.
+    val systemChips = live.any { it.systemChip }
+    val shown = if (systemChips) emptyList() else all
     val primary = shown.firstOrNull()
     val secondary = shown.getOrNull(1)
+    val mascotAtRest = controller.mascot && !systemChips
+
+    // Text on the right (a running call, a timer, "in 5 Min.") widens the island just enough to fit.
+    val german = LocalConfiguration.current.locales[0].language == "de"
+    val sample = trailingSample(primary, now, german, context)
+    val measurer = rememberTextMeasurer()
+    val localDensity = LocalDensity.current
+    val textWidth = remember(sample, localDensity) {
+        sample?.let { with(localDensity) { measurer.measure(it, TrailingStyle).size.width.toDp() } }
+    }
+    val side = textWidth?.let { (it + TrailingPadding + 6.dp).coerceIn(controller.sideWidth.dp, MaxTextSide) } ?: controller.sideWidth.dp
+    val sizes = remember(geometry, side, mascotAtRest) { IslandSizes(geometry, side, mascotAtRest) }
     val currentPeek = peek
     val mode = when {
         controller.hidden -> IslandMode.Hidden
@@ -239,11 +259,11 @@ fun IslandContent(controller: IslandController) {
             Box(Modifier.align(Alignment.TopCenter).padding(top = sizes.pillTop).then(width)) {
                 // At rest with the mascot the pill sits to the camera's left (see IslandSizes.idleShift).
                 val shift by animateDpAsState(
-                    if (display == IslandMode.Idle && controller.mascot) sizes.idleShift else 0.dp,
+                    if (display == IslandMode.Idle && mascotAtRest) sizes.idleShift else 0.dp,
                     spring(dampingRatio = 0.8f, stiffness = 420f),
                     label = "islandShift",
                 )
-                IslandSurface(controller, sizes, display, primary, currentPeek, shown, Modifier.align(Alignment.TopCenter).offset(x = shift))
+                IslandSurface(controller, sizes, display, primary, currentPeek, shown, mascotAtRest, Modifier.align(Alignment.TopCenter).offset(x = shift))
                 if (bubble && secondary != null) {
                     Bubble(secondary, sizes, Modifier.align(Alignment.TopEnd), onTap = controller::expand)
                 }
@@ -330,6 +350,7 @@ private fun IslandSurface(
     primary: Shown?,
     peek: Peek?,
     shown: List<Shown>,
+    mascotAtRest: Boolean,
     modifier: Modifier = Modifier,
 ) {
     val shape = RoundedCornerShape(sizes.corner)
@@ -386,7 +407,7 @@ private fun IslandSurface(
         label = "island",
     ) { target ->
         when {
-            target == IslandMode.Idle.name && controller.mascot -> Row(
+            target == IslandMode.Idle.name && mascotAtRest -> Row(
                 Modifier.size(sizes.idleMascotWidth, sizes.pillHeight),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -507,7 +528,7 @@ private fun calendarIntent(time: Long): Intent = Intent(Intent.ACTION_VIEW)
 private fun CompactIsland(shown: Shown, sizes: IslandSizes, mascot: Boolean) {
     // With music the mascot bobs beside the camera and pastel waves run on the other side.
     val music = mascot && shown is Shown.Media
-    SplitRow(sizes, Modifier.width(sizes.compactWidth).height(sizes.pillHeight), startPadding = 6.dp, endPadding = 8.dp, left = {
+    SplitRow(sizes, Modifier.width(sizes.compactWidth).height(sizes.pillHeight), startPadding = 6.dp, endPadding = TrailingPadding, left = {
         if (music) {
             MascotInPill(sizes.pillHeight, if ((shown as Shown.Media).info.playing) MascotMood.Music else MascotMood.Idle)
         } else {
@@ -587,6 +608,36 @@ private fun LiveTrailing(item: LiveItem) {
         item.indeterminate -> ProgressRing(null, accent, 18.dp)
         else -> IslandText(item.shortText ?: item.text.ifBlank { item.title }, accent, 12.sp, weight = FontWeight.SemiBold)
     }
+}
+
+/** Room right of the text on the compact island, to its round end. */
+private val TrailingPadding = 8.dp
+
+/** Widest the compact island gets on each side for its text; beyond that the status bar's icons are covered. */
+private val MaxTextSide = 76.dp
+
+private val TrailingStyle = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.SemiBold, fontFeatureSettings = "tnum")
+
+/**
+ * The longest text the compact island shows right of the camera for [shown], to make it wide enough;
+ * null where it shows a glyph or bars. A running clock reserves room for its next digit: this is measured
+ * every 15 seconds, the clock ticks every second.
+ */
+private fun trailingSample(shown: Shown?, now: Long, german: Boolean, context: android.content.Context): String? = when (shown) {
+    is Shown.Live -> {
+        val item = shown.item
+        val base = item.chronometer
+        when {
+            base != null && item.running -> if ((if (item.countDown) base - now else now - base) >= 50 * 60_000L) "0:00:00" else "00:00"
+            item.progress != null || item.indeterminate -> null
+            else -> item.shortText ?: item.text.ifBlank { item.title }
+        }
+    }
+    is Shown.Event -> Durations.until(shown.event.begin - now, german = german)
+    is Shown.Reminder -> Durations.until((shown.todo.dueAtMillis ?: 0L) - now, german = german)
+    Shown.Torch -> context.getString(R.string.island_on)
+    Shown.Awake -> context.getString(R.string.island_awake_short)
+    is Shown.Media, null -> null
 }
 
 @Composable
@@ -802,6 +853,13 @@ private fun ExpandedIsland(controller: IslandController, sizes: IslandSizes) {
     val event by hub.nextEvent.collectAsState()
     val shelf by hub.shelf.collectAsState()
     val locked by hub.locked.collectAsState()
+    // While open it asks again now and then: unlocked with the island open, it shows everything at once.
+    LaunchedEffect(Unit) {
+        while (true) {
+            hub.refreshLocked()
+            delay(1_000)
+        }
+    }
     // Black of its own as well: whatever the surface around it does, the opened island is never see-through.
     Column(Modifier.width(sizes.expandedWidth).background(Surface).padding(bottom = 14.dp)) {
         // The row around the camera: the mascot, glad the island was opened; else empty.
@@ -817,16 +875,14 @@ private fun ExpandedIsland(controller: IslandController, sizes: IslandSizes) {
         val pages = buildList {
             if (live.isNotEmpty() || event != null) add(IslandPage.Live)
             if (media != null) add(IslandPage.Music)
-            if (!locked) add(IslandPage.Reminders)
             if (!locked && shelf.isNotEmpty()) add(IslandPage.Shelf)
         }
         if (pages.isNotEmpty()) {
-            // Opens on what matters now: something running, else music that plays, else the reminders.
+            // Opens on what matters now: something running, else music that plays.
             val first = remember {
                 when {
                     IslandPage.Live in pages && live.isNotEmpty() -> IslandPage.Live
                     IslandPage.Music in pages && media?.playing == true -> IslandPage.Music
-                    IslandPage.Reminders in pages -> IslandPage.Reminders
                     else -> pages.first()
                 }
             }
@@ -838,7 +894,6 @@ private fun ExpandedIsland(controller: IslandController, sizes: IslandSizes) {
                         event?.let { e -> EventRow(e) { controller.collapse(); controller.actions.startIntent(calendarIntent(e.begin)) } }
                     }
                     IslandPage.Music -> media?.let { MediaCard(controller, it) }
-                    IslandPage.Reminders -> RemindersCard(controller)
                     IslandPage.Shelf -> Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(Tile).padding(12.dp)) {
                         ShelfRow(controller, shelf)
                     }
@@ -847,6 +902,8 @@ private fun ExpandedIsland(controller: IslandController, sizes: IslandSizes) {
             Spacer(Modifier.height(10.dp))
         }
         Column(Modifier.padding(horizontal = 12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            // The reminders have a place of their own, always there, not one card among others to swipe to.
+            RemindersCard(controller, locked)
             Toggles(controller, locked)
             if (!locked) SearchBar(controller)
         }
@@ -855,8 +912,8 @@ private fun ExpandedIsland(controller: IslandController, sizes: IslandSizes) {
 
 private const val MAX_LIVE_ROWS = 4
 
-/** The context cards of the opened island, in this order from left to right. */
-private enum class IslandPage { Live, Music, Reminders, Shelf }
+/** The context cards of the opened island, in this order from left to right; the reminders are below them. */
+private enum class IslandPage { Live, Music, Shelf }
 
 /**
  * Cards side by side as in a carousel: the current one in the middle at full size, the ones beside it
@@ -866,16 +923,31 @@ private enum class IslandPage { Live, Music, Reminders, Shelf }
 @Composable
 private fun ContextCards(pages: List<IslandPage>, initial: Int, content: @Composable (IslandPage) -> Unit) {
     val state = rememberPagerState(initialPage = initial) { pages.size }
+    // Each card as high as it is: the pager takes the height of the card in the middle, and in between
+    // two while swiping, instead of the highest card's height with black space below the smaller ones.
+    val heights = remember { mutableStateMapOf<Int, Int>() }
+    val height = run {
+        val page = state.currentPage
+        val from = heights[page] ?: return@run null
+        val offset = state.currentPageOffsetFraction
+        val to = heights[if (offset >= 0f) page + 1 else page - 1] ?: from
+        from + (to - from) * abs(offset)
+    }
+    val density = LocalDensity.current
     Column {
         HorizontalPager(
             state = state,
             contentPadding = PaddingValues(horizontal = if (pages.size > 1) 36.dp else 12.dp),
             pageSpacing = 10.dp,
             verticalAlignment = Alignment.Top,
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().then(if (height != null) Modifier.height(with(density) { height.toDp() }) else Modifier),
         ) { index ->
             Box(
-                Modifier.fillMaxWidth().graphicsLayer {
+                Modifier
+                    .fillMaxWidth()
+                    .wrapContentHeight(Alignment.Top, unbounded = true)
+                    .onSizeChanged { heights[index] = it.height }
+                    .graphicsLayer {
                     // How far this card is from the middle: 0 in the middle, 1 one card away.
                     val away = abs((state.currentPage - index) + state.currentPageOffsetFraction).coerceIn(0f, 1f)
                     val scale = 1f - 0.08f * away
@@ -909,7 +981,7 @@ private fun ContextCards(pages: List<IslandPage>, initial: Int, content: @Compos
  * next ones; a tap on the circle ticks one off, "+" adds one, "All" opens the organizer.
  */
 @Composable
-private fun RemindersCard(controller: IslandController) {
+private fun RemindersCard(controller: IslandController, locked: Boolean) {
     val context = LocalContext.current
     val repository = context.launcherApp.organizer
     // Opened: the latest reminders, also those changed in the other app.
@@ -937,6 +1009,11 @@ private fun RemindersCard(controller: IslandController) {
                 IslandText(dueCount.toString(), Yellow, 13.sp, weight = FontWeight.SemiBold)
             }
             Spacer(Modifier.weight(1f))
+            // Locked: how many, but neither what they say nor a way to change them.
+            if (locked) {
+                IslandText(stringResource(R.string.reminders_locked, open.size), Secondary, 12.sp, modifier = Modifier.padding(end = 10.dp, top = 9.dp, bottom = 9.dp))
+                return@Row
+            }
             RoundButton(R.drawable.ic_add, stringResource(R.string.reminder_add), 36.dp, Color.Transparent, Yellow) {
                 controller.collapse()
                 controller.actions.quickNote()
@@ -954,6 +1031,7 @@ private fun RemindersCard(controller: IslandController) {
                     .padding(horizontal = 8.dp, vertical = 6.dp),
             )
         }
+        if (locked) return@Column
         if (open.isEmpty()) {
             IslandText(stringResource(R.string.reminders_none), Secondary, 13.sp, modifier = Modifier.padding(top = 2.dp, bottom = 4.dp))
         }
@@ -1018,7 +1096,7 @@ private fun dueLabel(context: android.content.Context, due: Long, hasTime: Boole
     return listOf(day, time).filter { it.isNotBlank() }.joinToString(" ")
 }
 
-private const val MAX_REMINDERS = 5
+private const val MAX_REMINDERS = 4
 
 @Composable
 private fun MediaCard(controller: IslandController, info: MediaInfo) {
@@ -1089,8 +1167,9 @@ private fun LiveRow(controller: IslandController, item: LiveItem) {
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
                 IslandText(item.title, Color.White, 14.sp, weight = FontWeight.SemiBold)
+                // Not the same word twice ("Uhr", "Uhr") when the app gives neither title nor text.
                 val detail = item.text.ifBlank { controller.hub.appLabel(item.packageName) }
-                IslandText(detail, Secondary, 12.sp)
+                if (detail != item.title) IslandText(detail, Secondary, 12.sp)
             }
             Spacer(Modifier.width(8.dp))
             when {

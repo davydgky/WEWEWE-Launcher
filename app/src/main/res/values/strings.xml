@@ -567,6 +567,7 @@
     <string name="reminders_none">No open reminders</string>
     <string name="reminder_today">Today</string>
     <string name="reminder_tomorrow">Tomorrow</string>
+    <string name="reminders_locked">%1$d open · unlock to see them</string>
     <string name="reminders_more">+%1$d more</string>
     <string name="reminder_time">Time</string>
     <string name="toggle_camera">Camera</string>

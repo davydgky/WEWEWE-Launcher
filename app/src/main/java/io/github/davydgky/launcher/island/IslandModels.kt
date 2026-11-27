@@ -30,6 +30,11 @@ data class LiveItem(
     val contentIntent: PendingIntent? = null,
     val updatedAt: Long,
     val running: Boolean = true,
+    /**
+     * Android shows it itself as a chip in the status bar, beside the camera (a call, a Live Update): the
+     * island then leaves it to that chip instead of showing it a second time over it.
+     */
+    val systemChip: Boolean = false,
 )
 
 /** What a media session is playing. */

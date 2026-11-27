@@ -566,6 +566,7 @@
     <string name="reminders_none">Keine offenen Erinnerungen</string>
     <string name="reminder_today">Heute</string>
     <string name="reminder_tomorrow">Morgen</string>
+    <string name="reminders_locked">%1$d offen · entsperren zum Ansehen</string>
     <string name="reminders_more">+%1$d weitere</string>
     <string name="reminder_time">Uhrzeit</string>
     <string name="toggle_camera">Kamera</string>
