@@ -603,4 +603,25 @@
     <string name="backup_daily">Daily backup</string>
     <string name="backup_before_sync">Before a merge with the other app</string>
     <string name="backup_unreadable">Saved file that could not be read</string>
+
+    <!-- The reminders as they open out of the island. -->
+    <string name="isr_placeholder">What\'s on?</string>
+    <string name="isr_add_placeholder">New reminder</string>
+    <string name="isr_all_day">All day</string>
+    <string name="isr_other_time">Other time</string>
+    <string name="isr_no_date">No date</string>
+    <string name="isr_overdue">Overdue</string>
+    <string name="isr_today">Today</string>
+    <string name="isr_tomorrow">Tomorrow</string>
+    <string name="isr_week">Next 7 days</string>
+    <string name="isr_later">Later</string>
+    <string name="isr_done">Completed · %1$d</string>
+    <string name="isr_clear_done">Clear completed</string>
+    <string name="isr_delete">Delete</string>
+    <string name="isr_finish">Done</string>
+    <string name="isr_all_lists">All</string>
+    <string name="isr_open">%1$d open</string>
+    <string name="isr_suggestions">Suggestions</string>
+    <string name="isr_nothing">Nothing open. Enjoy the day.</string>
+    <string name="isr_list">List</string>
 </resources>

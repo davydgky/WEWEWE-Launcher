@@ -602,4 +602,25 @@
     <string name="backup_daily">Tägliche Sicherung</string>
     <string name="backup_before_sync">Vor einem Abgleich mit der anderen App</string>
     <string name="backup_unreadable">Gespeicherte Datei, die nicht lesbar war</string>
+
+    <!-- The reminders as they open out of the island. -->
+    <string name="isr_placeholder">Was steht an?</string>
+    <string name="isr_add_placeholder">Neue Erinnerung</string>
+    <string name="isr_all_day">Ganztags</string>
+    <string name="isr_other_time">Andere Zeit</string>
+    <string name="isr_no_date">Ohne Datum</string>
+    <string name="isr_overdue">Überfällig</string>
+    <string name="isr_today">Heute</string>
+    <string name="isr_tomorrow">Morgen</string>
+    <string name="isr_week">Nächste 7 Tage</string>
+    <string name="isr_later">Später</string>
+    <string name="isr_done">Erledigt · %1$d</string>
+    <string name="isr_clear_done">Erledigte löschen</string>
+    <string name="isr_delete">Löschen</string>
+    <string name="isr_finish">Fertig</string>
+    <string name="isr_all_lists">Alle</string>
+    <string name="isr_open">%1$d offen</string>
+    <string name="isr_suggestions">Vorschläge</string>
+    <string name="isr_nothing">Nichts offen. Genieß den Tag.</string>
+    <string name="isr_list">Liste</string>
 </resources>

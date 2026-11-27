@@ -280,6 +280,16 @@
             android:taskAffinity="io.github.davydgky.launcher.organizer"
             android:theme="@style/Theme.Launcher" />
 
+        <!-- The reminders as they open out of the island; a quick note from it is the same screen. -->
+        <activity
+            android:name=".island.IslandRemindersActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:label="@string/reminders_label"
+            android:taskAffinity="io.github.davydgky.launcher.island"
+            android:theme="@style/Theme.Launcher.Overlay"
+            android:windowSoftInputMode="adjustResize|stateHidden" />
+
         <!-- A quick note from the island, saved as a reminder in the organizer. -->
         <activity
             android:name=".island.QuickNoteActivity"

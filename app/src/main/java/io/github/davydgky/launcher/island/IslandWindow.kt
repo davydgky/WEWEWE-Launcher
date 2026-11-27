@@ -60,6 +60,7 @@ class IslandWindow(
     private var statusBarSeen = false
     private var statusBarVisible = true
     private var screenshotHidden = false
+    private var covered = false
 
     private val params = WindowManager.LayoutParams(
         1, 1,
@@ -123,6 +124,13 @@ class IslandWindow(
         jobs = listOf(
             scope.launch { snapshotFlow { controller.windowRequest }.collectLatest { request -> request?.let { applyRequest(it) } } },
             scope.launch {
+                hub.covered.collect { on ->
+                    covered = on
+                    root?.visibility = if (on || screenshotHidden) View.INVISIBLE else View.VISIBLE
+                    updateHidden()
+                }
+            },
+            scope.launch {
                 hub.keepAwake.collect { on ->
                     params.flags = params.flags.with(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON, on)
                     relayout()
@@ -167,7 +175,7 @@ class IslandWindow(
     /** Hides the island for a screenshot of what lies below it, and shows it again. */
     fun hideForScreenshot(hidden: Boolean) {
         screenshotHidden = hidden
-        root?.visibility = if (hidden) View.INVISIBLE else View.VISIBLE
+        root?.visibility = if (hidden || covered) View.INVISIBLE else View.VISIBLE
         updateHidden()
     }
 
@@ -184,7 +192,7 @@ class IslandWindow(
         val landscape = service.resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
         // Only trusted once the status bar has been seen: some systems never report it to overlays.
         val fullScreen = statusBarSeen && !statusBarVisible
-        val hidden = landscape || fullScreen || screenshotHidden
+        val hidden = landscape || fullScreen || screenshotHidden || covered
         if (hidden && !controller.hidden) controller.collapse()
         controller.hidden = hidden
     }
@@ -210,7 +218,7 @@ class IslandWindow(
         // Set by hand in the settings where the camera is reported a little off.
         val pillHeight = if (pillHeightDp > 0f) (pillHeightDp * density).roundToInt() else automatic
         val centerY = (if (centred) hole.centerY() else statusBar / 2) + (offsetDp * density).roundToInt()
-        controller.geometry = IslandGeometry(
+        val geometry = IslandGeometry(
             screenWidth = width,
             screenHeight = height,
             centerX = if (centred) hole.centerX() else width / 2,
@@ -220,6 +228,8 @@ class IslandWindow(
             pillHeight = pillHeight,
             density = density,
         )
+        controller.geometry = geometry
+        hub.geometry = geometry
     }
 
     @SuppressLint("DiscouragedApi", "InternalInsetResource")
