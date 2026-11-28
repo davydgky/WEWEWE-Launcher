@@ -83,8 +83,11 @@ class AppsRepository(private val context: Context, private val settings: Launche
         started = true
         launcherApps.registerCallback(callback, Handler(Looper.getMainLooper()))
         val filter = IntentFilter().apply {
-            addAction(Intent.ACTION_PROFILE_AVAILABLE)
-            addAction(Intent.ACTION_PROFILE_UNAVAILABLE)
+            // The private space and its events exist from Android 15.
+            if (android.os.Build.VERSION.SDK_INT >= 35) {
+                addAction(Intent.ACTION_PROFILE_AVAILABLE)
+                addAction(Intent.ACTION_PROFILE_UNAVAILABLE)
+            }
             addAction(Intent.ACTION_MANAGED_PROFILE_ADDED)
             addAction(Intent.ACTION_MANAGED_PROFILE_REMOVED)
             addAction(Intent.ACTION_MANAGED_PROFILE_UNLOCKED)
@@ -165,7 +168,7 @@ class AppsRepository(private val context: Context, private val settings: Launche
     private fun isAvailable(user: UserHandle) = user == Process.myUserHandle() ||
         (!userManager.isQuietModeEnabled(user) && userManager.isUserUnlocked(user))
 
-    private fun isPrivate(user: UserHandle) = runCatching {
+    private fun isPrivate(user: UserHandle) = android.os.Build.VERSION.SDK_INT >= 35 && runCatching {
         launcherApps.getLauncherUserInfo(user)?.userType == UserManager.USER_TYPE_PROFILE_PRIVATE
     }.getOrDefault(false)
 
