@@ -13,7 +13,8 @@ android {
     defaultConfig {
         applicationId = "io.github.davydgky.launcher"
         // Same platform floor as Velo: Android 16, targeting the newest platform.
-        minSdk = 36
+        // Android 14 and later; what came after is used where there, checked with Build.VERSION.
+        minSdk = 34
         targetSdk = 37
         versionCode = buildNumber
         versionName = "0.1.$buildNumber"

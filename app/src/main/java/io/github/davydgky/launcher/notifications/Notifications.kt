@@ -53,7 +53,11 @@ class Notifications(private val context: Context) {
     fun open(notification: AppNotification) {
         val intent = notification.contentIntent ?: return
         val options = ActivityOptions.makeBasic()
-            .setPendingIntentBackgroundActivityStartMode(ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOW_IF_VISIBLE)
+            .setPendingIntentBackgroundActivityStartMode(
+                // Before Android 16 there is only the one mode that allows it.
+                @Suppress("DEPRECATION")
+                if (android.os.Build.VERSION.SDK_INT >= 36) ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOW_IF_VISIBLE else ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED,
+            )
             .toBundle()
         runCatching { intent.send(context, 0, null, null, null, null, options) }
             .onFailure { Log.w(TAG, "Cannot open notification", it) }

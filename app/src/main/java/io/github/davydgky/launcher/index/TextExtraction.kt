@@ -43,7 +43,8 @@ object TextExtraction {
                 buildString {
                     for (index in 0 until minOf(renderer.pageCount, MAX_PDF_PAGES)) {
                         renderer.openPage(index).use { page ->
-                            page.textContents.forEach { append(it.text).append('\n') }
+                            // Android reads a PDF's text from version 15 on; before, PDFs are found by name only.
+                            if (android.os.Build.VERSION.SDK_INT >= 35) page.textContents.forEach { append(it.text).append('\n') }
                         }
                         if (length >= MAX_CHARS) break
                     }

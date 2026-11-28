@@ -268,7 +268,8 @@ class IslandHub(private val context: Context, private val scope: CoroutineScope)
         val template = extras.getString(Notification.EXTRA_TEMPLATE).orEmpty()
         // Music and videos come from their media session, with artwork and controls.
         if (template.contains("MediaStyle") || n.category == Notification.CATEGORY_TRANSPORT) return null
-        val promoted = n.flags and Notification.FLAG_PROMOTED_ONGOING != 0
+        // Live Updates (and their chips in the status bar) exist from Android 16.
+        val promoted = android.os.Build.VERSION.SDK_INT >= 36 && n.flags and Notification.FLAG_PROMOTED_ONGOING != 0
         if (!sbn.isOngoing && !promoted) return null
         val chronometer = extras.getBoolean(Notification.EXTRA_SHOW_CHRONOMETER)
         val countDown = extras.getBoolean(Notification.EXTRA_CHRONOMETER_COUNT_DOWN)
@@ -289,7 +290,7 @@ class IslandHub(private val context: Context, private val scope: CoroutineScope)
         val title = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString()?.takeIf { it.isNotBlank() } ?: appLabel(sbn.packageName)
         val text = (extras.getCharSequence(Notification.EXTRA_TEXT) ?: extras.getCharSequence(Notification.EXTRA_SUB_TEXT))?.toString().orEmpty()
         val progress = if (max > 0) (extras.getInt(Notification.EXTRA_PROGRESS).toFloat() / max).coerceIn(0f, 1f) else null
-        val shortText = runCatching { n.shortCriticalText }.getOrNull()?.takeIf { it.isNotBlank() }
+        val shortText = if (android.os.Build.VERSION.SDK_INT >= 36) n.shortCriticalText?.toString()?.takeIf { it.isNotBlank() } else null
         return LiveItem(
             key = sbn.key,
             kind = kind,

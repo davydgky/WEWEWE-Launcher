@@ -155,7 +155,11 @@ class LockService : AccessibilityService(), IslandActions {
     override fun send(intent: PendingIntent?, fallbackPackage: String?) {
         val sent = intent != null && runCatching {
             val options = ActivityOptions.makeBasic()
-                .setPendingIntentBackgroundActivityStartMode(ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOW_ALWAYS)
+                .setPendingIntentBackgroundActivityStartMode(
+                    // Before Android 16 there is only the one mode that allows it.
+                    @Suppress("DEPRECATION")
+                    if (android.os.Build.VERSION.SDK_INT >= 36) ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOW_ALWAYS else ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED,
+                )
                 .toBundle()
             intent.send(this, 0, null, null, null, null, options)
         }.onFailure { Log.w(TAG, "Cannot open", it) }.isSuccess
